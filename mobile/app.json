@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Kyros",
+    "slug": "kyros",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "kyros",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF1E4"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "clinic.kyros.app"
+    },
+    "android": {
+      "package": "clinic.kyros.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F3D2E"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

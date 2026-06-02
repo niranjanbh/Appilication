@@ -1,0 +1,14 @@
+{
+  "name": "@kyros/design-tokens",
+  "version": "0.1.0",
+  "description": "Kyros platform design tokens — color, typography, spacing, radii, motion",
+  "main": "tokens.json",
+  "exports": {
+    ".": "./tokens.json",
+    "./tailwind-preset": "./tailwind-preset.js"
+  },
+  "files": [
+    "tokens.json",
+    "tailwind-preset.js"
+  ]
+}

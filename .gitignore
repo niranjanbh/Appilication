@@ -1,0 +1,11 @@
+
+CLAUDE.local.md
+.claude/settings.local.json
+backend/.env
+backend/.venv
+
+/node_modules
+
+website/node_modules
+
+mobile/node_modules
