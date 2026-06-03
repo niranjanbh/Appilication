@@ -40,3 +40,22 @@ class AuthenticationError(KyrosDomainError):
 class AuthorizationError(KyrosDomainError):
     status_code = 403
     detail = "forbidden"
+
+
+class PhoneNotVerifiedError(KyrosDomainError):
+    status_code = 403
+    detail = "phone_not_verified"
+
+    def __init__(self, phone: str | None = None) -> None:
+        super().__init__()
+        self.phone = phone
+
+
+class OtpCooldownError(KyrosDomainError):
+    status_code = 429
+    detail = "otp_cooldown"
+
+
+class OtpMaxAttemptsError(KyrosDomainError):
+    status_code = 429
+    detail = "otp_max_attempts"

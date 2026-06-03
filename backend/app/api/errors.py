@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import KyrosDomainError
+from app.core.exceptions import KyrosDomainError, PhoneNotVerifiedError
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -16,7 +17,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         request_id = getattr(request.state, "request_id", "")
         return JSONResponse(
             status_code=422,
-            content={"detail": exc.errors(), "request_id": request_id},
+            content={"detail": jsonable_encoder(exc.errors()), "request_id": request_id},
         )
 
     @app.exception_handler(IntegrityError)
@@ -34,10 +35,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: KyrosDomainError
     ) -> JSONResponse:
         request_id = getattr(request.state, "request_id", "")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail, "request_id": request_id},
-        )
+        content: dict = {"detail": exc.detail, "request_id": request_id}
+        if isinstance(exc, PhoneNotVerifiedError) and exc.phone:
+            content["phone"] = exc.phone
+        return JSONResponse(status_code=exc.status_code, content=content)
 
     @app.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
