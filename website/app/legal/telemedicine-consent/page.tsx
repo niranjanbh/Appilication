@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Telemedicine Consent',
   description: 'Kyros Clinic telemedicine consent document, aligned with NMC Telemedicine Practice Guidelines 2020.',
-  alternates: { canonical: 'https://kyros.clinic/legal/telemedicine-consent' },
+  alternates: { canonical: 'https://kyrosclinic.com/legal/telemedicine-consent' },
 };
 
 const LAST_UPDATED = '2 June 2026';

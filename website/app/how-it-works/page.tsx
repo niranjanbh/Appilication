@@ -7,10 +7,10 @@ export const metadata: Metadata = {
   title: 'How It Works',
   description:
     'Kyros Clinic: choose your condition, book a specialist consultation, receive a plan, and track your health over time. One doctor who stays with you.',
-  alternates: { canonical: 'https://kyros.clinic/how-it-works' },
+  alternates: { canonical: 'https://kyrosclinic.com/how-it-works' },
   openGraph: {
     title: 'How It Works — Kyros Clinic',
-    url: 'https://kyros.clinic/how-it-works',
+    url: 'https://kyrosclinic.com/how-it-works',
   },
 };
 

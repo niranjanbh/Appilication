@@ -5,10 +5,10 @@ export const metadata: Metadata = {
   title: 'For Doctors',
   description:
     'Join the Kyros Clinic specialist panel. NMC-registered endocrinologists, dermatologists, and urologists building longitudinal patient relationships in telemedicine.',
-  alternates: { canonical: 'https://kyros.clinic/for-doctors' },
+  alternates: { canonical: 'https://kyrosclinic.com/for-doctors' },
   openGraph: {
     title: 'For Doctors — Join Kyros Clinic',
-    url: 'https://kyros.clinic/for-doctors',
+    url: 'https://kyrosclinic.com/for-doctors',
   },
 };
 

@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Privacy Notice',
   description: 'Kyros Clinic DPDP-compliant privacy notice. How we collect, use, store, and protect your personal and health data.',
-  alternates: { canonical: 'https://kyros.clinic/legal/privacy' },
+  alternates: { canonical: 'https://kyrosclinic.com/legal/privacy' },
 };
 
 const LAST_UPDATED = '2 June 2026';
@@ -26,12 +26,12 @@ export default function PrivacyPage() {
             <h2 className="font-display text-h2 font-medium text-forest mb-4">1. Who we are</h2>
             <p>
               Kyros Health Technologies Pvt. Ltd. ("Kyros", "we", "us", "our") operates Kyros
-              Clinic, a telemedicine platform accessible at kyros.clinic and through the Kyros
+              Clinic, a telemedicine platform accessible at kyrosclinic.com and through the Kyros
               mobile application. We are a Data Fiduciary under the Digital Personal Data
               Protection Act, 2023 (DPDP Act).
             </p>
             <p className="mt-3">
-              Data Protection Officer: <a href="mailto:dpo@kyros.clinic" className="text-forest underline">dpo@kyros.clinic</a>
+              Data Protection Officer: <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">dpo@kyrosclinic.com</a>
             </p>
           </section>
 
@@ -122,8 +122,8 @@ export default function PrivacyPage() {
                 see our data deletion process
               </a>{' '}
               or email{' '}
-              <a href="mailto:dpo@kyros.clinic" className="text-forest underline">
-                dpo@kyros.clinic
+              <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">
+                dpo@kyrosclinic.com
               </a>
               .
             </p>
@@ -164,7 +164,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="font-display text-h2 font-medium text-forest mb-4">10. Contact</h2>
             <p>
-              Questions about this notice: <a href="mailto:dpo@kyros.clinic" className="text-forest underline">dpo@kyros.clinic</a>
+              Questions about this notice: <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">dpo@kyrosclinic.com</a>
               <br />
               Kyros Health Technologies Pvt. Ltd., Bengaluru, Karnataka, India
             </p>

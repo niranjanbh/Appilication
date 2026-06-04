@@ -7,13 +7,13 @@ export const metadata: Metadata = {
   description:
       'Questions about consultations, specialists, privacy, prescriptions, pricing, and how Kyros Clinic works.',
   alternates: {
-    canonical: 'https://kyros.clinic/faq',
+    canonical: 'https://kyrosclinic.com/faq',
   },
   openGraph: {
     title: 'FAQ | Kyros Clinic',
     description:
         'Questions about consultations, specialists, privacy, prescriptions, pricing, and how Kyros Clinic works.',
-    url: 'https://kyros.clinic/faq',
+    url: 'https://kyrosclinic.com/faq',
   },
 };
 

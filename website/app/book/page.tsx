@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: 'Request a Consultation',
   description:
     'Request a Kyros Clinic consultation. Choose your condition, answer a few questions, and a care coordinator will reach out within 4 hours.',
-  alternates: { canonical: 'https://kyros.clinic/book' },
+  alternates: { canonical: 'https://kyrosclinic.com/book' },
   robots: { index: false, follow: true },
 };
 

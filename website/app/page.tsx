@@ -12,12 +12,12 @@ export const metadata: Metadata = {
   title: 'Kyros Clinic — Doctor-first hormonal health',
   description:
     'Consult specialist doctors for thyroid, PCOS, weight management, skin & hair, hormones, and longevity. Track labs, follow a plan, stay with one doctor.',
-  alternates: { canonical: 'https://kyros.clinic' },
+  alternates: { canonical: 'https://kyrosclinic.com' },
   openGraph: {
     title: 'Kyros Clinic — Doctor-first hormonal health',
     description:
       'India-first telemedicine clinic. One doctor. One place. A platform where privacy is the point.',
-    url: 'https://kyros.clinic',
+    url: 'https://kyrosclinic.com',
   },
 };
 
@@ -36,23 +36,23 @@ const schema = {
   '@graph': [
     {
       '@type': 'Organization',
-      '@id': 'https://kyros.clinic/#organization',
+      '@id': 'https://kyrosclinic.com/#organization',
       name: 'Kyros Clinic',
-      url: 'https://kyros.clinic',
+      url: 'https://kyrosclinic.com',
       description:
         'India-first doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid, weight management, skin and hair, men\'s intimate health, TRT, and longevity.',
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'customer support',
-        email: 'hello@kyros.clinic',
+        email: 'hello@kyrosclinic.com',
         availableLanguage: ['English', 'Hindi'],
       },
     },
     {
       '@type': 'MedicalBusiness',
-      '@id': 'https://kyros.clinic/#medical-business',
+      '@id': 'https://kyrosclinic.com/#medical-business',
       name: 'Kyros Clinic',
-      url: 'https://kyros.clinic',
+      url: 'https://kyrosclinic.com',
       medicalSpecialty: [
         'Endocrinology',
         'Dermatology',
@@ -62,7 +62,7 @@ const schema = {
       availableService: CONDITIONS.map((c) => ({
         '@type': 'MedicalTherapy',
         name: c.name,
-        url: `https://kyros.clinic/conditions/${c.slug}`,
+        url: `https://kyrosclinic.com/conditions/${c.slug}`,
       })),
     },
   ],

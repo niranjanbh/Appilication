@@ -76,7 +76,7 @@ export default function FaqClient() {
                 <p className="text-[16px] text-stone leading-[1.7] max-w-[660px]">
                     Questions about consultations, privacy, prescriptions,
                     pricing, and how Kyros works. If something isn't here,
-                    write to us at care@kyros.clinic.
+                    write to us at care@kyrosclinic.com.
                 </p>
             </div>
 

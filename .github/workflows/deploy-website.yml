@@ -1,12 +1,13 @@
+# DISABLED — Cloudflare Git integration handles website deploys directly.
+# Cloudflare triggers on push to main and runs:
+#   pnpm install --frozen-lockfile && pnpm --filter website build
+# using wrangler.toml at the repo root. Re-enable this workflow only if
+# switching away from Cloudflare's built-in CI.
+
 name: Deploy Website
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'website/**'
-      - 'design-tokens/**'
-      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:   # manual trigger only; automatic deploys are via Cloudflare CI
 
 concurrency:
   group: deploy-website
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    name: Build → Deploy to Vercel
+    name: Build → Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
     environment: production
 
@@ -41,15 +42,18 @@ jobs:
       - name: Build
         run: pnpm --filter website build
         env:
-          # Public env vars for Next.js build — non-secret runtime config
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+      - name: Run next-on-pages adapter
+        working-directory: website
+        run: npx @cloudflare/next-on-pages
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_WEBSITE }}
-          working-directory: ./website
-          vercel-args: '--prod'
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: kyros-website
+          directory: website/.vercel/output/static
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

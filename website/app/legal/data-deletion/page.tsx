@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Data Deletion',
   description: 'How to request deletion of your data from Kyros Clinic under the Digital Personal Data Protection Act (DPDP) 2023.',
-  alternates: { canonical: 'https://kyros.clinic/legal/data-deletion' },
+  alternates: { canonical: 'https://kyrosclinic.com/legal/data-deletion' },
 };
 
 const LAST_UPDATED = '2 June 2026';
@@ -75,8 +75,8 @@ export default function DataDeletionPage() {
                 </h3>
                 <p>
                   Email{' '}
-                  <a href="mailto:dpo@kyros.clinic" className="text-forest underline">
-                    dpo@kyros.clinic
+                  <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">
+                    dpo@kyrosclinic.com
                   </a>{' '}
                   from the email address registered on your account, with the subject line
                   "Data deletion request".
@@ -139,8 +139,8 @@ export default function DataDeletionPage() {
             </h2>
             <p>
               To request a copy of your data or to correct inaccurate data, email{' '}
-              <a href="mailto:dpo@kyros.clinic" className="text-forest underline">
-                dpo@kyros.clinic
+              <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">
+                dpo@kyrosclinic.com
               </a>{' '}
               with the subject line "Data access request" or "Data correction request". We
               will respond within 7 business days.
@@ -155,8 +155,8 @@ export default function DataDeletionPage() {
             <ol className="space-y-2 list-decimal pl-5 mt-3">
               <li>
                 First, contact our DPO at{' '}
-                <a href="mailto:dpo@kyros.clinic" className="text-forest underline">
-                  dpo@kyros.clinic
+                <a href="mailto:dpo@kyrosclinic.com" className="text-forest underline">
+                  dpo@kyrosclinic.com
                 </a>
                 .
               </li>

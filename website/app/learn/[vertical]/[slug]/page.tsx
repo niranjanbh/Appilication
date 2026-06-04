@@ -32,12 +32,12 @@ export function generateMetadata({ params }: Params): Metadata {
     title: article.title,
     description: article.deck,
     alternates: {
-      canonical: `https://kyros.clinic/learn/${params.vertical}/${params.slug}`,
+      canonical: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
     },
     openGraph: {
       title: `${article.title} — Kyros Clinic`,
       description: article.deck,
-      url: `https://kyros.clinic/learn/${params.vertical}/${params.slug}`,
+      url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
       type: "article",
       ...(doctor ? { authors: [doctor.name] } : {}),
     },
@@ -64,15 +64,15 @@ export default async function ArticlePage({ params }: Params) {
   const schema = {
     "@context": "https://schema.org",
     "@type": "Article",
-    "@id": `https://kyros.clinic/learn/${params.vertical}/${params.slug}`,
+    "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
     headline: article.title,
     description: article.deck,
-    url: `https://kyros.clinic/learn/${params.vertical}/${params.slug}`,
+    url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
     dateModified: new Date(article.doctor_reviewed_at).toISOString(),
     publisher: {
       "@type": "Organization",
       name: "Kyros Clinic",
-      url: "https://kyros.clinic",
+      url: "https://kyrosclinic.com",
     },
     ...(doctor
       ? {
@@ -93,14 +93,14 @@ export default async function ArticlePage({ params }: Params) {
     about: {
       "@type": "MedicalCondition",
       name: verticalLabel,
-      url: `https://kyros.clinic/conditions/${params.vertical}`,
+      url: `https://kyrosclinic.com/conditions/${params.vertical}`,
     },
     medicalAudience: { "@type": "Patient" },
     inLanguage: "en-IN",
     isPartOf: {
       "@type": "WebSite",
       name: "Kyros Clinic",
-      url: "https://kyros.clinic",
+      url: "https://kyrosclinic.com",
     },
   };
 

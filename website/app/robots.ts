@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/book'],
     },
-    sitemap: 'https://kyros.clinic/sitemap.xml',
+    sitemap: 'https://kyrosclinic.com/sitemap.xml',
   };
 }

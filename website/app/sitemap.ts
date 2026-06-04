@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { CONDITION_SLUGS } from '../lib/conditions';
 import { getAllArticleParams } from '../lib/mdx';
 
-const BASE_URL = 'https://kyros.clinic';
+const BASE_URL = 'https://kyrosclinic.com';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date().toISOString();

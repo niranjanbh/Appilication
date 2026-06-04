@@ -21,12 +21,12 @@ export function generateMetadata({ params }: Params): Metadata {
     title: condition.name,
     description: condition.heroSubline,
     alternates: {
-      canonical: `https://kyros.clinic/conditions/${condition.slug}`,
+      canonical: `https://kyrosclinic.com/conditions/${condition.slug}`,
     },
     openGraph: {
       title: `${condition.name} — Kyros Clinic`,
       description: condition.heroSubline,
-      url: `https://kyros.clinic/conditions/${condition.slug}`,
+      url: `https://kyrosclinic.com/conditions/${condition.slug}`,
     },
   };
 }
@@ -40,21 +40,21 @@ export default function ConditionPage({ params }: Params) {
     '@graph': [
       {
         '@type': 'MedicalWebPage',
-        '@id': `https://kyros.clinic/conditions/${condition.slug}`,
+        '@id': `https://kyrosclinic.com/conditions/${condition.slug}`,
         name: `${condition.name} — Kyros Clinic`,
-        url: `https://kyros.clinic/conditions/${condition.slug}`,
+        url: `https://kyrosclinic.com/conditions/${condition.slug}`,
         description: condition.heroSubline,
         specialty: 'Endocrinology',
         mainEntity: {
-          '@id': `https://kyros.clinic/conditions/${condition.slug}#condition`,
+          '@id': `https://kyrosclinic.com/conditions/${condition.slug}#condition`,
         },
       },
       {
         '@type': 'MedicalCondition',
-        '@id': `https://kyros.clinic/conditions/${condition.slug}#condition`,
+        '@id': `https://kyrosclinic.com/conditions/${condition.slug}#condition`,
         name: condition.schemaName,
         description: condition.schemaDescription,
-        url: `https://kyros.clinic/conditions/${condition.slug}`,
+        url: `https://kyrosclinic.com/conditions/${condition.slug}`,
         possibleTreatment: condition.whatWeOffer.map((offer) => ({
           '@type': 'MedicalTherapy',
           name: offer,
@@ -67,7 +67,7 @@ export default function ConditionPage({ params }: Params) {
       condition.faqs.length > 0
         ? {
             '@type': 'FAQPage',
-            '@id': `https://kyros.clinic/conditions/${condition.slug}#faq`,
+            '@id': `https://kyrosclinic.com/conditions/${condition.slug}#faq`,
             mainEntity: condition.faqs.map((faq) => ({
               '@type': 'Question',
               name: faq.question,

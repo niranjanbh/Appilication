@@ -84,10 +84,10 @@ export function Footer() {
             <p className="font-body text-caption text-ivory/60">
               Data Protection Officer:{' '}
               <a
-                href="mailto:dpo@kyros.clinic"
+                href="mailto:dpo@kyrosclinic.com"
                 className="text-ivory/80 hover:text-ivory transition-colors duration-micro"
               >
-                dpo@kyros.clinic
+                dpo@kyrosclinic.com
               </a>
             </p>
             <p className="font-body text-caption text-ivory/60 mt-1">

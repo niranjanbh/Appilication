@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: 'Contact',
   description:
     'Contact Kyros Clinic. Reach our care team for consultation enquiries, support, doctor applications, and press.',
-  alternates: { canonical: 'https://kyros.clinic/contact' },
+  alternates: { canonical: 'https://kyrosclinic.com/contact' },
 };
 
 export default function ContactPage() {
@@ -34,26 +34,26 @@ export default function ContactPage() {
                 {[
                   {
                     channel: 'General enquiries',
-                    value: 'hello@kyros.clinic',
-                    href: 'mailto:hello@kyros.clinic',
+                    value: 'hello@kyrosclinic.com',
+                    href: 'mailto:hello@kyrosclinic.com',
                     note: 'We respond within 1 business day.',
                   },
                   {
                     channel: 'Doctor applications',
-                    value: 'doctors@kyros.clinic',
-                    href: 'mailto:doctors@kyros.clinic',
+                    value: 'doctors@kyrosclinic.com',
+                    href: 'mailto:doctors@kyrosclinic.com',
                     note: 'NMC-registered specialists only. We respond within 2 business days.',
                   },
                   {
                     channel: 'Data Protection Officer',
-                    value: 'dpo@kyros.clinic',
-                    href: 'mailto:dpo@kyros.clinic',
+                    value: 'dpo@kyrosclinic.com',
+                    href: 'mailto:dpo@kyrosclinic.com',
                     note: 'For DPDP rights requests, data access, correction, or deletion.',
                   },
                   {
                     channel: 'Press',
-                    value: 'press@kyros.clinic',
-                    href: 'mailto:press@kyros.clinic',
+                    value: 'press@kyrosclinic.com',
+                    href: 'mailto:press@kyrosclinic.com',
                     note: 'Media enquiries, interviews, data requests.',
                   },
                 ].map(({ channel, value, href, note }) => (

@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: 'Advisory Board',
   description:
     'Kyros Clinic advisory board — being formed carefully. We list advisors only after they have publicly confirmed their role in writing.',
-  alternates: { canonical: 'https://kyros.clinic/advisory-board' },
+  alternates: { canonical: 'https://kyrosclinic.com/advisory-board' },
 };
 
 export default function AdvisoryBoardPage() {

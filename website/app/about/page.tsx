@@ -7,10 +7,10 @@ export const metadata: Metadata = {
   title: 'About Kyros Clinic',
   description:
     'Kyros Clinic is a doctor-first telemedicine clinic built for India\'s hormonal health gap. Founded by Niranjan Bhimanadham.',
-  alternates: { canonical: 'https://kyros.clinic/about' },
+  alternates: { canonical: 'https://kyrosclinic.com/about' },
   openGraph: {
     title: 'About Kyros Clinic',
-    url: 'https://kyros.clinic/about',
+    url: 'https://kyrosclinic.com/about',
   },
 };
 
@@ -19,18 +19,18 @@ const schema = {
   '@graph': [
     {
       '@type': 'AboutPage',
-      '@id': 'https://kyros.clinic/about',
-      url: 'https://kyros.clinic/about',
+      '@id': 'https://kyrosclinic.com/about',
+      url: 'https://kyrosclinic.com/about',
       name: 'About Kyros Clinic',
       description: 'Doctor-first telemedicine clinic for hormonal health in India.',
-      mainEntity: { '@id': 'https://kyros.clinic/#organization' },
+      mainEntity: { '@id': 'https://kyrosclinic.com/#organization' },
     },
     {
       '@type': 'Person',
-      '@id': 'https://kyros.clinic/about#founder',
+      '@id': 'https://kyrosclinic.com/about#founder',
       name: 'Niranjan Bhimanadham',
       jobTitle: 'Founder & CEO',
-      worksFor: { '@id': 'https://kyros.clinic/#organization' },
+      worksFor: { '@id': 'https://kyrosclinic.com/#organization' },
       description:
         'Founder of Kyros Clinic. Building India\'s first doctor-first telemedicine clinic for hormonal health.',
     },
@@ -159,7 +159,7 @@ export default function AboutPage() {
               { label: 'Legal name', value: 'Kyros Health Technologies Pvt. Ltd.' },
               { label: 'Founded', value: '2026' },
               { label: 'Headquarters', value: 'Bengaluru, Karnataka, India' },
-              { label: 'Data Protection Officer', value: 'dpo@kyros.clinic' },
+              { label: 'Data Protection Officer', value: 'dpo@kyrosclinic.com' },
               { label: 'Stage', value: 'Early-stage startup' },
               { label: 'Data residency', value: 'All data in ap-south-1 (Mumbai)' },
             ].map(({ label, value }) => (

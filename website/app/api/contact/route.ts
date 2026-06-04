@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: resp.ok ? 200 : resp.status });
   } catch {
     return NextResponse.json(
-      { detail: 'Could not reach the server. Please email us directly at hello@kyros.clinic' },
+      { detail: 'Could not reach the server. Please email us directly at hello@kyrosclinic.com' },
       { status: 503 }
     );
   }

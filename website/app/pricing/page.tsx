@@ -6,10 +6,10 @@ export const metadata: Metadata = {
   title: 'Pricing',
   description:
     'Kyros Clinic consultations start at ₹400. No hidden fees. Transparent pricing for initial and follow-up consultations across all seven conditions.',
-  alternates: { canonical: 'https://kyros.clinic/pricing' },
+  alternates: { canonical: 'https://kyrosclinic.com/pricing' },
   openGraph: {
     title: 'Pricing — Kyros Clinic',
-    url: 'https://kyros.clinic/pricing',
+    url: 'https://kyrosclinic.com/pricing',
   },
 };
 
@@ -17,7 +17,7 @@ const schema = {
   '@context': 'https://schema.org',
   '@type': 'MedicalWebPage',
   name: 'Kyros Clinic Pricing',
-  url: 'https://kyros.clinic/pricing',
+  url: 'https://kyrosclinic.com/pricing',
   description: 'Transparent consultation pricing at Kyros Clinic. Initial and follow-up consultations for hormonal health conditions.',
 };
 

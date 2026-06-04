@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Terms of Use',
   description: 'Kyros Clinic terms of use. Governing conditions for the use of the Kyros telemedicine platform.',
-  alternates: { canonical: 'https://kyros.clinic/legal/terms' },
+  alternates: { canonical: 'https://kyrosclinic.com/legal/terms' },
 };
 
 const LAST_UPDATED = '2 June 2026';
@@ -131,7 +131,7 @@ export default function TermsPage() {
           <section>
             <h2 className="font-display text-h2 font-medium text-forest mb-4">10. Contact</h2>
             <p>
-              Legal enquiries: <a href="mailto:legal@kyros.clinic" className="text-forest underline">legal@kyros.clinic</a>
+              Legal enquiries: <a href="mailto:legal@kyrosclinic.com" className="text-forest underline">legal@kyrosclinic.com</a>
             </p>
           </section>
 

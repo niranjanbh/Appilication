@@ -9,11 +9,11 @@ export const metadata: Metadata = {
   title: "Learn — Hormonal Health Guides",
   description:
     "Doctor-reviewed articles on thyroid, PCOS, weight management, skin and hair, men's intimate health, hormones, and longevity — written by NMC-registered specialists.",
-  alternates: { canonical: "https://kyros.clinic/learn" },
+  alternates: { canonical: "https://kyrosclinic.com/learn" },
   openGraph: {
     title: "Learn — Kyros Clinic",
     description: "Clinical articles reviewed by NMC-registered specialist doctors.",
-    url: "https://kyros.clinic/learn",
+    url: "https://kyrosclinic.com/learn",
   },
 };
 
@@ -21,7 +21,7 @@ const schema = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   name: "Kyros Clinic — Learn",
-  url: "https://kyros.clinic/learn",
+  url: "https://kyrosclinic.com/learn",
   description:
     "Doctor-reviewed clinical articles on hormonal health conditions for Indian patients.",
 };

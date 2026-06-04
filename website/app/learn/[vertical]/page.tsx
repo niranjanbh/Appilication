@@ -20,10 +20,10 @@ export function generateMetadata({ params }: Params): Metadata {
   return {
     title: `${label} — Clinical Articles`,
     description: `Doctor-reviewed clinical articles on ${label.toLowerCase()} from NMC-registered specialists at Kyros Clinic.`,
-    alternates: { canonical: `https://kyros.clinic/learn/${params.vertical}` },
+    alternates: { canonical: `https://kyrosclinic.com/learn/${params.vertical}` },
     openGraph: {
       title: `${label} Articles — Kyros Clinic`,
-      url: `https://kyros.clinic/learn/${params.vertical}`,
+      url: `https://kyrosclinic.com/learn/${params.vertical}`,
     },
   };
 }
@@ -39,7 +39,7 @@ export default function VerticalLearnPage({ params }: Params) {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: `${label} — Kyros Clinic Learn`,
-    url: `https://kyros.clinic/learn/${params.vertical}`,
+    url: `https://kyrosclinic.com/learn/${params.vertical}`,
     description: `Doctor-reviewed clinical articles on ${label.toLowerCase()}.`,
   };
 

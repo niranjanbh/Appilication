@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   },
   description:
     'India-first telemedicine clinic for hormonal health, PCOS, thyroid, weight management, skin & hair, and longevity. Consult real doctors, track your labs, follow a plan that fits you.',
-  metadataBase: new URL('https://kyros.clinic'),
+  metadataBase: new URL('https://kyrosclinic.com'),
   openGraph: {
     siteName: 'Kyros Clinic',
     type: 'website',

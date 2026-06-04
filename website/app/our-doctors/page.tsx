@@ -7,14 +7,14 @@ export const metadata: Metadata = {
   title: 'Our Doctors',
   description:
     'Kyros Clinic doctors — NMC-registered specialists in thyroid, PCOS, weight management, hormones, skin & hair, and longevity. Being introduced as they join the panel.',
-  alternates: { canonical: 'https://kyros.clinic/our-doctors' },
+  alternates: { canonical: 'https://kyrosclinic.com/our-doctors' },
 };
 
 const schema = {
   '@context': 'https://schema.org',
   '@type': 'MedicalWebPage',
   name: 'Our Doctors — Kyros Clinic',
-  url: 'https://kyros.clinic/our-doctors',
+  url: 'https://kyrosclinic.com/our-doctors',
   description:
     'NMC-registered specialist doctors at Kyros Clinic, covering thyroid, PCOS, weight management, hormones, skin & hair, and longevity.',
 };
