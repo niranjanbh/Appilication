@@ -1,0 +1,86 @@
+{% extends "coord/base.html" %}
+{% block title %}Communication — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Communication</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+  {% if success == 'sent' %}
+  <div class="alert-bar alert-bar-success">Message sent.</div>
+  {% endif %}
+
+  <div class="card" style="margin-bottom:8px;">
+    <p style="font-size:12px;color:var(--stone);margin:0;">
+      Only pre-approved scheduling and logistics templates may be sent.
+      Clinical advice is not permitted via this channel.
+    </p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:260px 1fr;gap:24px;">
+    <!-- Patient selector -->
+    <div>
+      <div class="card">
+        <div class="card-title">Select patient</div>
+        <div style="margin-top:8px;">
+          {% for patient, user in patients %}
+          <a href="/coord/communication?patient_id={{ patient.id }}"
+             style="display:block;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--ink);margin-bottom:4px;
+                    background:{{ '#e8f0e8' if selected_patient and selected_patient[0].id == patient.id else 'transparent' }};">
+            {{ user.name }}
+            <div style="font-size:11px;color:var(--stone);">{{ user.phone or '' }}</div>
+          </a>
+          {% else %}
+          <p style="font-size:12px;color:var(--stone);">No assigned patients.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Message form -->
+    <div>
+      {% if selected_patient %}
+      {% set patient, user = selected_patient %}
+      <div class="card">
+        <div class="card-title">Send message to {{ user.name }}</div>
+        <form method="POST" action="/coord/communication/send" style="margin-top:16px;">
+          <input type="hidden" name="patient_id" value="{{ patient.id }}">
+
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Channel</label>
+            <select name="channel" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+              <option value="whatsapp">WhatsApp{% if not user.phone %} (no phone on file){% endif %}</option>
+              <option value="email">Email{% if not user.email %} (no email on file){% endif %}</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Template</label>
+            <select name="template_key" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
+              {% for key, text in templates.items() %}
+              <option value="{{ key }}">{{ key.replace('_', ' ').title() }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div style="background:#faf6ef;border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--stone);" x-data="{ sel: '' }">
+            <strong style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Message preview</strong>
+            {% for key, text in templates.items() %}
+            <p style="margin:8px 0 0;font-style:italic;" id="preview-{{ key }}">{{ text }}</p>
+            {% endfor %}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="card">
+        <p style="font-size:13px;color:var(--stone);">Select a patient from the list to send a message.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

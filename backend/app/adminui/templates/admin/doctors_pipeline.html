@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% block title %}Doctor Pipeline — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Doctor Onboarding Pipeline</h2>
+</div>
+<div class="page-body">
+  <div class="pipeline">
+    {% for stage in pipeline_stages %}
+    {% set stage_docs = by_status.get(stage, []) %}
+    <div class="pipeline-col">
+      <h3>
+        {{ stage.replace('_', ' ').title() }}
+        <span class="pipeline-count">{{ stage_docs | length }}</span>
+      </h3>
+      {% for doctor, user in stage_docs %}
+      <div class="pipeline-card">
+        <div class="doctor-name">{{ user.name }}</div>
+        <div class="nmc">{{ doctor.nmc_registration_number }}</div>
+        <div style="margin-top:8px;">
+          <a href="/admin/doctors/{{ doctor.id }}" class="btn btn-secondary btn-sm">View</a>
+          {% if stage == 'applied' %}
+          <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify" style="display:inline;">
+            <button type="submit" class="btn btn-primary btn-sm">Verify</button>
+          </form>
+          {% elif stage == 'verified' or stage == 'onboarding' %}
+          <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate" style="display:inline;">
+            <button type="submit" class="btn btn-primary btn-sm">Activate</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div style="color:var(--stone);font-size:12px;text-align:center;padding:12px 0;">Empty</div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

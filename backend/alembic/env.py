@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import app.models  # noqa: F401 — registers all models with Base.metadata
+from alembic import context
 from app.core.config import settings
 from app.db.base import Base
-import app.models  # noqa: F401 — registers all models with Base.metadata
 
 config = context.config
 if config.config_file_name is not None:

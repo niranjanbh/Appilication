@@ -1,0 +1,36 @@
+{% extends "coord/base.html" %}
+{% block title %}Patients — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Patients <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+</div>
+
+<form class="filter-bar"
+      hx-get="/coord/patients"
+      hx-target="#patients-tbody"
+      hx-trigger="change, submit"
+      hx-push-url="true">
+  <div>
+    <label>Search</label>
+    <input type="text" name="search" value="{{ search }}" placeholder="Name or phone…">
+  </div>
+  <button type="submit" class="btn btn-primary">Search</button>
+</form>
+
+{% if error %}
+<div class="alert-bar alert-bar-error" style="margin:16px 32px 0;">{{ error }}</div>
+{% endif %}
+
+<div class="table-wrap" style="margin:16px 32px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th><th>Phone</th><th>Conditions</th><th>Intake</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="patients-tbody">
+      {% include "coord/_patient_rows.html" %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -35,7 +35,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: KyrosDomainError
     ) -> JSONResponse:
         request_id = getattr(request.state, "request_id", "")
-        content: dict = {"detail": exc.detail, "request_id": request_id}
+        content: dict[str, object] = {"detail": exc.detail, "request_id": request_id}
         if isinstance(exc, PhoneNotVerifiedError) and exc.phone:
             content["phone"] = exc.phone
         return JSONResponse(status_code=exc.status_code, content=content)

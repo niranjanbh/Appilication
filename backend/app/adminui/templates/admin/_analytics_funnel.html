@@ -1,0 +1,76 @@
+{% if funnel %}
+<!-- Acquisition funnel -->
+<h3 style="margin-bottom:12px;">Acquisition Funnel</h3>
+<div class="table-wrap" style="max-width:640px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Stage</th>
+        <th style="text-align:right;">Count</th>
+        <th style="text-align:right;">Conversion from prev.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Inquiries (booking form)</td>
+        <td style="text-align:right;">{{ funnel.inquiries | default(0) }}</td>
+        <td style="text-align:right;">—</td>
+      </tr>
+      <tr>
+        <td>Patient registrations</td>
+        <td style="text-align:right;">{{ funnel.registrations | default(0) }}</td>
+        <td style="text-align:right;">{{ funnel.rate_inq_to_reg }}%</td>
+      </tr>
+      <tr>
+        <td>Paid bookings</td>
+        <td style="text-align:right;">{{ funnel.bookings | default(0) }}</td>
+        <td style="text-align:right;">{{ funnel.rate_reg_to_book }}%</td>
+      </tr>
+      <tr>
+        <td>Completed consultations</td>
+        <td style="text-align:right;">{{ funnel.completions | default(0) }}</td>
+        <td style="text-align:right;">{{ funnel.rate_book_to_comp }}%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- CSV export -->
+<div style="margin-top:12px;">
+  <a class="btn" href="/v1/admin/analytics/export?report=funnel{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" download>
+    Download CSV
+  </a>
+</div>
+{% endif %}
+
+{% if condition_mix %}
+<!-- Condition mix -->
+<h3 style="margin:28px 0 12px;">Condition Mix</h3>
+<div class="table-wrap" style="max-width:480px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Condition</th>
+        <th style="text-align:right;">Consultations</th>
+        <th style="text-align:right;">Share</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in condition_mix %}
+      <tr>
+        <td>{{ row.condition }}</td>
+        <td style="text-align:right;">{{ row.count }}</td>
+        <td style="text-align:right;">{{ row.pct }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" style="text-align:center;color:var(--stone);">No data</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:12px;">
+  <a class="btn" href="/v1/admin/analytics/export?report=condition_mix{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" download>
+    Download CSV
+  </a>
+</div>
+{% endif %}

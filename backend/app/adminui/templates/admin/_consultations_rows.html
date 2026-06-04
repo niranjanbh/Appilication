@@ -1,0 +1,12 @@
+{% for consultation, patient_user, doctor_user in consultations %}
+<tr>
+  <td style="font-size:12px;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') if consultation.scheduled_start_at else '—' }}</td>
+  <td>{{ patient_user.name if patient_user else '—' }}</td>
+  <td>{{ doctor_user.name if doctor_user else '—' }}</td>
+  <td style="color:var(--stone);">{{ consultation.consultation_type.value }}</td>
+  <td><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
+  <td style="color:var(--stone);">₹{{ (consultation.consultation_fee_paise / 100) | int }}</td>
+</tr>
+{% else %}
+<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No consultations found.</td></tr>
+{% endfor %}

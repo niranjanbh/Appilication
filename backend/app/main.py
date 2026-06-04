@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.adminui.router import admin_router, admin_static
+from app.adminui.views.coord.router import coord_router
 from app.api.errors import register_exception_handlers
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
@@ -43,6 +45,19 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_v1_router, prefix="/v1")
+    app.include_router(admin_router, prefix="/admin")
+    app.mount("/admin/static", admin_static, name="admin-static")
+    app.include_router(coord_router, prefix="/coord")
+    app.mount("/coord/static", admin_static, name="coord-static")
+
+    @app.get("/healthz", include_in_schema=False)
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/readyz", include_in_schema=False)
+    async def readyz() -> dict[str, str]:
+        return {"status": "ok"}
+
     return app
 
 

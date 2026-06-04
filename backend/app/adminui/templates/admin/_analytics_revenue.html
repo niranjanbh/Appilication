@@ -1,0 +1,60 @@
+<!-- Revenue filter -->
+<form class="filter-bar" style="margin-bottom:16px;"
+      hx-get="/admin/analytics"
+      hx-target="#analytics-panel"
+      hx-push-url="true">
+  <input type="hidden" name="tab" value="revenue">
+  <div>
+    <label>Group by</label>
+    <select name="group_by">
+      <option value="condition" {% if group_by == 'condition' %}selected{% endif %}>Condition</option>
+      <option value="doctor"    {% if group_by == 'doctor'    %}selected{% endif %}>Doctor</option>
+      <option value="period"    {% if group_by == 'period'    %}selected{% endif %}>Period (weekly)</option>
+    </select>
+  </div>
+  <div>
+    <label>From</label>
+    <input type="date" name="start_date" value="{{ start_date }}">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="date" name="end_date" value="{{ end_date }}">
+  </div>
+  <button type="submit" class="btn btn-primary">Apply</button>
+</form>
+
+<h3 style="margin-bottom:12px;">Revenue — by {{ group_by }}</h3>
+
+{% if revenue %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>{{ group_by | title }}</th>
+        <th style="text-align:right;">Consultations</th>
+        <th style="text-align:right;">Revenue (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in revenue %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td style="text-align:right;">{{ row.consultation_count }}</td>
+        <td style="text-align:right;">₹{{ "%.2f" | format(row.revenue_inr) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" style="text-align:center;color:var(--stone);">No revenue data for this period</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:12px;">
+  <a class="btn"
+     href="/v1/admin/analytics/export?report=revenue&group_by={{ group_by }}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}"
+     download>
+    Download CSV
+  </a>
+</div>
+{% else %}
+<p style="color:var(--stone);">No data loaded.</p>
+{% endif %}

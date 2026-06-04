@@ -1,0 +1,58 @@
+<!-- Cohort retention filter -->
+<form class="filter-bar" style="margin-bottom:16px;"
+      hx-get="/admin/analytics"
+      hx-target="#analytics-panel"
+      hx-push-url="true">
+  <input type="hidden" name="tab" value="retention">
+  <div>
+    <label>Cohort window</label>
+    <select name="cohort_months">
+      {% for m in [3, 6, 9, 12] %}
+      <option value="{{ m }}" {% if m == cohort_months %}selected{% endif %}>Last {{ m }} months</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Apply</button>
+</form>
+
+<h3 style="margin-bottom:12px;">30 / 60 / 90-day Cohort Retention</h3>
+
+{% if retention %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Cohort month</th>
+        <th style="text-align:right;">Cohort size</th>
+        <th style="text-align:right;">Returned 30d</th>
+        <th style="text-align:right;">Rate 30d</th>
+        <th style="text-align:right;">Returned 60d</th>
+        <th style="text-align:right;">Rate 60d</th>
+        <th style="text-align:right;">Returned 90d</th>
+        <th style="text-align:right;">Rate 90d</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in retention %}
+      <tr>
+        <td>{{ row.cohort_month }}</td>
+        <td style="text-align:right;">{{ row.cohort_size }}</td>
+        <td style="text-align:right;">{{ row.returned_30 }}</td>
+        <td style="text-align:right;">{{ row.rate_30 }}%</td>
+        <td style="text-align:right;">{{ row.returned_60 }}</td>
+        <td style="text-align:right;">{{ row.rate_60 }}%</td>
+        <td style="text-align:right;">{{ row.returned_90 }}</td>
+        <td style="text-align:right;">{{ row.rate_90 }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;color:var(--stone);">No cohorts found for this window</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:12px;">
+  <a class="btn" href="/v1/admin/analytics/export?report=retention" download>Download CSV</a>
+</div>
+{% else %}
+<p style="color:var(--stone);">No data loaded.</p>
+{% endif %}

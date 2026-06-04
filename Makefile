@@ -137,6 +137,8 @@ test: ## Run pytest in the test compose environment
 	$(SAY) "Running migrations on test DB..."
 	cd backend && \
 		KYROS_DATABASE_URL="postgresql+asyncpg://kyros:test@localhost:55432/kyros_test" \
+		KYROS_JWT_SECRET="test_jwt_secret_minimum_32_characters_long_xxxx" \
+		KYROS_OTP_SECRET="test_otp_secret_minimum_32_characters_long_yyyy" \
 		uv run alembic upgrade head
 	$(SAY) "Running tests..."
 	cd backend && \
@@ -215,6 +217,14 @@ build-frontend: ## Build all three frontends
 	cd doctor-portal && pnpm build
 	cd website && pnpm build
 	# mobile build is per-platform (eas build); not run by default
+
+.PHONY: build-web
+build-web: ## Export the patient web portal (RNW) as a static site to mobile/dist/
+	$(SAY) "Building patient web portal (React Native Web)…"
+	cd mobile && pnpm build:web
+	$(OK) "Static site written to mobile/dist/ — deploy to app.kyros.clinic via S3+CloudFront"
+	@echo "  Deployment: aws s3 sync mobile/dist/ s3://kyros-web-portal --delete"
+	@echo "  Then invalidate the CloudFront distribution cache."
 
 .PHONY: openapi
 openapi: ## Regenerate openapi.json from the running backend

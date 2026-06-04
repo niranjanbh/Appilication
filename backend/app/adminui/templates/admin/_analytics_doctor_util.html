@@ -1,0 +1,48 @@
+<!-- Doctor utilization filter -->
+<form class="filter-bar" style="margin-bottom:16px;"
+      hx-get="/admin/analytics"
+      hx-target="#analytics-panel"
+      hx-push-url="true">
+  <input type="hidden" name="tab" value="utilization">
+  <div>
+    <label>Weeks back</label>
+    <select name="weeks">
+      {% for w in [2, 4, 8, 12] %}
+      <option value="{{ w }}" {% if w == weeks %}selected{% endif %}>{{ w }} weeks</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Apply</button>
+</form>
+
+<h3 style="margin-bottom:12px;">Doctor Utilization — consultations per week</h3>
+
+{% if doctor_util %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Doctor</th>
+        <th>Week starting</th>
+        <th style="text-align:right;">Consultations</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in doctor_util %}
+      <tr>
+        <td>{{ row.doctor_name }}</td>
+        <td>{{ row.week_start }}</td>
+        <td style="text-align:right;">{{ row.consultation_count }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" style="text-align:center;color:var(--stone);">No consultations in this window</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:12px;">
+  <a class="btn" href="/v1/admin/analytics/export?report=doctor_utilization" download>Download CSV</a>
+</div>
+{% else %}
+<p style="color:var(--stone);">No data loaded.</p>
+{% endif %}

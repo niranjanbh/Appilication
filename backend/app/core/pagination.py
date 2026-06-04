@@ -28,7 +28,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     pages: int
 
     @classmethod
-    def build(cls, items: list[T], total: int, params: PaginationParams) -> "PaginatedResponse[T]":
+    def build(cls, items: list[T], total: int, params: PaginationParams) -> PaginatedResponse[T]:
         pages = max(1, -(-total // params.page_size))
         return cls(
             items=items,

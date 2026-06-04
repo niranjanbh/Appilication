@@ -1,0 +1,26 @@
+name: kyros-test
+
+services:
+  postgres-test:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: kyros
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: kyros_test
+    tmpfs:
+      - /var/lib/postgresql/data   # in-memory — fast, no persistence needed
+    ports:
+      - "55432:5432"               # different host port to avoid collision with dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyros -d kyros_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  redis-test:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", ""]
+    tmpfs:
+      - /data
+    ports:
+      - "56379:6379"

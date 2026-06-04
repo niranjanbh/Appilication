@@ -1,0 +1,64 @@
+{% extends "coord/base.html" %}
+{% block title %}{{ user.name }} — Patients — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ user.name }}</h2>
+</div>
+<div class="page-body">
+  {# RESTRICTED VIEW — no lab values, no prescriptions, no doctor notes #}
+
+  <div class="detail-grid">
+    <div class="detail-section">
+      <h3>Contact</h3>
+      <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">{{ user.name }}</span></div>
+      <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">{{ user.phone or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">{{ user.email or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">City</span><span class="detail-value">{{ user.city or '—' }}</span></div>
+    </div>
+    <div class="detail-section">
+      <h3>Clinical summary</h3>
+      <div class="detail-row"><span class="detail-label">Kyros ID</span><span class="detail-value">{{ patient.kyros_patient_id }}</span></div>
+      <div class="detail-row"><span class="detail-label">Conditions</span><span class="detail-value">{{ patient.primary_conditions | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Intake complete</span><span class="detail-value">{% if patient.intake_complete_at %}{{ patient.intake_complete_at.strftime('%d %b %Y') }}{% else %}No{% endif %}</span></div>
+      {# Allergies and current medications intentionally omitted — clinical content #}
+    </div>
+  </div>
+
+  <!-- Consultation history — dates/status/doctor only, no clinical content -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Consultation history</div>
+    <p style="font-size:11px;color:var(--stone);margin-bottom:12px;">Showing scheduling information only. Clinical notes are not accessible to coordinators.</p>
+    {% if consultations %}
+    <table style="width:100%;font-size:13px;">
+      <thead>
+        <tr>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Date</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Doctor</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Condition</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for consultation, doctor_user in consultations %}
+        <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 0;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') if consultation.scheduled_start_at else '—' }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ doctor_user.name if doctor_user else '—' }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ consultation.condition_category }}</td>
+          <td style="padding:8px 0;"><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:13px;color:var(--stone);">No consultations yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Quick actions -->
+  <div class="action-bar" style="margin-top:20px;">
+    <a href="/coord/scheduling?patient_id={{ patient.id }}" class="btn btn-primary">Book consultation</a>
+    <a href="/coord/communication?patient_id={{ patient.id }}" class="btn btn-secondary">Send message</a>
+    <a href="/coord/patients" class="btn btn-secondary">← Back</a>
+  </div>
+</div>
+{% endblock %}

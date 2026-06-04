@@ -1,0 +1,60 @@
+{% extends "admin/base.html" %}
+{% block title %}Analytics — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Analytics &amp; Reporting</h2>
+</div>
+
+<!-- Date range filter (shared across tabs) -->
+<form class="filter-bar" id="analytics-filter">
+  <div>
+    <label>From</label>
+    <input type="date" name="start_date" value="{{ start_date }}" id="f-start">
+  </div>
+  <div>
+    <label>To</label>
+    <input type="date" name="end_date" value="{{ end_date }}" id="f-end">
+  </div>
+</form>
+
+<!-- Tab bar -->
+<div class="tab-bar" style="margin:16px 0 0;display:flex;gap:8px;">
+  <button class="btn {% if tab == 'funnel' %}btn-primary{% endif %}"
+          hx-get="/admin/analytics?tab=funnel&start_date={{ start_date }}&end_date={{ end_date }}"
+          hx-target="#analytics-panel"
+          hx-push-url="true">
+    Funnel
+  </button>
+  <button class="btn {% if tab == 'retention' %}btn-primary{% endif %}"
+          hx-get="/admin/analytics?tab=retention&cohort_months={{ cohort_months }}"
+          hx-target="#analytics-panel"
+          hx-push-url="true">
+    Cohort Retention
+  </button>
+  <button class="btn {% if tab == 'revenue' %}btn-primary{% endif %}"
+          hx-get="/admin/analytics?tab=revenue&group_by={{ group_by }}&start_date={{ start_date }}&end_date={{ end_date }}"
+          hx-target="#analytics-panel"
+          hx-push-url="true">
+    Revenue
+  </button>
+  <button class="btn {% if tab == 'utilization' %}btn-primary{% endif %}"
+          hx-get="/admin/analytics?tab=utilization&weeks={{ weeks }}"
+          hx-target="#analytics-panel"
+          hx-push-url="true">
+    Doctor Utilization
+  </button>
+</div>
+
+<!-- Panel — swapped by HTMX on tab click -->
+<div id="analytics-panel" style="margin-top:20px;">
+  {% if tab == 'funnel' or not tab %}
+    {% include "admin/_analytics_funnel.html" %}
+  {% elif tab == 'retention' %}
+    {% include "admin/_analytics_retention.html" %}
+  {% elif tab == 'revenue' %}
+    {% include "admin/_analytics_revenue.html" %}
+  {% elif tab == 'utilization' %}
+    {% include "admin/_analytics_doctor_util.html" %}
+  {% endif %}
+</div>
+{% endblock %}

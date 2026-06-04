@@ -1,0 +1,99 @@
+import type { Metadata } from 'next';
+import { ContactForm } from './ContactForm';
+
+export const metadata: Metadata = {
+  title: 'Contact',
+  description:
+    'Contact Kyros Clinic. Reach our care team for consultation enquiries, support, doctor applications, and press.',
+  alternates: { canonical: 'https://kyros.clinic/contact' },
+};
+
+export default function ContactPage() {
+  return (
+    <>
+      {/* Hero */}
+      <section className="bg-ivory py-20 px-6">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="font-display text-h1 font-medium text-forest mb-4">Get in touch</h1>
+          <p className="font-body text-body-lg text-stone max-w-2xl leading-relaxed">
+            Reach us for consultation enquiries, support, doctor applications, or press.
+          </p>
+        </div>
+      </section>
+
+      {/* Contact channels + form */}
+      <section className="bg-white py-16 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Channels */}
+            <div>
+              <h2 className="font-display text-h2 font-medium text-forest mb-8">
+                How to reach us
+              </h2>
+              <div className="space-y-6">
+                {[
+                  {
+                    channel: 'General enquiries',
+                    value: 'hello@kyros.clinic',
+                    href: 'mailto:hello@kyros.clinic',
+                    note: 'We respond within 1 business day.',
+                  },
+                  {
+                    channel: 'Doctor applications',
+                    value: 'doctors@kyros.clinic',
+                    href: 'mailto:doctors@kyros.clinic',
+                    note: 'NMC-registered specialists only. We respond within 2 business days.',
+                  },
+                  {
+                    channel: 'Data Protection Officer',
+                    value: 'dpo@kyros.clinic',
+                    href: 'mailto:dpo@kyros.clinic',
+                    note: 'For DPDP rights requests, data access, correction, or deletion.',
+                  },
+                  {
+                    channel: 'Press',
+                    value: 'press@kyros.clinic',
+                    href: 'mailto:press@kyros.clinic',
+                    note: 'Media enquiries, interviews, data requests.',
+                  },
+                ].map(({ channel, value, href, note }) => (
+                  <div key={channel} className="bg-ivory rounded-card p-6">
+                    <p className="font-body text-caption text-stone uppercase tracking-widest mb-1">
+                      {channel}
+                    </p>
+                    <a
+                      href={href}
+                      className="font-display text-h3 font-medium text-forest hover:text-jade transition-colors duration-micro"
+                    >
+                      {value}
+                    </a>
+                    <p className="font-body text-body text-stone mt-2">{note}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 bg-peach-mist rounded-card p-6">
+                <p className="font-display text-h3 font-medium text-forest mb-2">Care team hours</p>
+                <p className="font-body text-body text-ink">
+                  Monday to Saturday, 9 AM to 9 PM IST
+                </p>
+                <p className="font-body text-caption text-stone mt-2">
+                  For urgent medical concerns, please contact emergency services or go to the
+                  nearest hospital. Kyros is not an emergency care service.
+                </p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div>
+              <h2 className="font-display text-h2 font-medium text-forest mb-8">
+                Send a message
+              </h2>
+              <ContactForm />
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

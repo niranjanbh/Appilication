@@ -1,0 +1,63 @@
+{% extends "coord/base.html" %}
+{% block title %}Intake Queue — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Intake Queue
+    {% if queue %}<span style="font-size:14px;font-weight:400;color:var(--stone);"> ({{ queue | length }})</span>{% endif %}
+  </h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  {% if not queue %}
+  <div class="card">
+    <p style="font-size:14px;color:var(--stone);">No pending intake items. All consultations are confirmed.</p>
+  </div>
+  {% else %}
+  {% for consultation, patient_user in queue %}
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <strong style="font-size:15px;">{{ patient_user.name if patient_user else '—' }}</strong>
+        <div style="font-size:12px;color:var(--stone);margin-top:2px;">
+          {{ consultation.condition_category.replace('_', ' ').title() }}
+          · {{ consultation.consultation_type }}
+          · {{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') if consultation.scheduled_start_at else '—' }}
+        </div>
+      </div>
+      <span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <!-- Confirm -->
+      <form method="POST" action="/coord/intake/{{ consultation.id }}/confirm" style="display:flex;gap:8px;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Coordinator note (optional)</label>
+          <input type="text" name="notes" maxlength="490"
+                 placeholder="Add a note for the doctor…"
+                 style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 10px;font-size:12px;width:280px;">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+      </form>
+
+      <!-- Escalate -->
+      <form method="POST" action="/coord/intake/{{ consultation.id }}/escalate" style="display:flex;gap:8px;align-items:flex-end;">
+        <div>
+          <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Escalation reason</label>
+          <input type="text" name="reason" required maxlength="200"
+                 placeholder="Emergency symptom or concern…"
+                 style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 10px;font-size:12px;width:240px;">
+        </div>
+        <button type="submit" class="btn btn-danger btn-sm"
+                onclick="return confirm('Escalate to super admin?')">Escalate</button>
+      </form>
+
+      <a href="/coord/patients/{{ consultation.patient_id }}" class="btn btn-secondary btn-sm" style="align-self:flex-end;">View patient</a>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

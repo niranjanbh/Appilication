@@ -1,0 +1,140 @@
+name: kyros
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: kyros-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kyros
+      POSTGRES_PASSWORD: kyros_dev_password
+      POSTGRES_DB: kyros
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"   # 5432 is often occupied by a local Postgres; use 5433 on host
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyros -d kyros"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: kyros-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: kyros-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
+  backend-api:
+    build:
+      context: ./backend
+      target: dev
+    image: kyros-backend:dev
+    container_name: kyros-backend-api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      KYROS_DATABASE_URL: "postgresql+asyncpg://kyros:kyros_dev_password@postgres:5432/kyros"
+      KYROS_REDIS_URL: "redis://redis:6379/0"
+      KYROS_CELERY_BROKER_URL: "redis://redis:6379/1"
+      KYROS_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      KYROS_APP_ENV: "development"
+      KYROS_DEBUG: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app:cached
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Celery services require app.tasks (added in a later build prompt).
+  # Use: docker compose --profile celery up
+  celery-worker:
+    profiles: ["celery"]
+    image: kyros-backend:dev
+    container_name: kyros-celery-worker
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      KYROS_DATABASE_URL: "postgresql+asyncpg://kyros:kyros_dev_password@postgres:5432/kyros"
+      KYROS_REDIS_URL: "redis://redis:6379/0"
+      KYROS_CELERY_BROKER_URL: "redis://redis:6379/1"
+      KYROS_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      KYROS_APP_ENV: "development"
+    volumes:
+      - ./backend:/app:cached
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.tasks.celery_app worker
+      --loglevel=INFO
+      --queues=default
+      --concurrency=2
+
+  celery-beat:
+    profiles: ["celery"]
+    image: kyros-backend:dev
+    container_name: kyros-celery-beat
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      KYROS_DATABASE_URL: "postgresql+asyncpg://kyros:kyros_dev_password@postgres:5432/kyros"
+      KYROS_REDIS_URL: "redis://redis:6379/0"
+      KYROS_CELERY_BROKER_URL: "redis://redis:6379/1"
+      KYROS_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      KYROS_APP_ENV: "development"
+    volumes:
+      - ./backend:/app:cached
+      - celery_beat_data:/app/beat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.tasks.celery_app beat
+      --loglevel=INFO
+      --schedule=/app/beat/celerybeat-schedule
+
+volumes:
+  postgres_data:
+    name: kyros_postgres_data
+  celery_beat_data:
+    name: kyros_celery_beat_data
+
+networks:
+  default:
+    name: kyros_network

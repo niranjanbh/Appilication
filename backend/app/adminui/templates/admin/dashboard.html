@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Dashboard</h2>
+</div>
+<div class="page-body">
+
+  <!-- Platform stats -->
+  <div class="stats-grid">
+    <div class="card">
+      <div class="card-title">Total Users</div>
+      <div class="card-value">{{ total_users }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Active Doctors</div>
+      <div class="card-value">{{ active_doctors }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Today's Consults</div>
+      <div class="card-value">{{ today_consults }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pending OCR</div>
+      <div class="card-value">{{ pending_ocr }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">New (7 days)</div>
+      <div class="card-value">{{ new_this_week }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+    <!-- Users by role -->
+    <div class="card">
+      <div class="card-title">Users by role</div>
+      {% for role, count in users_by_role.items() %}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ece3;font-size:13px;">
+        <span class="chip chip-{{ role }}">{{ role }}</span>
+        <strong>{{ count }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Doctor pipeline -->
+    <div class="card">
+      <div class="card-title">Doctor pipeline</div>
+      {% for stage, count in doctors_by_status.items() %}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ece3;font-size:13px;">
+        <span style="color:var(--stone);text-transform:capitalize;">{{ stage.replace('_', ' ') }}</span>
+        <strong>{{ count }}</strong>
+      </div>
+      {% endfor %}
+      <div style="margin-top:12px;">
+        <a href="/admin/doctors/pipeline" class="btn btn-secondary btn-sm">View pipeline</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

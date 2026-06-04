@@ -1,0 +1,28 @@
+{% for item in items %}
+<tr>
+  <td>
+    <strong style="font-size:13px;">{{ item.title }}</strong>
+    <div style="font-size:11px;color:var(--stone);">{{ item.slug }}</div>
+  </td>
+  <td style="color:var(--stone);">{{ item.content_type.value if item.content_type else '—' }}</td>
+  <td style="font-size:12px;color:var(--stone);">{{ item.condition_categories | join(', ') or '—' }}</td>
+  <td><span class="chip chip-{{ item.status.value }}">{{ item.status.value }}</span></td>
+  <td style="color:var(--stone);">{{ 'Yes' if item.ai_disclosure else 'No' }}</td>
+  <td>
+    <div style="display:flex;gap:6px;">
+      {% if item.status.value != 'published' %}
+      <form method="POST" action="/admin/content/{{ item.id }}/publish">
+        <button type="submit" class="btn btn-primary btn-sm">Publish</button>
+      </form>
+      {% endif %}
+      {% if item.status.value != 'archived' %}
+      <form method="POST" action="/admin/content/{{ item.id }}/archive">
+        <button type="submit" class="btn btn-secondary btn-sm">Archive</button>
+      </form>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No content found.</td></tr>
+{% endfor %}

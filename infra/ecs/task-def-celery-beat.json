@@ -1,0 +1,56 @@
+{
+  "family": "kyros-celery-beat",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/kyros-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/kyros-ecs-task-role",
+  "volumes": [
+    {
+      "name": "beat-schedule",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "EFS_FILESYSTEM_ID",
+        "rootDirectory": "/kyros/beat"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "celery-beat",
+      "image": "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/kyros-backend:IMAGE_TAG",
+      "essential": true,
+      "command": [
+        "celery", "-A", "app.worker.celery_app", "beat",
+        "--loglevel=INFO",
+        "--schedule=/app/beat/celerybeat-schedule"
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "beat-schedule",
+          "containerPath": "/app/beat",
+          "readOnly": false
+        }
+      ],
+      "secrets": [
+        { "name": "KYROS_DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:database_url::" },
+        { "name": "KYROS_REDIS_URL",    "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:redis_url::" },
+        { "name": "KYROS_JWT_SECRET",   "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:jwt_secret::" },
+        { "name": "KYROS_OTP_SECRET",   "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:otp_secret::" },
+        { "name": "KYROS_SENTRY_DSN",   "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:sentry_dsn::" }
+      ],
+      "environment": [
+        { "name": "KYROS_APP_ENV",    "value": "production" },
+        { "name": "KYROS_AWS_REGION", "value": "ap-south-1" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/kyros/celery-beat",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "beat"
+        }
+      }
+    }
+  ]
+}

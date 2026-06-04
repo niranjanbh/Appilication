@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ user.name }} — Users — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ user.name }}</h2>
+</div>
+<div class="page-body">
+  <div class="detail-grid">
+    <!-- Identity -->
+    <div class="detail-section">
+      <h3>Identity</h3>
+      <div class="detail-row"><span class="detail-label">ID</span><span class="detail-value" style="font-size:11px;font-family:monospace;">{{ user.id }}</span></div>
+      <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">{{ user.name }}</span></div>
+      <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">{{ user.phone or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">{{ user.email or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Role</span><span class="detail-value"><span class="chip chip-{{ user.role.value }}">{{ user.role.value }}</span></span></div>
+      <div class="detail-row"><span class="detail-label">Joined</span><span class="detail-value">{{ user.created_at.strftime('%d %b %Y %H:%M UTC') if user.created_at else '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Status</span>
+        <span class="detail-value">
+          {% if user.deleted_at %}<span class="chip chip-suspended">Suspended since {{ user.deleted_at.strftime('%d %b %Y') }}</span>
+          {% else %}<span class="chip chip-active">Active</span>{% endif %}
+        </span>
+      </div>
+    </div>
+
+    <!-- Doctor profile (if exists) -->
+    {% if doctor %}
+    <div class="detail-section">
+      <h3>Doctor profile</h3>
+      <div class="detail-row"><span class="detail-label">NMC reg</span><span class="detail-value">{{ doctor.nmc_registration_number }}</span></div>
+      <div class="detail-row"><span class="detail-label">State council</span><span class="detail-value">{{ doctor.nmc_state_council or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Specialty</span><span class="detail-value">{{ doctor.specialty | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="chip chip-{{ doctor.status.value }}">{{ doctor.status.value }}</span></span></div>
+      <div class="detail-row"><span class="detail-label">Revenue share</span><span class="detail-value">{{ doctor.revenue_share_pct or '—' }}%</span></div>
+      <div style="margin-top:12px;">
+        <a href="/admin/doctors/{{ doctor.id }}" class="btn btn-secondary btn-sm">Doctor detail →</a>
+      </div>
+    </div>
+    {% elif patient %}
+    <div class="detail-section">
+      <h3>Patient profile</h3>
+      <div class="detail-row"><span class="detail-label">Kyros ID</span><span class="detail-value">{{ patient.kyros_patient_id }}</span></div>
+      <div class="detail-row"><span class="detail-label">Conditions</span><span class="detail-value">{{ patient.primary_conditions | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Intake complete</span><span class="detail-value">{{ patient.intake_complete_at.strftime('%d %b %Y') if patient.intake_complete_at else 'No' }}</span></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Actions -->
+  <div class="action-bar">
+    {% if user.deleted_at %}
+    <form method="POST" action="/admin/users/{{ user.id }}/reactivate">
+      <button type="submit" class="btn btn-primary">Reactivate account</button>
+    </form>
+    {% else %}
+    <form method="POST" action="/admin/users/{{ user.id }}/suspend"
+          onsubmit="return confirm('Suspend {{ user.name }}? They will not be able to log in.')">
+      <button type="submit" class="btn btn-danger">Suspend account</button>
+    </form>
+    {% endif %}
+    <a href="/admin/users" class="btn btn-secondary">← Back to users</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Kyros AWS WAF v2 — ALB Web ACL with managed rule groups"
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [staging, production]
+    Default: production
+  AlbArn:
+    Type: String
+    Description: "ARN of the ALB to associate this Web ACL with"
+  RateLimitRpm:
+    Type: Number
+    Default: 2000
+    Description: "Per-IP request rate limit (requests per 5 minutes)"
+
+Resources:
+
+  KyrosWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "kyros-${Environment}-web-acl"
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      Description: "Kyros production WAF — managed rules + rate limiting"
+      Rules:
+
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-common-rule-set"
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+              ExcludedRules: []
+
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-known-bad-inputs"
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+
+        - Name: AWSManagedRulesAmazonIpReputationList
+          Priority: 3
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-ip-reputation"
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+
+        - Name: AWSManagedRulesSQLiRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-sqli"
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+
+        - Name: PerIpRateLimit
+          Priority: 5
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-rate-limit"
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref RateLimitRpm
+              AggregateKeyType: IP
+
+        - Name: AuthEndpointRateLimit
+          Priority: 6
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "kyros-${Environment}-auth-rate-limit"
+          Statement:
+            RateBasedStatement:
+              Limit: 50
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch:
+                    UriPath: {}
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: "/v1/auth/"
+                  TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "kyros-${Environment}-web-acl"
+
+  WebAclAlbAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      WebACLArn: !GetAtt KyrosWebAcl.Arn
+      ResourceArn: !Ref AlbArn
+
+  WafLoggingConfig:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt KyrosWebAcl.Arn
+      LogDestinationConfigs:
+        - !Sub "arn:aws:logs:ap-south-1:${AWS::AccountId}:log-group:aws-waf-logs-kyros-${Environment}"
+      RedactedFields:
+        - SingleHeader:
+            Name: authorization
+        - SingleHeader:
+            Name: cookie
+
+Outputs:
+  WebAclArn:
+    Value: !GetAtt KyrosWebAcl.Arn
+    Export:
+      Name: !Sub "kyros-${Environment}-web-acl-arn"

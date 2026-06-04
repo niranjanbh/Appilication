@@ -58,6 +58,18 @@ async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_by_email_or_phone(db: AsyncSession, email_or_phone: str) -> User | None:
+    """Try email lookup first, then phone. Used by admin login."""
+    from sqlalchemy import or_
+    result = await db.execute(
+        select(User).where(
+            or_(User.email == email_or_phone, User.phone == email_or_phone),
+            User.deleted_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_for_re_registration(
     db: AsyncSession,
     user_id: uuid.UUID,

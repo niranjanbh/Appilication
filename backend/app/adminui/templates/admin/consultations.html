@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% block title %}Consultations — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Consultations <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+</div>
+
+<form class="filter-bar"
+      hx-get="/admin/consultations"
+      hx-target="#consults-tbody"
+      hx-trigger="change, submit"
+      hx-push-url="true">
+  <div>
+    <label>Status</label>
+    <select name="status_filter">
+      <option value="">All statuses</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>From date</label>
+    <input type="date" name="date_from" value="{{ date_from }}">
+  </div>
+  <input type="hidden" name="page" value="1">
+  <button type="submit" class="btn btn-primary">Filter</button>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Scheduled</th><th>Patient</th><th>Doctor</th><th>Type</th><th>Status</th><th>Fee</th>
+      </tr>
+    </thead>
+    <tbody id="consults-tbody">
+      {% include "admin/_consultations_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="/admin/consultations?status_filter={{ status_filter }}&date_from={{ date_from }}&page={{ page - 1 }}">← Prev</a>
+  {% endif %}
+  <span>Page {{ page }} of {{ ((total - 1) // page_size) + 1 }}</span>
+  {% if page * page_size < total %}
+    <a href="/admin/consultations?status_filter={{ status_filter }}&date_from={{ date_from }}&page={{ page + 1 }}">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

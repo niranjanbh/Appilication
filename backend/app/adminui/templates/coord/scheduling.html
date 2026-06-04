@@ -1,0 +1,98 @@
+{% extends "coord/base.html" %}
+{% block title %}Scheduling — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Scheduling</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+  {% if request.query_params.get('success') == 'booked' %}
+  <div class="alert-bar alert-bar-success">Consultation booked successfully.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'slot_unavailable' %}
+  <div class="alert-bar alert-bar-error">Slot is no longer available. Please choose another.</div>
+  {% endif %}
+
+  <!-- Days ahead filter -->
+  <form class="filter-bar" method="GET" action="/coord/scheduling" style="margin-bottom:20px;">
+    <div>
+      <label>Show slots up to</label>
+      <select name="days_ahead" onchange="this.form.submit()">
+        {% for d in [3, 7, 14, 30] %}
+        <option value="{{ d }}" {% if d == days_ahead %}selected{% endif %}>{{ d }} days</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <!-- Book consultation form -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Book consultation for patient</div>
+    {% if not patients %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No assigned patients.</p>
+    {% elif not slots %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No available slots in the selected window. Try extending the range.</p>
+    {% else %}
+    <form method="POST" action="/coord/scheduling/book" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px;">
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
+        <select name="patient_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="">Select patient…</option>
+          {% for patient, user in patients %}
+          <option value="{{ patient.id }}">{{ user.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Condition</label>
+        <select name="condition_category" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          {% for c in conditions %}
+          <option value="{{ c }}">{{ c.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Slot</label>
+        <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:280px;">
+          <option value="">Select slot…</option>
+          {% for slot, doctor, doctor_user in slots %}
+          <option value="{{ slot.id }}">
+            {{ slot.slot_start.strftime('%d %b %Y %H:%M') }} — Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Book</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Available slots -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date &amp; Time</th><th>Doctor</th><th>Specialty</th><th>Duration</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slot, doctor, doctor_user in slots %}
+        <tr>
+          <td>{{ slot.slot_start.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ doctor_user.name }}</td>
+          <td style="color:var(--stone);font-size:12px;">{{ doctor.specialty | join(', ') or '—' }}</td>
+          <td style="color:var(--stone);">
+            {% set dur = (slot.slot_end - slot.slot_start).seconds // 60 %}{{ dur }} min
+          </td>
+          <td><span class="chip chip-active">Available</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--stone);padding:20px;">No available slots.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+[Unit]
+Description=Kyros Backend (Docker Compose)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target kyros-prepare-env.service
+
+[Service]
+Type=forking
+RemainAfterExit=yes
+# Pull env-prep before starting (oneshot, runs first)
+ExecStartPre=/usr/local/bin/kyros-prepare-env.sh
+ExecStart=/usr/bin/docker compose \
+    -f /etc/kyros/docker-compose.yml \
+    --project-name kyros \
+    up -d --remove-orphans
+ExecStop=/usr/bin/docker compose \
+    -f /etc/kyros/docker-compose.yml \
+    --project-name kyros \
+    down
+ExecReload=/usr/bin/docker compose \
+    -f /etc/kyros/docker-compose.yml \
+    --project-name kyros \
+    up -d --remove-orphans
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=180s
+TimeoutStopSec=60s
+
+[Install]
+WantedBy=multi-user.target

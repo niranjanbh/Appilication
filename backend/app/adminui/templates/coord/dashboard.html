@@ -1,0 +1,72 @@
+{% extends "coord/base.html" %}
+{% block title %}Dashboard — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Dashboard</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="stats-grid">
+    <div class="card">
+      <div class="card-title">Assigned patients</div>
+      <div class="card-value">{{ assigned_count }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pending intake</div>
+      <div class="card-value">{{ pending_intake }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Today's consults</div>
+      <div class="card-value">{{ today_consultations | length }}</div>
+    </div>
+  </div>
+
+  <!-- Today's schedule -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Today's consultations</div>
+    {% if today_consultations %}
+    <table style="width:100%;font-size:13px;">
+      <thead>
+        <tr>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Time</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Patient</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Doctor</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for consultation, patient_user, doctor_user in today_consultations %}
+        <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 0;">{{ consultation.scheduled_start_at.strftime('%H:%M') if consultation.scheduled_start_at else '—' }}</td>
+          <td style="padding:8px 0;">{{ patient_user.name if patient_user else '—' }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ doctor_user.name if doctor_user else '—' }}</td>
+          <td style="padding:8px 0;"><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No consultations scheduled for today.</p>
+    {% endif %}
+  </div>
+
+  <!-- Intake queue -->
+  {% if intake_queue %}
+  <div class="card">
+    <div class="card-title">Pending intake <span class="pipeline-count">{{ intake_queue | length }}</span></div>
+    {% for consultation, patient_user in intake_queue %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0ece3;font-size:13px;">
+      <div>
+        <strong>{{ patient_user.name if patient_user else '—' }}</strong>
+        <span style="color:var(--stone);margin-left:8px;">{{ consultation.condition_category }}</span>
+      </div>
+      <a href="/coord/intake" class="btn btn-secondary btn-sm">Review</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

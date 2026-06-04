@@ -11,7 +11,7 @@ _PHI_FIELDS = frozenset(
 )
 
 
-def _scrub_phi(event: dict[str, object], hint: object) -> dict[str, object] | None:  # noqa: ARG001
+def _scrub_phi(event: dict[str, object], hint: object) -> dict[str, object] | None:
     """Strip PHI from Sentry events before they leave the process."""
     _scrub_dict(event)
     return event
@@ -33,13 +33,13 @@ def init_sentry() -> None:
     if not settings.sentry_dsn:
         return
     try:
-        import sentry_sdk  # type: ignore[import-untyped]
+        import sentry_sdk
 
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
             environment=settings.app_env,
             release=settings.app_version,
-            before_send=_scrub_phi,
+            before_send=_scrub_phi,  # type: ignore[arg-type]
             traces_sample_rate=0.1,
             send_default_pii=False,
         )

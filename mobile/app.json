@@ -23,9 +23,18 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "name": "Kyros Clinic",
+      "shortName": "Kyros",
+      "description": "Kyros Clinic patient portal — hormonal health, PCOS, thyroid, and more.",
+      "themeColor": "#0F3D2E",
+      "backgroundColor": "#FAF1E4",
+      "lang": "en-IN"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
     "experiments": {
       "typedRoutes": true
     }

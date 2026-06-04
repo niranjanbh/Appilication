@@ -1,0 +1,83 @@
+# Phase 1 production Docker Compose — runs on EC2 t3.small (ap-south-1)
+# Managed by systemd unit kyros-backend.service.
+# Secrets are pre-written to /etc/kyros/backend.env by kyros-prepare-env.sh.
+#
+# Deploy: pull new image tag, then `docker compose -f /etc/kyros/docker-compose.yml up -d`
+
+services:
+  backend-api:
+    image: ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /etc/kyros/backend.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    command: >
+      gunicorn app.main:app
+      --workers 2
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --timeout 120
+      --keepalive 5
+      --access-logfile -
+      --error-logfile -
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  celery-worker:
+    image: ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /etc/kyros/backend.env
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+    command: >
+      celery -A app.worker.celery_app worker
+      --loglevel=INFO
+      --queues=ocr,notifications,reports,payments,maintenance,default
+      --concurrency=8
+      --max-tasks-per-child=200
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  celery-beat:
+    image: ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /etc/kyros/backend.env
+    volumes:
+      - /var/lib/kyros/beat:/app/beat
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    command: >
+      celery -A app.worker.celery_app beat
+      --loglevel=INFO
+      --schedule=/app/beat/celerybeat-schedule
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"

@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Kyros CloudWatch alarms — API, RDS, ElastiCache, Celery queues"
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [staging, production]
+    Default: production
+  AlbFullName:
+    Type: String
+    Description: "ALB full name (e.g. app/kyros-prod-alb/abc123)"
+  AlbTargetGroupFullName:
+    Type: String
+    Description: "Target group full name (e.g. targetgroup/kyros-backend-tg/abc123)"
+  RdsDbInstanceId:
+    Type: String
+    Description: "RDS DB instance identifier"
+  ElastiCacheClusterId:
+    Type: String
+    Description: "ElastiCache Redis cluster id"
+  AlarmSnsArn:
+    Type: String
+    Description: "SNS topic ARN for alarm notifications (pager channel)"
+  SlackSnsArn:
+    Type: String
+    Description: "SNS topic ARN for Slack (non-pager notifications)"
+
+Resources:
+
+  # ── ALB: 5xx error rate > 1% for 5 minutes (pager) ──────────────────────────
+  AlbHigh5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-alb-5xx-high"
+      AlarmDescription: "API 5xx error rate > 1% for 5 minutes"
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AlbFullName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: error5xx
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApplicationELB
+              MetricName: HTTPCode_Target_5XX_Count
+              Dimensions:
+                - Name: LoadBalancer
+                  Value: !Ref AlbFullName
+            Period: 60
+            Stat: Sum
+        - Id: total
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApplicationELB
+              MetricName: RequestCount
+              Dimensions:
+                - Name: LoadBalancer
+                  Value: !Ref AlbFullName
+            Period: 60
+            Stat: Sum
+        - Id: errorRate
+          Expression: "IF(total > 0, (error5xx / total) * 100, 0)"
+          Label: "5xx rate %"
+          ReturnData: true
+      Threshold: 1.0
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 5
+      AlarmActions:
+        - !Ref AlarmSnsArn
+      OKActions:
+        - !Ref AlarmSnsArn
+
+  # ── ALB: target unhealthy > 3 min (pager) ────────────────────────────────────
+  AlbUnhealthyHostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-alb-unhealthy-host"
+      AlarmDescription: "ALB target unhealthy for more than 3 minutes"
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - Name: TargetGroup
+          Value: !Ref AlbTargetGroupFullName
+        - Name: LoadBalancer
+          Value: !Ref AlbFullName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmSnsArn
+      OKActions:
+        - !Ref AlarmSnsArn
+
+  # ── RDS: CPU > 80% for 10 minutes (pager) ────────────────────────────────────
+  RdsCpuHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-rds-cpu-high"
+      AlarmDescription: "RDS CPU utilization > 80% for 10 minutes"
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsDbInstanceId
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 10
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmSnsArn
+      OKActions:
+        - !Ref AlarmSnsArn
+
+  # ── RDS: connection failures (pager) ─────────────────────────────────────────
+  RdsConnectionFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-rds-connection-failures"
+      AlarmDescription: "RDS connection failures detected"
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsDbInstanceId
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: LessThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        - !Ref AlarmSnsArn
+
+  # ── ElastiCache: memory > 80% (pager) ────────────────────────────────────────
+  RedisMemoryHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-redis-memory-high"
+      AlarmDescription: "ElastiCache Redis memory usage > 80%"
+      Namespace: AWS/ElastiCache
+      MetricName: DatabaseMemoryUsagePercentage
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref ElastiCacheClusterId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmSnsArn
+      OKActions:
+        - !Ref AlarmSnsArn
+
+  # ── ElastiCache: evictions > 0 for 15 min (Slack) ────────────────────────────
+  RedisEvictionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-redis-evictions"
+      AlarmDescription: "Redis cache evictions — memory pressure"
+      Namespace: AWS/ElastiCache
+      MetricName: Evictions
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref ElastiCacheClusterId
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref SlackSnsArn
+
+  # ── Celery OCR queue depth > 100 (warning / Slack) ───────────────────────────
+  CeleryOcrQueueWarningAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-celery-ocr-queue-warning"
+      AlarmDescription: "Celery OCR queue depth > 100 for 10 minutes"
+      Namespace: Kyros/Backend
+      MetricName: CeleryQueueDepth
+      Dimensions:
+        - Name: Queue
+          Value: ocr
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 10
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref SlackSnsArn
+
+  # ── Celery OCR queue depth > 200 (pager) ─────────────────────────────────────
+  CeleryOcrQueueCriticalAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-celery-ocr-queue-critical"
+      AlarmDescription: "Celery OCR queue depth > 200 for 10 minutes — on-call page"
+      Namespace: Kyros/Backend
+      MetricName: CeleryQueueDepth
+      Dimensions:
+        - Name: Queue
+          Value: ocr
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 10
+      Threshold: 200
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmSnsArn
+
+  # ── Celery payments queue depth > 50 (Slack) ─────────────────────────────────
+  CeleryPaymentsQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "kyros-${Environment}-celery-payments-queue"
+      AlarmDescription: "Celery payments queue depth > 50 — payment processing lag"
+      Namespace: Kyros/Backend
+      MetricName: CeleryQueueDepth
+      Dimensions:
+        - Name: Queue
+          Value: payments
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref SlackSnsArn
+
+Outputs:
+  AlbHigh5xxAlarmArn:
+    Value: !GetAtt AlbHigh5xxAlarm.Arn
+  RdsCpuHighAlarmArn:
+    Value: !GetAtt RdsCpuHighAlarm.Arn
+  RedisMemoryHighAlarmArn:
+    Value: !GetAtt RedisMemoryHighAlarm.Arn

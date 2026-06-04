@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ user.name }} — Doctors — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ user.name }} <span style="font-weight:400;font-size:16px;color:var(--stone);">· {{ doctor.nmc_registration_number }}</span></h2>
+</div>
+<div class="page-body">
+  <div class="detail-grid">
+    <!-- Doctor info -->
+    <div class="detail-section">
+      <h3>Profile</h3>
+      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="chip chip-{{ doctor.status.value }}">{{ doctor.status.value }}</span></span></div>
+      <div class="detail-row"><span class="detail-label">NMC reg</span><span class="detail-value">{{ doctor.nmc_registration_number }}</span></div>
+      <div class="detail-row"><span class="detail-label">State council</span><span class="detail-value">{{ doctor.nmc_state_council or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Specialty</span><span class="detail-value">{{ doctor.specialty | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Conditions</span><span class="detail-value">{{ doctor.conditions_treated | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Languages</span><span class="detail-value">{{ doctor.consultation_languages | join(', ') or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Duration default</span><span class="detail-value">{{ doctor.consultation_duration_minutes_default }} min</span></div>
+      <div class="detail-row"><span class="detail-label">Buffer time</span><span class="detail-value">{{ doctor.buffer_time_minutes }} min</span></div>
+      <div class="detail-row"><span class="detail-label">Revenue share</span><span class="detail-value">{{ doctor.revenue_share_pct or '—' }}{% if doctor.revenue_share_pct %}%{% endif %}</span></div>
+      <div class="detail-row"><span class="detail-label">Bank details</span><span class="detail-value">{% if doctor.bank_details_encrypted %}On file (encrypted){% else %}Not submitted{% endif %}</span></div>
+    </div>
+
+    <!-- Contact -->
+    <div class="detail-section">
+      <h3>Contact</h3>
+      <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">{{ user.name }}</span></div>
+      <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">{{ user.phone or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">{{ user.email or '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Verified at</span><span class="detail-value">{{ doctor.verified_at.strftime('%d %b %Y') if doctor.verified_at else '—' }}</span></div>
+    </div>
+  </div>
+
+  <!-- Pipeline actions -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Pipeline actions</div>
+    <div class="action-bar">
+      <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify">
+        <button type="submit" class="btn btn-secondary">Mark Verified</button>
+      </form>
+      <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate">
+        <button type="submit" class="btn btn-primary">Activate</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Revenue share -->
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Revenue share</div>
+    <form method="POST" action="/admin/doctors/{{ doctor.id }}/revenue-share" style="display:flex;gap:10px;align-items:flex-end;margin-top:10px;">
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Percentage (%)</label>
+        <input type="number" name="revenue_share_pct" min="0" max="100" step="0.01"
+               value="{{ doctor.revenue_share_pct or '' }}"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:120px;">
+      </div>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+  </div>
+
+  <div style="margin-top:16px;">
+    <a href="/admin/doctors" class="btn btn-secondary">← Back to doctors</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{
+  "family": "kyros-migrate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/kyros-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/kyros-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "migrate",
+      "image": "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/kyros-backend:IMAGE_TAG",
+      "essential": true,
+      "command": ["alembic", "upgrade", "head"],
+      "secrets": [
+        { "name": "KYROS_DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:database_url::" },
+        { "name": "KYROS_JWT_SECRET",   "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:jwt_secret::" },
+        { "name": "KYROS_OTP_SECRET",   "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:otp_secret::" }
+      ],
+      "environment": [
+        { "name": "KYROS_APP_ENV",    "value": "production" },
+        { "name": "KYROS_AWS_REGION", "value": "ap-south-1" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/kyros/migrations",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "migrate"
+        }
+      }
+    }
+  ]
+}

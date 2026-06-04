@@ -1,5 +1,8 @@
 packages:
-  - 'design-tokens'
-  - 'mobile'
-  - 'doctor-portal'
-  - 'website'
+  - design-tokens
+  - mobile
+  - doctor-portal
+  - website
+
+ignoredBuiltDependencies:
+  - esbuild

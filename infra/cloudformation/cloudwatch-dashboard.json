@@ -1,0 +1,156 @@
+{
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0, "y": 0, "width": 24, "height": 1,
+      "properties": {
+        "markdown": "## Kyros Production — Operational Dashboard\nRegion: ap-south-1 | Updated every 60s"
+      }
+    },
+
+    {
+      "type": "metric",
+      "x": 0, "y": 1, "width": 6, "height": 6,
+      "properties": {
+        "title": "API Request Rate",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"label": "Requests/min", "stat": "Sum", "period": 60}]
+        ],
+        "period": 60,
+        "yAxis": {"left": {"min": 0}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 6, "y": 1, "width": 6, "height": 6,
+      "properties": {
+        "title": "API 5xx Error Rate",
+        "view": "timeSeries",
+        "metrics": [
+          [{"expression": "IF(m2 > 0, (m1/m2)*100, 0)", "label": "5xx %", "id": "e1"}],
+          ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"id": "m1", "visible": false, "stat": "Sum"}],
+          ["AWS/ApplicationELB", "RequestCount",              "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"id": "m2", "visible": false, "stat": "Sum"}]
+        ],
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "max": 10}},
+        "annotations": {"horizontal": [{"value": 1, "label": "1% threshold", "color": "#ff0000"}]}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 1, "width": 6, "height": 6,
+      "properties": {
+        "title": "ALB Latency P95",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"stat": "p95", "label": "P95 ms", "period": 60}],
+          ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"stat": "p99", "label": "P99 ms", "period": 60}]
+        ],
+        "period": 60,
+        "yAxis": {"left": {"min": 0}},
+        "annotations": {"horizontal": [{"value": 1, "label": "1s threshold", "color": "#ff6600"}]}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 18, "y": 1, "width": 6, "height": 6,
+      "properties": {
+        "title": "Healthy Host Count",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/ApplicationELB", "HealthyHostCount",   "TargetGroup", "REPLACE_TG_FULL_NAME", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"stat": "Minimum"}],
+          ["AWS/ApplicationELB", "UnHealthyHostCount", "TargetGroup", "REPLACE_TG_FULL_NAME", "LoadBalancer", "REPLACE_ALB_FULL_NAME", {"stat": "Maximum", "color": "#ff0000"}]
+        ],
+        "period": 60
+      }
+    },
+
+    {
+      "type": "text",
+      "x": 0, "y": 7, "width": 24, "height": 1,
+      "properties": {"markdown": "### Database & Cache"}
+    },
+
+    {
+      "type": "metric",
+      "x": 0, "y": 8, "width": 6, "height": 6,
+      "properties": {
+        "title": "RDS CPU & Connections",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/RDS", "CPUUtilization",     "DBInstanceIdentifier", "REPLACE_RDS_ID", {"stat": "Average", "label": "CPU %"}],
+          ["AWS/RDS", "DatabaseConnections","DBInstanceIdentifier", "REPLACE_RDS_ID", {"stat": "Average", "label": "Connections", "yAxis": "right"}]
+        ],
+        "period": 60,
+        "annotations": {"horizontal": [{"value": 80, "label": "80% CPU", "color": "#ff0000"}]}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 6, "y": 8, "width": 6, "height": 6,
+      "properties": {
+        "title": "RDS IOPS",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/RDS", "ReadIOPS",  "DBInstanceIdentifier", "REPLACE_RDS_ID", {"stat": "Average"}],
+          ["AWS/RDS", "WriteIOPS", "DBInstanceIdentifier", "REPLACE_RDS_ID", {"stat": "Average"}]
+        ],
+        "period": 60
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 8, "width": 6, "height": 6,
+      "properties": {
+        "title": "Redis Memory & CPU",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/ElastiCache", "DatabaseMemoryUsagePercentage", "CacheClusterId", "REPLACE_REDIS_ID", {"stat": "Average", "label": "Memory %"}],
+          ["AWS/ElastiCache", "CPUUtilization",                "CacheClusterId", "REPLACE_REDIS_ID", {"stat": "Average", "label": "CPU %"}]
+        ],
+        "period": 60,
+        "annotations": {"horizontal": [{"value": 80, "label": "80% memory", "color": "#ff0000"}]}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 18, "y": 8, "width": 6, "height": 6,
+      "properties": {
+        "title": "Redis Evictions & Connections",
+        "view": "timeSeries",
+        "metrics": [
+          ["AWS/ElastiCache", "Evictions",         "CacheClusterId", "REPLACE_REDIS_ID", {"stat": "Sum"}],
+          ["AWS/ElastiCache", "CurrConnections",   "CacheClusterId", "REPLACE_REDIS_ID", {"stat": "Average", "yAxis": "right"}]
+        ],
+        "period": 60
+      }
+    },
+
+    {
+      "type": "text",
+      "x": 0, "y": 14, "width": 24, "height": 1,
+      "properties": {"markdown": "### Celery Queue Depths"}
+    },
+
+    {
+      "type": "metric",
+      "x": 0, "y": 15, "width": 24, "height": 6,
+      "properties": {
+        "title": "Celery Queue Depths",
+        "view": "timeSeries",
+        "metrics": [
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "ocr",           {"stat": "Maximum", "label": "OCR"}],
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "notifications", {"stat": "Maximum", "label": "Notifications"}],
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "reports",       {"stat": "Maximum", "label": "Reports"}],
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "payments",      {"stat": "Maximum", "label": "Payments"}],
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "maintenance",   {"stat": "Maximum", "label": "Maintenance"}],
+          ["Kyros/Backend", "CeleryQueueDepth", "Queue", "default",       {"stat": "Maximum", "label": "Default"}]
+        ],
+        "period": 60,
+        "yAxis": {"left": {"min": 0}},
+        "annotations": {"horizontal": [{"value": 100, "label": "Warning", "color": "#ff6600"}, {"value": 200, "label": "Critical", "color": "#ff0000"}]}
+      }
+    }
+  ]
+}
