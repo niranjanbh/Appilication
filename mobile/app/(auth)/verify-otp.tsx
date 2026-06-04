@@ -10,13 +10,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { z } from 'zod';
 import { sendOtpApi, verifyOtpApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
 import { useAuth } from '../../lib/auth/context';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 const schema = z.object({
   otp: z.string().length(6, 'Enter the 6-digit code'),
@@ -24,18 +26,20 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function VerifyOtpScreen() {
-  const router = useRouter();
+  const router  = useRouter();
   const { phone } = useLocalSearchParams<{ phone: string }>();
-  const { signIn } = useAuth();
+  const { signIn }  = useAuth();
+  const isDark  = useColorScheme() === 'dark';
   const [apiError, setApiError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
-  const [resent, setResent] = useState(false);
+  const [resent, setResent]       = useState(false);
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { otp: '' },
   });
 
+  // Preserve 100% of existing submit + resend logic
   const onSubmit = async ({ otp }: FormValues) => {
     setApiError(null);
     try {
@@ -64,131 +68,203 @@ export default function VerifyOtpScreen() {
     }
   };
 
+  const btnScale = useSharedValue(1);
+  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+
+  const outerBg  = isDark ? colors.midnight    : colors.navyDeep;
+  const cardBg   = isDark ? colors.nightSurface : colors.white;
+  const textPri  = isDark ? colors.white        : colors.navyDeep;
+  const textSub  = isDark ? colors.slateText    : colors.coolGray;
+  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: outerBg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.container}>
-        <Text style={styles.title}>Verify your number</Text>
-        <Text style={styles.body}>
-          We sent a 6-digit code to {phone}. Enter it below.
-        </Text>
 
-        <Controller
-          control={control}
-          name="otp"
-          render={({ field }) => (
-            <TextInput
-              style={[styles.otpInput, errors.otp && styles.inputError]}
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              keyboardType="number-pad"
-              maxLength={6}
-              autoFocus
-              accessibilityLabel="6-digit verification code"
-              placeholderTextColor={colors.stone}
-              placeholder="123456"
-              textAlign="center"
-            />
-          )}
-        />
-        {errors.otp && <Text style={styles.fieldError}>{errors.otp.message}</Text>}
-        {apiError && <Text style={styles.apiError}>{apiError}</Text>}
+        {/* Logo area */}
+        <View style={styles.logoArea}>
+          <Text style={styles.wordmark}>Kyros</Text>
+        </View>
 
-        <Pressable
-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
-          onPress={handleSubmit(onSubmit)}
-          disabled={isSubmitting}
-          accessibilityLabel="Verify code"
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color={colors.ivory} />
-          ) : (
-            <Text style={styles.buttonText}>Verify</Text>
-          )}
-        </Pressable>
+        {/* Verify card */}
+        <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <View style={styles.iconWrap}>
+            <Text style={styles.phoneIcon}>📱</Text>
+          </View>
 
-        <Pressable
-          onPress={handleResend}
-          disabled={resending}
-          accessibilityLabel="Resend verification code"
-          style={styles.resendContainer}
-        >
-          <Text style={styles.resendText}>
-            {resent ? 'Code sent again' : resending ? 'Sending…' : "Didn't receive it? Resend"}
+          <Text style={[styles.title, { color: textPri }]}>Verify your number</Text>
+          <Text style={[styles.body, { color: textSub }]}>
+            We sent a 6-digit code to{' '}
+            <Text style={[styles.phoneHighlight, { color: textPri }]}>{phone}</Text>
           </Text>
-        </Pressable>
+
+          <Controller
+            control={control}
+            name="otp"
+            render={({ field }) => (
+              <TextInput
+                style={[
+                  styles.otpInput,
+                  { backgroundColor: inputBg, borderColor: errors.otp ? colors.criticalRed : inputBdr, color: textPri },
+                ]}
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+                accessibilityLabel="6-digit verification code"
+                placeholderTextColor={textSub}
+                placeholder="••••••"
+                textAlign="center"
+              />
+            )}
+          />
+          {errors.otp   && <Text style={styles.fieldError}>{errors.otp.message}</Text>}
+          {apiError     && <Text style={styles.apiError}>{apiError}</Text>}
+
+          <Animated.View style={btnAnim}>
+            <Pressable
+              style={[styles.button, isSubmitting && styles.buttonBusy]}
+              onPress={handleSubmit(onSubmit)}
+              onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+              onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+              disabled={isSubmitting}
+              accessibilityLabel="Verify code"
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Verify</Text>
+              )}
+            </Pressable>
+          </Animated.View>
+
+          <Pressable
+            onPress={handleResend}
+            disabled={resending}
+            accessibilityLabel="Resend verification code"
+            style={styles.resendBtn}
+          >
+            <Text style={[styles.resendText, { color: resent ? colors.successGreen : textSub }]}>
+              {resent ? '✓ Code sent again' : resending ? 'Sending…' : "Didn't receive it? Resend"}
+            </Text>
+          </Pressable>
+        </View>
+
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
+  flex: { flex: 1 },
   container: {
     flex: 1,
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[16],
+    paddingTop: spacing[12],
+    paddingBottom: spacing[8],
+    justifyContent: 'center',
   },
-  title: {
+
+  logoArea: { alignItems: 'center', marginBottom: spacing[6] },
+  wordmark: {
     fontFamily: fontFamily.display,
-    fontSize: fontSize.h2,
-    color: colors.forest,
+    fontSize: 40,
+    color: colors.white,
     fontWeight: '500',
-    marginBottom: spacing[3],
+  },
+
+  card: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[6],
+    gap: spacing[4],
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+    elevation: 16,
+  },
+
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.iceBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing[2],
+  },
+  phoneIcon: { fontSize: 30 },
+
+  title: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.h3,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   body: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
-    marginBottom: spacing[8],
+    textAlign: 'center',
     lineHeight: 22,
   },
+  phoneHighlight: { fontWeight: '600' },
+
   otpInput: {
+    width: '100%',
     borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
-    padding: spacing[4],
+    borderRadius: borderRadius.xl,
+    paddingVertical: spacing[4],
     fontFamily: fontFamily.body,
-    fontSize: fontSize.h2,
-    color: colors.ink,
-    backgroundColor: colors.white,
-    letterSpacing: 8,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 12,
   },
-  inputError: { borderColor: colors.alert },
+
   fieldError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.alert,
-    marginTop: spacing[1],
+    color: colors.criticalRed,
+    textAlign: 'center',
   },
   apiError: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.alert,
-    marginTop: spacing[3],
+    fontSize: fontSize.sm,
+    color: colors.criticalRed,
     textAlign: 'center',
   },
+
   button: {
-    backgroundColor: colors.forest,
-    borderRadius: 8,
-    paddingVertical: spacing[3],
+    width: '100%',
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[6],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ivory,
+    fontSize: fontSize.bodyLg,
+    color: colors.white,
     fontWeight: '600',
   },
-  resendContainer: { marginTop: spacing[4], alignItems: 'center' },
+
+  resendBtn: { paddingVertical: spacing[2] },
   resendText: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.jade,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
   },
 });

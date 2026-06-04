@@ -1,14 +1,3 @@
-/**
- * Lab report detail screen.
- *
- * Shows:
- *   - Report metadata (lab name, date, file type)
- *   - OCR processing indicator while status is ocr_pending/ocr_processing
- *   - Parsed biomarker table when OCR is complete
- *   - Correction form for low-confidence fields (confidence < 0.60 block save)
- *   - Download button
- */
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,9 +8,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import {
   correctLabReport,
   getDownloadUrl,
@@ -30,118 +21,142 @@ import {
   type LabReport,
   type ParsedLabReport,
 } from '../../lib/api/lab-reports';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../lib/design-tokens';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 const POLL_INTERVAL_MS = 4000;
 const PROCESSING_STATUSES = new Set(['ocr_pending', 'ocr_processing']);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function confidenceColor(c: number): string {
-  if (c >= 0.85) return colors.forest;
-  if (c >= 0.60) return colors.saffron;
-  return colors.terracotta;
+  if (c >= 0.85) return colors.successGreen;
+  if (c >= 0.60) return colors.warningAmber;
+  return colors.criticalRed;
 }
-
-function flagLabel(flag: Biomarker['flag']): string {
-  if (flag === 'high') return '↑';
-  if (flag === 'low') return '↓';
+function flagLabel(f: Biomarker['flag']): string {
+  if (f === 'high') return '↑';
+  if (f === 'low') return '↓';
   return '';
 }
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function buildInitialCorrections(p: ParsedLabReport): Record<number, string> {
+  const m: Record<number, string> = {};
+  p.biomarkers.forEach((b, i) => { if (b.confidence < 0.60 || b.needs_patient_correction) m[i] = b.value; });
+  return m;
 }
 
 // ── Biomarker row ─────────────────────────────────────────────────────────────
 
 function BiomarkerRow({
-  biomarker,
-  correctionValue,
-  onChangeCorrectionValue,
+  biomarker, correctionValue, onChangeCorrectionValue,
+  isDark, textPri, textSub, cardBg, cardBdr,
 }: {
-  biomarker: Biomarker;
-  correctionValue: string;
+  biomarker: Biomarker; correctionValue: string;
   onChangeCorrectionValue: (v: string) => void;
+  isDark: boolean; textPri: string; textSub: string; cardBg: string; cardBdr: string;
 }) {
   const needsCorrection = biomarker.confidence < 0.60 || biomarker.needs_patient_correction;
-  const lowConfidence = biomarker.confidence < 0.85;
+  const lowConfidence   = biomarker.confidence < 0.85;
+  const flagColor = biomarker.flag === 'high' ? colors.criticalRed : colors.warningAmber;
 
   return (
-    <View style={[styles.bioRow, needsCorrection && styles.bioRowHighlight]}>
-      <View style={styles.bioHeader}>
-        <Text style={styles.bioName}>{biomarker.name}</Text>
+    <View style={[b.row, { backgroundColor: cardBg, borderColor: needsCorrection ? colors.warningAmber + '50' : cardBdr, borderWidth: needsCorrection ? 1.5 : 1 }]}>
+      <View style={b.header}>
+        <Text style={[b.name, { color: textPri }]}>{biomarker.name}</Text>
         {flagLabel(biomarker.flag) ? (
-          <Text style={[styles.bioFlag, { color: biomarker.flag === 'high' ? colors.terracotta : colors.saffron }]}>
-            {flagLabel(biomarker.flag)}
-          </Text>
+          <Text style={[b.flag, { color: flagColor }]}>{flagLabel(biomarker.flag)}</Text>
         ) : null}
         {lowConfidence && (
-          <View style={[styles.confidenceBadge, { backgroundColor: confidenceColor(biomarker.confidence) + '20' }]}>
-            <Text style={[styles.confidenceText, { color: confidenceColor(biomarker.confidence) }]}>
+          <View style={[b.confBadge, { backgroundColor: confidenceColor(biomarker.confidence) + '20' }]}>
+            <Text style={[b.confText, { color: confidenceColor(biomarker.confidence) }]}>
               {Math.round(biomarker.confidence * 100)}% confidence
             </Text>
           </View>
         )}
       </View>
-
-      <View style={styles.bioValueRow}>
-        {needsCorrection ? (
-          <View style={styles.correctionField}>
-            <Text style={styles.correctionLabel}>
-              {biomarker.confidence < 0.60
-                ? 'Please verify this value before saving:'
-                : 'Low confidence — verify:'}
-            </Text>
-            <TextInput
-              style={styles.correctionInput}
-              value={correctionValue}
-              onChangeText={onChangeCorrectionValue}
-              placeholder={biomarker.value || '—'}
-              placeholderTextColor={colors.stone}
-              keyboardType="decimal-pad"
-              accessibilityLabel={`Correct value for ${biomarker.name}`}
-            />
-            <Text style={styles.correctionUnit}>
-              {biomarker.unit}
-              {biomarker.ref_low && biomarker.ref_high
-                ? `  ·  Ref: ${biomarker.ref_low}–${biomarker.ref_high}`
-                : ''}
-            </Text>
-          </View>
-        ) : (
-          <>
-            <Text style={styles.bioValue}>
-              {biomarker.value} {biomarker.unit}
-            </Text>
-            {biomarker.ref_low && biomarker.ref_high && (
-              <Text style={styles.bioRef}>
-                Ref: {biomarker.ref_low}–{biomarker.ref_high}
-              </Text>
-            )}
-          </>
-        )}
-      </View>
+      {needsCorrection ? (
+        <View style={b.correction}>
+          <Text style={[b.corrLabel, { color: colors.warningAmber }]}>
+            {biomarker.confidence < 0.60 ? 'Please verify this value:' : 'Low confidence — verify:'}
+          </Text>
+          <TextInput
+            style={[b.corrInput, { backgroundColor: isDark ? colors.nightElev : colors.skyMist, borderColor: colors.warningAmber + '60', color: textPri }]}
+            value={correctionValue}
+            onChangeText={onChangeCorrectionValue}
+            placeholder={biomarker.value || '—'}
+            placeholderTextColor={textSub}
+            keyboardType="decimal-pad"
+            accessibilityLabel={`Correct value for ${biomarker.name}`}
+          />
+          <Text style={[b.corrUnit, { color: textSub }]}>
+            {biomarker.unit}{biomarker.ref_low && biomarker.ref_high ? `  ·  Ref: ${biomarker.ref_low}–${biomarker.ref_high}` : ''}
+          </Text>
+        </View>
+      ) : (
+        <View style={b.valueRow}>
+          <Text style={[b.value, { color: textPri }]}>{biomarker.value} {biomarker.unit}</Text>
+          {biomarker.ref_low && biomarker.ref_high && (
+            <Text style={[b.ref, { color: textSub }]}>Ref: {biomarker.ref_low}–{biomarker.ref_high}</Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
-// ── Correction state builder ──────────────────────────────────────────────────
+const b = StyleSheet.create({
+  row:       { borderRadius: borderRadius.xl, padding: spacing[4], gap: spacing[2] },
+  header:    { flexDirection: 'row', alignItems: 'center', gap: spacing[2], flexWrap: 'wrap' },
+  name:      { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600', flex: 1 },
+  flag:      { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
+  confBadge: { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: borderRadius.full },
+  confText:  { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
+  valueRow:  { flexDirection: 'row', alignItems: 'baseline', gap: spacing[3] },
+  value:     { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '500' },
+  ref:       { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  correction: { gap: spacing[2] },
+  corrLabel:  { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  corrInput:  { borderWidth: 1, borderRadius: borderRadius.xl, paddingHorizontal: spacing[4], paddingVertical: spacing[3], fontFamily: fontFamily.body, fontSize: fontSize.body },
+  corrUnit:   { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+});
 
-function buildInitialCorrections(parsed: ParsedLabReport): Record<number, string> {
-  const map: Record<number, string> = {};
-  parsed.biomarkers.forEach((b, i) => {
-    if (b.confidence < 0.60 || b.needs_patient_correction) {
-      map[i] = b.value;
-    }
-  });
-  return map;
+// ── Meta card ─────────────────────────────────────────────────────────────────
+
+function MetaCard({ report, onDownload, isDark, textPri, textSub, cardBg, cardBdr }: {
+  report: LabReport; onDownload: () => void;
+  isDark: boolean; textPri: string; textSub: string; cardBg: string; cardBdr: string;
+}) {
+  const dlScale = useSharedValue(1);
+  const dlAnim  = useAnimatedStyle(() => ({ transform: [{ scale: dlScale.value }] }));
+  return (
+    <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+      <View style={styles.metaRow}>
+        <Text style={[styles.metaLabel, { color: textSub }]}>File</Text>
+        <Text style={[styles.metaValue, { color: textPri }]} numberOfLines={1}>{report.original_filename}</Text>
+      </View>
+      {report.report_date && (
+        <View style={styles.metaRow}>
+          <Text style={[styles.metaLabel, { color: textSub }]}>Report date</Text>
+          <Text style={[styles.metaValue, { color: textPri }]}>{report.report_date}</Text>
+        </View>
+      )}
+      <View style={styles.metaRow}>
+        <Text style={[styles.metaLabel, { color: textSub }]}>Uploaded</Text>
+        <Text style={[styles.metaValue, { color: textPri }]}>{formatDate(report.created_at)}</Text>
+      </View>
+      <Animated.View style={dlAnim}>
+        <Pressable
+          style={[styles.dlBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight }]}
+          onPress={onDownload}
+          onPressIn={() => { dlScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+          onPressOut={() => { dlScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+          accessibilityLabel="Download original file"
+        >
+          <Text style={[styles.dlBtnText, { color: textPri }]}>↓ Download original</Text>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
@@ -149,11 +164,12 @@ function buildInitialCorrections(parsed: ParsedLabReport): Record<number, string
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const isDark = useColorScheme() === 'dark';
 
-  const [report, setReport] = useState<LabReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [report,      setReport]      = useState<LabReport | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
   const [corrections, setCorrections] = useState<Record<number, string>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -163,9 +179,7 @@ export default function ReportDetailScreen() {
       const data = await getLabReport(id);
       setReport(data);
       if (data.parsed_json) {
-        setCorrections((prev) =>
-          Object.keys(prev).length === 0 ? buildInitialCorrections(data.parsed_json!) : prev,
-        );
+        setCorrections(prev => Object.keys(prev).length === 0 ? buildInitialCorrections(data.parsed_json!) : prev);
       }
       setError(null);
     } catch {
@@ -175,52 +189,28 @@ export default function ReportDetailScreen() {
     }
   }, [id]);
 
-  // Poll while OCR is in progress
-  useEffect(() => {
-    void fetchReport();
-  }, [fetchReport]);
-
+  useEffect(() => { void fetchReport(); }, [fetchReport]);
   useEffect(() => {
     if (!report) return;
     if (PROCESSING_STATUSES.has(report.status)) {
-      pollRef.current = setInterval(() => {
-        void fetchReport();
-      }, POLL_INTERVAL_MS);
+      pollRef.current = setInterval(() => { void fetchReport(); }, POLL_INTERVAL_MS);
     } else {
       if (pollRef.current) clearInterval(pollRef.current);
     }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [report?.status, fetchReport]);
 
   const handleSaveCorrections = useCallback(async () => {
     if (!report?.parsed_json) return;
-
-    // Build corrected parsed_json
     const updated: ParsedLabReport = {
       ...report.parsed_json,
-      biomarkers: report.parsed_json.biomarkers.map((b, i) => {
+      biomarkers: report.parsed_json.biomarkers.map((bm, i) => {
         const corrected = corrections[i];
-        if (corrected !== undefined) {
-          return { ...b, value: corrected, needs_patient_correction: false };
-        }
-        return b;
+        return corrected !== undefined ? { ...bm, value: corrected, needs_patient_correction: false } : bm;
       }),
     };
-
-    // Block save if any confidence < 0.60 field is still blank
-    const blocking = report.parsed_json.biomarkers.some(
-      (b, i) => b.confidence < 0.60 && !corrections[i]?.trim(),
-    );
-    if (blocking) {
-      Alert.alert(
-        'Correction required',
-        'Please fill in all highlighted fields before saving.',
-      );
-      return;
-    }
-
+    const blocking = report.parsed_json.biomarkers.some((bm, i) => bm.confidence < 0.60 && !corrections[i]?.trim());
+    if (blocking) { Alert.alert('Correction required', 'Please fill in all highlighted fields before saving.'); return; }
     setSaving(true);
     try {
       const saved = await correctLabReport(report.id, updated);
@@ -243,433 +233,179 @@ export default function ReportDetailScreen() {
     }
   }, [report]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  const saveScale = useSharedValue(1);
+  const saveAnim  = useAnimatedStyle(() => ({ transform: [{ scale: saveScale.value }] }));
+
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.forest} />
-      </View>
-    );
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
   }
-
   if (error || !report) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error ?? 'Report not found.'}</Text>
-        <Pressable onPress={() => router.back()} style={styles.backLink}>
-          <Text style={styles.backLinkText}>← Back</Text>
-        </Pressable>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Report not found.'}</Text>
+        <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.electricBlue }]}>← Back</Text></Pressable>
       </View>
     );
   }
-
-  // ── OCR in progress ────────────────────────────────────────────────────────
-
   if (PROCESSING_STATUSES.has(report.status)) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.forest} />
-        <Text style={styles.processingTitle}>Analysing your report…</Text>
-        <Text style={styles.processingSub}>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <ActivityIndicator size="large" color={colors.electricBlue} />
+        <Text style={[styles.processingTitle, { color: textPri }]}>Analysing your report…</Text>
+        <Text style={[styles.processingSub, { color: textSub }]}>
           Our system is extracting your lab values. This usually takes under 60 seconds.
         </Text>
       </View>
     );
   }
-
-  // ── OCR failed ─────────────────────────────────────────────────────────────
-
   if (report.status === 'ocr_failed') {
     return (
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-        <MetaSection report={report} onDownload={() => void handleDownload()} />
-        <View style={styles.failedBox}>
-          <Text style={styles.failedTitle}>Processing failed</Text>
-          <Text style={styles.failedSub}>
-            We couldn't automatically read this report. You can still download the original file
-            above and share it with your doctor.
+      <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+        <MetaCard report={report} onDownload={() => void handleDownload()} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />
+        <View style={[styles.failedBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
+          <Text style={[styles.failedTitle, { color: colors.criticalRed }]}>Processing failed</Text>
+          <Text style={[styles.failedSub, { color: textSub }]}>
+            We couldn't automatically read this report. You can still download the original file and share it with your doctor.
           </Text>
         </View>
       </ScrollView>
     );
   }
 
-  // ── Results ────────────────────────────────────────────────────────────────
-
-  const parsed = report.parsed_json;
+  const parsed        = report.parsed_json;
   const hasCorrections = Object.keys(corrections).length > 0;
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <MetaSection report={report} onDownload={() => void handleDownload()} />
+    <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+      <MetaCard report={report} onDownload={() => void handleDownload()} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />
 
       {parsed ? (
         <>
-          {parsed.lab_name ? (
+          {parsed.lab_name && (
             <View style={styles.labInfo}>
-              <Text style={styles.labInfoLabel}>Lab</Text>
-              <Text style={styles.labInfoValue}>{parsed.lab_name}</Text>
+              <Text style={[styles.labLabel, { color: textSub }]}>Lab</Text>
+              <Text style={[styles.labValue, { color: textPri }]}>{parsed.lab_name}</Text>
             </View>
-          ) : null}
+          )}
 
           {report.status === 'patient_review_needed' && (
-            <View style={styles.reviewBanner}>
-              <Text style={styles.reviewBannerText}>
+            <View style={[styles.reviewBanner, { backgroundColor: colors.warningAmber + '15', borderColor: colors.warningAmber + '40' }]}>
+              <Text style={[styles.reviewText, { color: textPri }]}>
                 Some values need your confirmation before they're saved to your health record.
               </Text>
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Biomarker Results</Text>
+          <Text style={[styles.sectionTitle, { color: textPri }]}>Biomarker Results</Text>
 
-          {parsed.biomarkers.map((b, i) => (
-            <BiomarkerRow
-              key={`${b.name}-${i}`}
-              biomarker={b}
-              correctionValue={corrections[i] ?? b.value}
-              onChangeCorrectionValue={(v) =>
-                setCorrections((prev) => ({ ...prev, [i]: v }))
-              }
-            />
-          ))}
-
-          {parsed.biomarkers.length === 0 && (
-            <Text style={styles.emptyBio}>No biomarker values were extracted.</Text>
-          )}
+          <View style={styles.bioList}>
+            {parsed.biomarkers.map((bm, i) => (
+              <BiomarkerRow
+                key={`${bm.name}-${i}`}
+                biomarker={bm}
+                correctionValue={corrections[i] ?? bm.value}
+                onChangeCorrectionValue={v => setCorrections(prev => ({ ...prev, [i]: v }))}
+                isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr}
+              />
+            ))}
+            {parsed.biomarkers.length === 0 && (
+              <Text style={[styles.emptyBio, { color: textSub }]}>No biomarker values were extracted.</Text>
+            )}
+          </View>
 
           {(hasCorrections || report.status === 'patient_review_needed') && !report.patient_corrected && (
-            <Pressable
-              style={[styles.saveButton, saving && styles.disabled]}
-              onPress={() => void handleSaveCorrections()}
-              disabled={saving}
-              accessibilityLabel="Save corrections"
-            >
-              {saving ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.saveButtonText}>Save corrections</Text>
-              )}
-            </Pressable>
+            <Animated.View style={saveAnim}>
+              <Pressable
+                style={[styles.saveBtn, saving && styles.disabled]}
+                onPress={() => void handleSaveCorrections()}
+                onPressIn={() => { saveScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+                onPressOut={() => { saveScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+                disabled={saving}
+                accessibilityLabel="Save corrections"
+              >
+                {saving ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.saveBtnText}>Save corrections</Text>}
+              </Pressable>
+            </Animated.View>
           )}
 
           {report.patient_corrected && (
-            <View style={styles.correctedBadge}>
-              <Text style={styles.correctedText}>✓ You've reviewed and corrected this report</Text>
+            <View style={[styles.correctedBadge, { backgroundColor: colors.successGreen + '15' }]}>
+              <Text style={[styles.correctedText, { color: colors.successGreen }]}>✓ You've reviewed and corrected this report</Text>
             </View>
           )}
 
           {typeof parsed.overall_confidence === 'number' && (
-            <Text style={styles.confidence}>
+            <Text style={[styles.confidence, { color: textSub }]}>
               Overall OCR confidence: {Math.round(parsed.overall_confidence * 100)}%
             </Text>
           )}
         </>
       ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            This report hasn't been processed yet. Pull down to refresh.
-          </Text>
-        </View>
+        <Text style={[styles.emptyState, { color: textSub }]}>This report hasn't been processed yet. Pull down to refresh.</Text>
       )}
     </ScrollView>
   );
 }
 
-// ── Meta section (shared between states) ──────────────────────────────────────
-
-function MetaSection({ report, onDownload }: { report: LabReport; onDownload: () => void }) {
-  return (
-    <View style={styles.metaCard}>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>File</Text>
-        <Text style={styles.metaValue} numberOfLines={1}>{report.original_filename}</Text>
-      </View>
-      {report.report_date && (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaLabel}>Report date</Text>
-          <Text style={styles.metaValue}>{report.report_date}</Text>
-        </View>
-      )}
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>Uploaded</Text>
-        <Text style={styles.metaValue}>{formatDate(report.created_at)}</Text>
-      </View>
-      <Pressable
-        style={styles.downloadButton}
-        onPress={onDownload}
-        accessibilityLabel="Download original file"
-      >
-        <Text style={styles.downloadButtonText}>↓ Download original</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-  },
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[16],
-    gap: spacing[4],
-  },
-  center: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[8],
-    gap: spacing[4],
-  },
-  errorText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.terracotta,
-    textAlign: 'center',
-  },
-  backLink: { alignItems: 'center' },
-  backLinkText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  processingTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.forest,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  processingSub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  metaCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-    gap: spacing[3],
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  metaLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    flex: 1,
-  },
-  metaValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.ink,
-    fontWeight: '500',
-    flex: 2,
-    textAlign: 'right',
-  },
-  downloadButton: {
+  scroll: { flex: 1 },
+  container: { flexGrow: 1, paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[16], gap: spacing[4] },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8], gap: spacing[4] },
+
+  card: {
+    borderRadius: borderRadius.xxl,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.forest,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing[2],
-    alignItems: 'center',
-    marginTop: spacing[1],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
-  downloadButtonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.forest,
-    fontWeight: '600',
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
+  metaLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, flex: 1 },
+  metaValue: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', flex: 2, textAlign: 'right' },
+  dlBtn: { marginHorizontal: spacing[5], marginBottom: spacing[4], height: 44, borderWidth: 1, borderRadius: borderRadius.xl, alignItems: 'center', justifyContent: 'center' },
+  dlBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
+
+  labInfo: { flexDirection: 'row', gap: spacing[3], alignItems: 'center' },
+  labLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  labValue: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  reviewBanner: { borderRadius: borderRadius.xl, borderWidth: 1, padding: spacing[4] },
+  reviewText:   { fontFamily: fontFamily.body, fontSize: fontSize.caption, lineHeight: 20 },
+
+  sectionTitle: { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '500' },
+
+  bioList: { gap: spacing[3] },
+  emptyBio: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', paddingVertical: spacing[4] },
+
+  saveBtn: {
+    height: 56, backgroundColor: colors.navyDeep, borderRadius: borderRadius.xxl,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: colors.navyDeep, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.30, shadowRadius: 16, elevation: 6,
   },
-  labInfo: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    alignItems: 'center',
-  },
-  labInfoLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  labInfoValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-  },
-  reviewBanner: {
-    backgroundColor: colors.saffron + '22',
-    borderRadius: borderRadius.md,
-    padding: spacing[4],
-  },
-  reviewBannerText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.ink,
-    lineHeight: 20,
-  },
-  sectionTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.forest,
-    fontWeight: '500',
-  },
-  bioRow: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  bioRowHighlight: {
-    borderWidth: 1,
-    borderColor: colors.saffron + '60',
-  },
-  bioHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    flexWrap: 'wrap',
-  },
-  bioName: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '600',
-    flex: 1,
-  },
-  bioFlag: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    fontWeight: '700',
-  },
-  confidenceBadge: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  confidenceText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-  },
-  bioValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing[3],
-  },
-  bioValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '500',
-  },
-  bioRef: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  correctionField: {
-    flex: 1,
-    gap: spacing[2],
-  },
-  correctionLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.terracotta,
-  },
-  correctionInput: {
-    borderWidth: 1,
-    borderColor: colors.saffron,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    backgroundColor: colors.ivory,
-  },
-  correctionUnit: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  emptyBio: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-    paddingVertical: spacing[4],
-  },
-  saveButton: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  disabled: { opacity: 0.45 },
-  correctedBadge: {
-    backgroundColor: colors.forest + '18',
-    borderRadius: borderRadius.md,
-    padding: spacing[3],
-    alignItems: 'center',
-  },
-  correctedText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.forest,
-    fontWeight: '600',
-  },
-  confidence: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    textAlign: 'right',
-  },
-  failedBox: {
-    backgroundColor: colors.terracotta + '18',
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-    gap: spacing[2],
-  },
-  failedTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.terracotta,
-    fontWeight: '600',
-  },
-  failedSub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    lineHeight: 22,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing[8],
-  },
-  emptyStateText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  disabled:    { opacity: 0.45 },
+  saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+
+  correctedBadge: { borderRadius: borderRadius.xl, padding: spacing[3], alignItems: 'center' },
+  correctedText:  { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
+
+  confidence: { fontFamily: fontFamily.body, fontSize: fontSize.caption, textAlign: 'right' },
+
+  failedBox:   { borderRadius: borderRadius.xl, borderWidth: 1, padding: spacing[4], gap: spacing[2] },
+  failedTitle: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
+  failedSub:   { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 22 },
+
+  emptyState:       { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22, paddingVertical: spacing[8] },
+  processingTitle:  { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '500', textAlign: 'center' },
+  processingSub:    { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
+  errorText:        { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
+  backLink:         { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
 });

@@ -6,21 +6,18 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ConsultationStatus =
-  | 'scheduled'
-  | 'confirmed'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled'
-  | 'no_show';
+  | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
 
 interface Consultation {
   id: string;
@@ -46,90 +43,83 @@ interface ListResponse {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const UPCOMING_STATUSES: ConsultationStatus[] = ['scheduled', 'confirmed', 'in_progress'];
-
-function isUpcoming(c: Consultation): boolean {
-  return UPCOMING_STATUSES.includes(c.status);
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
-function formatRupees(paise: number): string {
-  return `₹${(paise / 100).toFixed(0)}`;
-}
-
-function formatCategory(cat: string): string {
-  return cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
+function isUpcoming(c: Consultation): boolean { return UPCOMING_STATUSES.includes(c.status); }
+function formatDate(iso: string) { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function formatTime(iso: string) { return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }); }
+function formatRupees(p: number) { return `₹${(p / 100).toFixed(0)}`; }
+function formatCat(cat: string)  { return cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
-  scheduled: 'Scheduled',
-  confirmed: 'Confirmed',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  no_show: 'No Show',
+  scheduled: 'Scheduled', confirmed: 'Confirmed', in_progress: 'In Progress',
+  completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
-  scheduled: colors.forest,
-  confirmed: '#2563EB',
-  in_progress: '#D97706',
-  completed: colors.stone,
-  cancelled: '#DC2626',
-  no_show: '#DC2626',
+  scheduled:   colors.navyDeep,
+  confirmed:   colors.electricBlue,
+  in_progress: colors.warningAmber,
+  completed:   colors.successGreen,
+  cancelled:   colors.criticalRed,
+  no_show:     colors.criticalRed,
 };
 
-// ── Card component ─────────────────────────────────────────────────────────────
+// ── Card ───────────────────────────────────────────────────────────────────────
 
 function ConsultationCard({
   item,
+  isDark,
   onPress,
 }: {
   item: Consultation;
+  isDark: boolean;
   onPress: () => void;
 }) {
-  const statusColor = STATUS_COLOR[item.status];
+  const scale = useSharedValue(1);
+  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const sc    = STATUS_COLOR[item.status];
+
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+
   return (
-    <Pressable
-      style={styles.card}
-      onPress={onPress}
-      accessibilityLabel={`Consultation on ${formatDate(item.scheduled_start_at)}, status ${STATUS_LABEL[item.status]}`}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardDate}>
-          {formatDate(item.scheduled_start_at)} · {formatTime(item.scheduled_start_at)}
-        </Text>
-        <View style={[styles.statusPill, { backgroundColor: statusColor + '18' }]}>
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {STATUS_LABEL[item.status]}
+    <Animated.View style={anim}>
+      <Pressable
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
+        onPress={onPress}
+        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+        accessibilityLabel={`Consultation on ${formatDate(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardDate, { color: textSub }]}>
+            {formatDate(item.scheduled_start_at)} · {formatTime(item.scheduled_start_at)}
           </Text>
+          <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>
+            <Text style={[styles.statusText, { color: sc }]}>{STATUS_LABEL[item.status]}</Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.cardCategory}>{formatCategory(item.condition_category)}</Text>
-      <Text style={styles.cardType}>
-        {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'} ·{' '}
-        {formatRupees(item.consultation_fee_paise)}
-      </Text>
-    </Pressable>
+        <Text style={[styles.cardCategory, { color: textPri }]}>
+          {formatCat(item.condition_category)}
+        </Text>
+        <Text style={[styles.cardMeta, { color: textSub }]}>
+          {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'} · {formatRupees(item.consultation_fee_paise)}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
 export default function ConsultationsScreen() {
-  const router = useRouter();
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
   const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error,      setError]      = useState<string | null>(null);
 
   const fetchConsultations = useCallback(async () => {
     try {
@@ -152,49 +142,61 @@ export default function ConsultationsScreen() {
     setRefreshing(false);
   }, [fetchConsultations]);
 
+  const bookScale = useSharedValue(1);
+  const bookAnim  = useAnimatedStyle(() => ({ transform: [{ scale: bookScale.value }] }));
+
   const upcoming = consultations.filter(isUpcoming);
-  const past = consultations.filter((c) => !isUpcoming(c));
+  const past     = consultations.filter(c => !isUpcoming(c));
+  const bg       = isDark ? colors.midnight : colors.skyMist;
+  const textPri  = isDark ? colors.white    : colors.navyDeep;
+  const textSub  = isDark ? colors.slateText : colors.coolGray;
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.forest} />
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <ActivityIndicator color={colors.electricBlue} />
       </View>
     );
   }
 
   return (
     <ScrollView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.electricBlue} />}
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Consultations</Text>
-        <Pressable
-          style={styles.bookButton}
-          onPress={() => router.push('/consultations/book')}
-          accessibilityLabel="Book a consultation"
-        >
-          <Text style={styles.bookButtonText}>+ Book</Text>
-        </Pressable>
+        <Text style={[styles.title, { color: textPri }]}>Consultations</Text>
+        <Animated.View style={bookAnim}>
+          <Pressable
+            style={styles.bookBtn}
+            onPress={() => router.push('/consultations/book')}
+            onPressIn={() => { bookScale.value = withSpring(0.94, { mass: 0.3, stiffness: 500 }); }}
+            onPressOut={() => { bookScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+            accessibilityLabel="Book a consultation"
+          >
+            <Text style={styles.bookBtnText}>+ Book</Text>
+          </Pressable>
+        </Animated.View>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
       {/* Upcoming */}
-      <Text style={styles.sectionLabel}>Upcoming</Text>
+      <Text style={[styles.sectionLabel, { color: textSub }]}>Upcoming</Text>
       {upcoming.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No upcoming consultations</Text>
-          <Text style={styles.emptySub}>Book a consultation to get started.</Text>
+        <View style={[styles.emptyCard, { backgroundColor: isDark ? colors.nightSurface : colors.white, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)' }]}>
+          <Text style={styles.emptyIcon}>📅</Text>
+          <Text style={[styles.emptyText, { color: textPri }]}>No upcoming consultations</Text>
+          <Text style={[styles.emptySub, { color: textSub }]}>Book a consultation to get started.</Text>
         </View>
       ) : (
-        upcoming.map((c) => (
+        upcoming.map(c => (
           <ConsultationCard
             key={c.id}
             item={c}
+            isDark={isDark}
             onPress={() => router.push(`/consultations/${c.id}`)}
           />
         ))
@@ -203,11 +205,12 @@ export default function ConsultationsScreen() {
       {/* Past */}
       {past.length > 0 && (
         <>
-          <Text style={[styles.sectionLabel, styles.sectionLabelLower]}>Past</Text>
-          {past.map((c) => (
+          <Text style={[styles.sectionLabel, styles.sectionLabelLower, { color: textSub }]}>Past</Text>
+          {past.map(c => (
             <ConsultationCard
               key={c.id}
               item={c}
+              isDark={isDark}
               onPress={() => router.push(`/consultations/${c.id}`)}
             />
           ))}
@@ -220,7 +223,7 @@ export default function ConsultationsScreen() {
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
+  flex: { flex: 1 },
   container: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
@@ -228,109 +231,114 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[10],
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing[5],
+    marginBottom: spacing[6],
   },
   title: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  bookButton: {
-    backgroundColor: colors.forest,
+  bookBtn: {
+    height: 36,
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
+    backgroundColor: colors.navyDeep,
     borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  bookButtonText: {
+  bookBtnText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
     color: colors.white,
-    fontWeight: '600',
+    fontWeight: '700',
   },
+
   sectionLabel: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.stone,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: spacing[3],
-    marginTop: spacing[1],
   },
   sectionLabelLower: { marginTop: spacing[6] },
+
   card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing[4],
     marginBottom: spacing[3],
-    gap: spacing[1],
+    gap: spacing[2],
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing[1],
   },
   cardDate: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.stone,
   },
   statusPill: {
     paddingHorizontal: spacing[2],
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: borderRadius.full,
   },
   statusText: {
     fontFamily: fontFamily.body,
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: fontSize.xs,
+    fontWeight: '700',
   },
   cardCategory: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  cardType: {
+  cardMeta: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.stone,
   },
+
   emptyCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[5],
+    borderRadius: borderRadius.xl,
+    padding: spacing[6],
     alignItems: 'center',
     gap: spacing[2],
     marginBottom: spacing[3],
+    borderWidth: 1,
   },
+  emptyIcon:  { fontSize: 32 },
   emptyText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '600',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   emptySub: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.stone,
     textAlign: 'center',
   },
+
   error: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: '#DC2626',
+    color: colors.criticalRed,
     marginBottom: spacing[4],
   },
 });

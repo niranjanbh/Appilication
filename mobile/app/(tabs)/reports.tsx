@@ -1,7 +1,3 @@
-/**
- * Reports tab — shows the patient's lab report list and entry point to upload.
- */
-
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,13 +6,15 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { listLabReports, type LabReport } from '../../lib/api/lab-reports';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
-// ── Status helpers ────────────────────────────────────────────────────────────
+// ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<string, string> = {
   upload_pending:        'Upload pending',
@@ -29,64 +27,81 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   upload_pending:        colors.stone,
-  ocr_pending:           colors.saffron,
-  ocr_processing:        colors.saffron,
-  ocr_complete:          colors.forest,
-  ocr_failed:            colors.terracotta,
-  patient_review_needed: colors.saffron,
+  ocr_pending:           colors.warningAmber,
+  ocr_processing:        colors.warningAmber,
+  ocr_complete:          colors.successGreen,
+  ocr_failed:            colors.criticalRed,
+  patient_review_needed: colors.warningAmber,
 };
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+    day: 'numeric', month: 'short', year: 'numeric',
   });
 }
 
 // ── Report card ───────────────────────────────────────────────────────────────
 
-function ReportCard({ report, onPress }: { report: LabReport; onPress: () => void }) {
-  const statusColor = STATUS_COLOR[report.status] ?? colors.stone;
-  const statusLabel = STATUS_LABEL[report.status] ?? report.status;
+function ReportCard({
+  report,
+  onPress,
+  isDark,
+}: {
+  report: LabReport;
+  onPress: () => void;
+  isDark: boolean;
+}) {
+  const scale  = useSharedValue(1);
+  const anim   = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const sColor = STATUS_COLOR[report.status] ?? colors.stone;
+  const sLabel = STATUS_LABEL[report.status] ?? report.status;
+  const isPdf  = report.content_type === 'application/pdf';
+
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
 
   return (
-    <Pressable style={styles.card} onPress={onPress} accessibilityLabel={`View ${report.original_filename}`}>
-      <View style={styles.cardLeft}>
-        <View style={[styles.fileIcon, { backgroundColor: statusColor + '18' }]}>
-          <Text style={[styles.fileIconText, { color: statusColor }]}>
-            {report.content_type === 'application/pdf' ? 'PDF' : 'IMG'}
+    <Animated.View style={anim}>
+      <Pressable
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
+        onPress={onPress}
+        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+        accessibilityLabel={`View ${report.original_filename}`}
+      >
+        <View style={[styles.fileIcon, { backgroundColor: sColor + '18' }]}>
+          <Text style={[styles.fileIconText, { color: sColor }]}>{isPdf ? 'PDF' : 'IMG'}</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.filename, { color: textPri }]} numberOfLines={1}>
+            {report.original_filename}
           </Text>
+          {report.lab_name ? <Text style={[styles.labName, { color: textSub }]}>{report.lab_name}</Text> : null}
+          <Text style={[styles.date, { color: textSub }]}>{formatDate(report.created_at)}</Text>
         </View>
-      </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.filename} numberOfLines={1}>
-          {report.original_filename}
-        </Text>
-        {report.lab_name ? (
-          <Text style={styles.labName}>{report.lab_name}</Text>
-        ) : null}
-        <Text style={styles.date}>{formatDate(report.created_at)}</Text>
-      </View>
-      <View style={styles.cardRight}>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
-          <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+        <View style={styles.cardRight}>
+          <View style={[styles.statusPill, { backgroundColor: sColor + '18' }]}>
+            <Text style={[styles.statusText, { color: sColor }]}>{sLabel}</Text>
+          </View>
+          <Text style={[styles.chevron, { color: textSub }]}>›</Text>
         </View>
-        <Text style={styles.chevron}>›</Text>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ReportsScreen() {
-  const router = useRouter();
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
   const [reports, setReports] = useState<LabReport[]>([]);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -103,66 +118,82 @@ export default function ReportsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
+
+  const fabScale = useSharedValue(1);
+  const fabAnim  = useAnimatedStyle(() => ({ transform: [{ scale: fabScale.value }] }));
+
+  const bg = isDark ? colors.midnight : colors.skyMist;
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.forest} />
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <ActivityIndicator color={colors.electricBlue} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={reports}
         keyExtractor={(r) => r.id}
         renderItem={({ item }) => (
           <ReportCard
             report={item}
+            isDark={isDark}
             onPress={() => router.push(`/reports/${item.id}`)}
           />
         )}
         contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.forest} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.electricBlue}
+          />
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Lab Reports</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: isDark ? colors.white : colors.navyDeep }]}>
+              Lab Reports
+            </Text>
+            <Text style={[styles.subtitle, { color: isDark ? colors.slateText : colors.coolGray }]}>
               {total > 0 ? `${total} report${total === 1 ? '' : 's'}` : 'No reports yet'}
             </Text>
           </View>
         }
         ListEmptyComponent={
-          !error ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No reports yet</Text>
-              <Text style={styles.emptySub}>
-                Upload a lab report and our system will extract your biomarker results
-                automatically.
+          <View style={styles.empty}>
+            <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
+              <Text style={styles.emptyIconText}>🔬</Text>
+            </View>
+            <Text style={[styles.emptyTitle, { color: isDark ? colors.white : colors.navyDeep }]}>
+              {error ?? 'No reports yet'}
+            </Text>
+            {!error && (
+              <Text style={[styles.emptySub, { color: isDark ? colors.slateText : colors.coolGray }]}>
+                Upload a lab report and we'll extract your biomarker results automatically.
               </Text>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={[styles.emptyTitle, { color: colors.terracotta }]}>{error}</Text>
-            </View>
-          )
+            )}
+          </View>
         }
       />
-      <View style={styles.fab}>
+
+      {/* Upload FAB */}
+      <Animated.View style={[styles.fab, fabAnim]}>
         <Pressable
-          style={styles.uploadButton}
+          style={styles.uploadBtn}
           onPress={() => router.push('/reports/upload')}
+          onPressIn={() => { fabScale.value = withSpring(0.95, { mass: 0.3, stiffness: 500 }); }}
+          onPressOut={() => { fabScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
           accessibilityLabel="Upload lab report"
         >
-          <Text style={styles.uploadButtonText}>+ Upload report</Text>
+          <Text style={styles.uploadIcon}>+</Text>
+          <Text style={styles.uploadText}>Upload report</Text>
         </Pressable>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -170,139 +201,136 @@ export default function ReportsScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-  },
-  center: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  list: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[24],
-  },
-  header: {
-    paddingTop: spacing[6],
-    paddingBottom: spacing[4],
-    gap: spacing[1],
-  },
+  container: { flex: 1 },
+  center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list: { paddingHorizontal: spacing[4], paddingTop: spacing[2], paddingBottom: 100 },
+
+  header: { paddingVertical: spacing[4], gap: spacing[1] },
   title: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   subtitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.stone,
   },
+
   card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing[3],
     gap: spacing[3],
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  cardLeft: {},
   fileIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   fileIconText: {
     fontFamily: fontFamily.body,
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  cardBody: {
-    flex: 1,
-    gap: 2,
-  },
+  cardBody: { flex: 1, gap: 3 },
   filename: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   labName: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.stone,
   },
   date: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.stone,
   },
-  cardRight: {
-    alignItems: 'flex-end',
-    gap: spacing[2],
-  },
-  statusBadge: {
+  cardRight: { alignItems: 'flex-end', gap: spacing[2] },
+  statusPill: {
     paddingHorizontal: spacing[2],
     paddingVertical: 3,
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.full,
   },
   statusText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   chevron: {
     fontFamily: fontFamily.body,
     fontSize: 20,
-    color: colors.stone,
   },
-  emptyState: {
+
+  empty: { alignItems: 'center', paddingTop: spacing[16], gap: spacing[4] },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
-    paddingTop: spacing[16],
-    paddingHorizontal: spacing[6],
-    gap: spacing[3],
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
+  emptyIconText: { fontSize: 32 },
   emptyTitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
   emptySub: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
     textAlign: 'center',
     lineHeight: 22,
+    paddingHorizontal: spacing[6],
   },
+
   fab: {
     position: 'absolute',
     bottom: spacing[8],
     left: spacing[6],
     right: spacing[6],
   },
-  uploadButton: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
+  uploadBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: colors.forest,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'center',
+    gap: spacing[2],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  uploadButtonText: {
+  uploadIcon: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '700',
+    fontSize: 22,
     color: colors.white,
+    lineHeight: 26,
+  },
+  uploadText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.bodyLg,
+    color: colors.white,
+    fontWeight: '700',
   },
 });

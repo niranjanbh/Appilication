@@ -7,8 +7,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import {
   confirmAbhaCreation,
   getAbhaStatus,
@@ -16,26 +18,26 @@ import {
   linkAbhaNumber,
   type AbhaStatus,
 } from '../lib/api/abha';
-import { colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
 
-type Tab = 'link' | 'create';
+type Tab        = 'link' | 'create';
 type CreateStep = 'aadhaar' | 'otp';
 
 export default function AbhaSettingsScreen() {
-  const router = useRouter();
-  const [status, setStatus] = useState<AbhaStatus | null>(null);
-  const [statusLoading, setStatusLoading] = useState(true);
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
 
-  const [tab, setTab] = useState<Tab>('link');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  const [abhaNumber, setAbhaNumber] = useState('');
-  const [createStep, setCreateStep] = useState<CreateStep>('aadhaar');
-  const [aadhaarNumber, setAadhaarNumber] = useState('');
-  const [txnId, setTxnId] = useState('');
-  const [otp, setOtp] = useState('');
+  const [status,         setStatus]        = useState<AbhaStatus | null>(null);
+  const [statusLoading,  setStatusLoading] = useState(true);
+  const [tab,            setTab]           = useState<Tab>('link');
+  const [loading,        setLoading]       = useState(false);
+  const [error,          setError]         = useState<string | null>(null);
+  const [success,        setSuccess]       = useState<string | null>(null);
+  const [abhaNumber,     setAbhaNumber]    = useState('');
+  const [createStep,     setCreateStep]    = useState<CreateStep>('aadhaar');
+  const [aadhaarNumber,  setAadhaarNumber] = useState('');
+  const [txnId,          setTxnId]         = useState('');
+  const [otp,            setOtp]           = useState('');
 
   useEffect(() => {
     getAbhaStatus()
@@ -44,22 +46,16 @@ export default function AbhaSettingsScreen() {
       .finally(() => setStatusLoading(false));
   }, []);
 
+  // Preserve all existing ABHA link / create logic
   const handleLinkExisting = async () => {
     setError(null);
     const digits = abhaNumber.replace(/-/g, '');
-    if (digits.length !== 14 || !/^\d+$/.test(digits)) {
-      setError('Enter a valid 14-digit ABHA number');
-      return;
-    }
+    if (digits.length !== 14 || !/^\d+$/.test(digits)) { setError('Enter a valid 14-digit ABHA number'); return; }
     setLoading(true);
     try {
       const result = await linkAbhaNumber(abhaNumber);
-      if (result.linked) {
-        setStatus(result);
-        setSuccess(`ABHA linked: ${result.abha_number_masked ?? ''}`);
-      } else {
-        setError('ABHA number not found in ABDM registry');
-      }
+      if (result.linked) { setStatus(result); setSuccess(`ABHA linked: ${result.abha_number_masked ?? ''}`); }
+      else setError('ABHA number not found in ABDM registry');
     } catch {
       setError('Could not verify ABHA number. Please try again.');
     } finally {
@@ -69,10 +65,7 @@ export default function AbhaSettingsScreen() {
 
   const handleCreateInit = async () => {
     setError(null);
-    if (!/^\d{12}$/.test(aadhaarNumber)) {
-      setError('Enter a valid 12-digit Aadhaar number');
-      return;
-    }
+    if (!/^\d{12}$/.test(aadhaarNumber)) { setError('Enter a valid 12-digit Aadhaar number'); return; }
     setLoading(true);
     try {
       const result = await initAbhaCreation(aadhaarNumber);
@@ -87,20 +80,12 @@ export default function AbhaSettingsScreen() {
 
   const handleCreateConfirm = async () => {
     setError(null);
-    if (!/^\d{6}$/.test(otp)) {
-      setError('Enter the 6-digit OTP');
-      return;
-    }
+    if (!/^\d{6}$/.test(otp)) { setError('Enter the 6-digit OTP'); return; }
     setLoading(true);
     try {
       const result = await confirmAbhaCreation(txnId, otp);
-      if (result.linked) {
-        setStatus(result);
-        setSuccess(`ABHA created: ${result.abha_number_masked ?? ''}`);
-      } else {
-        setError('Invalid OTP or session expired. Please start again.');
-        setCreateStep('aadhaar');
-      }
+      if (result.linked) { setStatus(result); setSuccess(`ABHA created: ${result.abha_number_masked ?? ''}`); }
+      else { setError('Invalid OTP or session expired. Please start again.'); setCreateStep('aadhaar'); }
     } catch {
       setError('Invalid OTP. Please try again.');
     } finally {
@@ -108,160 +93,179 @@ export default function AbhaSettingsScreen() {
     }
   };
 
+  const btnScale = useSharedValue(1);
+  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+
+  const bg        = isDark ? colors.midnight     : colors.skyMist;
+  const textPri   = isDark ? colors.white        : colors.navyDeep;
+  const textSub   = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg    = isDark ? colors.nightSurface : colors.white;
+  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+
   if (statusLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.sage} />
-      </View>
-    );
+    return <View style={[styles.centered, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
   }
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} accessibilityLabel="Go back" style={styles.backButton}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-      </View>
+    <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
 
-      <Text style={styles.title}>Health Records (ABHA)</Text>
-      <Text style={styles.subtitle}>
-        Your Ayushman Bharat Health Account lets you carry your health history securely
-        across providers.
+      {/* Header */}
+      <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
+        <Text style={[styles.backText, { color: colors.electricBlue }]}>‹ Back</Text>
+      </Pressable>
+      <Text style={[styles.title, { color: textPri }]}>Health Records (ABHA)</Text>
+      <Text style={[styles.subtitle, { color: textSub }]}>
+        Your Ayushman Bharat Health Account lets you carry your health history securely across providers.
       </Text>
 
+      {/* Linked state */}
       {status?.linked && (
-        <View style={styles.linkedCard}>
-          <Text style={styles.linkedLabel}>Linked ABHA</Text>
-          <Text style={styles.linkedNumber}>{status.abha_number_masked}</Text>
+        <View style={[styles.linkedCard, { backgroundColor: colors.successGreen + '12', borderColor: colors.successGreen + '30' }]}>
+          <Text style={[styles.linkedLabel, { color: colors.successGreen }]}>✓ Linked ABHA</Text>
+          <Text style={[styles.linkedNumber, { color: textPri }]}>{status.abha_number_masked}</Text>
         </View>
       )}
 
+      {/* Success banner */}
       {success && (
-        <View style={styles.successBanner}>
-          <Text style={styles.successText}>{success}</Text>
+        <View style={[styles.successBanner, { backgroundColor: colors.successGreen + '12', borderColor: colors.successGreen + '30' }]}>
+          <Text style={[styles.successText, { color: colors.successGreen }]}>{success}</Text>
         </View>
       )}
 
+      {/* Forms */}
       {!status?.linked && !success && (
         <>
-          <View style={styles.tabs}>
-            <Pressable
-              style={[styles.tab, tab === 'link' && styles.tabActive]}
-              onPress={() => { setTab('link'); setError(null); }}
-              accessibilityLabel="Link existing ABHA"
-            >
-              <Text style={[styles.tabText, tab === 'link' && styles.tabTextActive]}>
-                I have an ABHA
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, tab === 'create' && styles.tabActive]}
-              onPress={() => { setTab('create'); setError(null); setCreateStep('aadhaar'); }}
-              accessibilityLabel="Create new ABHA"
-            >
-              <Text style={[styles.tabText, tab === 'create' && styles.tabTextActive]}>
-                Create new ABHA
-              </Text>
-            </Pressable>
+          {/* Tab switcher */}
+          <View style={[styles.tabBar, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]}>
+            {(['link', 'create'] as Tab[]).map(t => (
+              <Pressable
+                key={t}
+                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, shadowColor: isDark ? '#000' : colors.navyDeep }]]}
+                onPress={() => { setTab(t); setError(null); if (t === 'create') setCreateStep('aadhaar'); }}
+                accessibilityLabel={t === 'link' ? 'Link existing ABHA' : 'Create new ABHA'}
+              >
+                <Text style={[styles.tabText, { color: tab === t ? textPri : textSub, fontWeight: tab === t ? '700' : '400' }]}>
+                  {t === 'link' ? 'I have an ABHA' : 'Create new ABHA'}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
+          {/* Link form */}
           {tab === 'link' && (
             <View style={styles.form}>
-              <Text style={styles.label}>Your ABHA number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="12345678901234"
-                placeholderTextColor={colors.stone}
-                value={abhaNumber}
-                onChangeText={setAbhaNumber}
-                keyboardType="number-pad"
-                maxLength={17}
-                accessibilityLabel="ABHA number"
-              />
-              <Text style={styles.hint}>14-digit number from your ABHA card or app</Text>
-              <Pressable
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleLinkExisting}
-                disabled={loading}
-                accessibilityLabel="Verify and link ABHA"
-              >
-                {loading
-                  ? <ActivityIndicator color={colors.ivory} />
-                  : <Text style={styles.buttonText}>Verify and link</Text>
-                }
-              </Pressable>
+              <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: textPri }]}>Your ABHA number</Text>
+                <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+                  <TextInput
+                    style={[styles.textInput, { color: textPri }]}
+                    placeholder="12345678901234"
+                    placeholderTextColor={textSub}
+                    value={abhaNumber}
+                    onChangeText={setAbhaNumber}
+                    keyboardType="number-pad"
+                    maxLength={17}
+                    accessibilityLabel="ABHA number"
+                  />
+                </View>
+                <Text style={[styles.hint, { color: textSub }]}>14-digit number from your ABHA card or app</Text>
+              </View>
+              <Animated.View style={btnAnim}>
+                <Pressable
+                  style={[styles.button, loading && styles.buttonBusy]}
+                  onPress={handleLinkExisting}
+                  onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+                  onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+                  disabled={loading}
+                  accessibilityLabel="Verify and link ABHA"
+                >
+                  {loading ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.buttonText}>Verify and link</Text>}
+                </Pressable>
+              </Animated.View>
             </View>
           )}
 
+          {/* Create — aadhaar step */}
           {tab === 'create' && createStep === 'aadhaar' && (
             <View style={styles.form}>
-              <Text style={styles.label}>Aadhaar number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="XXXXXXXXXXXX"
-                placeholderTextColor={colors.stone}
-                value={aadhaarNumber}
-                onChangeText={setAadhaarNumber}
-                keyboardType="number-pad"
-                maxLength={12}
-                secureTextEntry
-                accessibilityLabel="Aadhaar number"
-              />
-              <Text style={styles.hint}>
-                An OTP will be sent to your Aadhaar-linked mobile.
-                Your Aadhaar is encrypted end-to-end and never stored by Kyros.
-              </Text>
-              <Pressable
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleCreateInit}
-                disabled={loading}
-                accessibilityLabel="Send OTP"
-              >
-                {loading
-                  ? <ActivityIndicator color={colors.ivory} />
-                  : <Text style={styles.buttonText}>Send OTP</Text>
-                }
-              </Pressable>
+              <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: textPri }]}>Aadhaar number</Text>
+                <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+                  <TextInput
+                    style={[styles.textInput, { color: textPri }]}
+                    placeholder="XXXXXXXXXXXX"
+                    placeholderTextColor={textSub}
+                    value={aadhaarNumber}
+                    onChangeText={setAadhaarNumber}
+                    keyboardType="number-pad"
+                    maxLength={12}
+                    secureTextEntry
+                    accessibilityLabel="Aadhaar number"
+                  />
+                </View>
+                <Text style={[styles.hint, { color: textSub }]}>
+                  An OTP will be sent to your Aadhaar-linked mobile. Your Aadhaar is encrypted end-to-end and never stored by Kyros.
+                </Text>
+              </View>
+              <Animated.View style={btnAnim}>
+                <Pressable
+                  style={[styles.button, loading && styles.buttonBusy]}
+                  onPress={handleCreateInit}
+                  onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+                  onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+                  disabled={loading}
+                  accessibilityLabel="Send OTP"
+                >
+                  {loading ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.buttonText}>Send OTP</Text>}
+                </Pressable>
+              </Animated.View>
             </View>
           )}
 
+          {/* Create — OTP step */}
           {tab === 'create' && createStep === 'otp' && (
             <View style={styles.form}>
-              <Text style={styles.label}>Enter OTP</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="000000"
-                placeholderTextColor={colors.stone}
-                value={otp}
-                onChangeText={setOtp}
-                keyboardType="number-pad"
-                maxLength={6}
-                accessibilityLabel="OTP"
-              />
-              <Text style={styles.hint}>Check the mobile number linked to your Aadhaar</Text>
+              <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: textPri }]}>Enter OTP</Text>
+                <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+                  <TextInput
+                    style={[styles.textInput, { color: textPri }]}
+                    placeholder="000000"
+                    placeholderTextColor={textSub}
+                    value={otp}
+                    onChangeText={setOtp}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    accessibilityLabel="OTP"
+                  />
+                </View>
+                <Text style={[styles.hint, { color: textSub }]}>Check the mobile number linked to your Aadhaar</Text>
+              </View>
+              <Animated.View style={btnAnim}>
+                <Pressable
+                  style={[styles.button, loading && styles.buttonBusy]}
+                  onPress={handleCreateConfirm}
+                  onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+                  onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+                  disabled={loading}
+                  accessibilityLabel="Confirm OTP and create ABHA"
+                >
+                  {loading ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.buttonText}>Create ABHA</Text>}
+                </Pressable>
+              </Animated.View>
               <Pressable
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleCreateConfirm}
-                disabled={loading}
-                accessibilityLabel="Confirm OTP and create ABHA"
-              >
-                {loading
-                  ? <ActivityIndicator color={colors.ivory} />
-                  : <Text style={styles.buttonText}>Create ABHA</Text>
-                }
-              </Pressable>
-              <Pressable
-                style={styles.secondaryButton}
+                style={styles.secondaryBtn}
                 onPress={() => { setCreateStep('aadhaar'); setOtp(''); setError(null); }}
                 accessibilityLabel="Change Aadhaar number"
               >
-                <Text style={styles.secondaryButtonText}>Change Aadhaar number</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.electricBlue }]}>Change Aadhaar number</Text>
               </Pressable>
             </View>
           )}
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
+          {error && <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>}
         </>
       )}
     </ScrollView>
@@ -269,86 +273,57 @@ export default function AbhaSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.ivory },
-  container: { padding: spacing[6], paddingBottom: spacing[10], flexGrow: 1 },
-  headerRow: { marginBottom: spacing[4] },
-  backButton: { paddingVertical: spacing[1] },
-  backText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.sage },
-  title: {
-    fontFamily: fontFamily.heading,
-    fontSize: fontSize.h2,
-    color: colors.ink,
-    marginBottom: spacing[2],
-  },
-  subtitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    lineHeight: 22,
-    marginBottom: spacing[6],
-  },
+  flex:    { flex: 1 },
+  centered:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { padding: spacing[6], paddingBottom: spacing[10], flexGrow: 1, gap: spacing[4] },
+
+  backBtn:  { alignSelf: 'flex-start' },
+  backText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  title: { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600' },
+  subtitle: { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 22 },
+
   linkedCard: {
-    backgroundColor: '#F0FAF5',
-    borderRadius: 10,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-  },
-  linkedLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    marginBottom: spacing[1],
-  },
-  linkedNumber: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ink },
-  successBanner: {
-    backgroundColor: '#F0FAF5',
-    borderRadius: 8,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-  },
-  successText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.ink },
-  tabs: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    backgroundColor: '#F0EDE8',
-    padding: 4,
-    marginBottom: spacing[6],
-  },
-  tab: { flex: 1, paddingVertical: spacing[2], alignItems: 'center', borderRadius: 6 },
-  tabActive: { backgroundColor: colors.ivory },
-  tabText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.stone },
-  tabTextActive: { color: colors.ink, fontFamily: fontFamily.body },
-  form: { gap: spacing[3] },
-  label: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.ink },
-  input: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[5],
     borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    backgroundColor: colors.ivory,
+    gap: spacing[1],
   },
-  hint: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone, lineHeight: 18 },
+  linkedLabel:  { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  linkedNumber: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
+
+  successBanner: { borderRadius: borderRadius.xl, borderWidth: 1, padding: spacing[4] },
+  successText:   { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  tabBar:   { flexDirection: 'row', borderRadius: borderRadius.xl, padding: 4 },
+  tabItem:  { flex: 1, paddingVertical: spacing[3], alignItems: 'center', borderRadius: borderRadius.lg },
+  tabActive: { shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  tabText:  { fontFamily: fontFamily.body, fontSize: fontSize.body },
+
+  form:       { gap: spacing[3] },
+  field:      { gap: spacing[1] },
+  fieldLabel: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
+  inputWrap:  { borderRadius: borderRadius.xl, borderWidth: 1, paddingHorizontal: spacing[4], paddingVertical: spacing[4] },
+  textInput:  { fontFamily: fontFamily.body, fontSize: fontSize.body, padding: 0 },
+  hint:       { fontFamily: fontFamily.body, fontSize: fontSize.caption, lineHeight: 18 },
+
   button: {
-    backgroundColor: colors.sage,
-    borderRadius: 8,
-    paddingVertical: spacing[4],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.ivory },
-  secondaryButton: { paddingVertical: spacing[2], alignItems: 'center' },
-  secondaryButtonText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.sage },
-  errorText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.alert,
-    marginTop: spacing[3],
-    textAlign: 'center',
-  },
+  buttonBusy: { opacity: 0.70 },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '600' },
+
+  secondaryBtn:     { height: 48, alignItems: 'center', justifyContent: 'center' },
+  secondaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, textAlign: 'center' },
 });

@@ -11,13 +11,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { z } from 'zod';
 import { loginApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
 import { useAuth } from '../../lib/auth/context';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 const schema = z.object({
   email_or_phone: z.string().min(1, 'Required'),
@@ -25,16 +27,64 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+// ─── Input field ──────────────────────────────────────────────────────────────
+
+interface FieldProps {
+  label: string;
+  error?: string;
+  inputBg: string;
+  inputBdr: string;
+  textColor: string;
+  children: React.ReactNode;
+}
+
+function Field({ label, error, inputBg, inputBdr, textColor, children }: FieldProps) {
+  return (
+    <View style={field.wrap}>
+      <Text style={[field.label, { color: textColor }]}>{label}</Text>
+      <View style={[field.inputWrap, { backgroundColor: inputBg, borderColor: error ? colors.criticalRed : inputBdr }]}>
+        {children}
+      </View>
+      {error ? <Text style={field.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+const field = StyleSheet.create({
+  wrap:     { gap: spacing[1] },
+  label: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  inputWrap: {
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
+  },
+  error: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.caption,
+    color: colors.criticalRed,
+    marginTop: 2,
+  },
+});
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
 export default function LoginScreen() {
-  const router = useRouter();
+  const router    = useRouter();
   const { signIn } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
+  const isDark = useColorScheme() === 'dark';
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { email_or_phone: '', password: '' },
   });
 
+  // Preserve 100% of the existing submit logic
   const onSubmit = async (values: FormValues) => {
     setApiError(null);
     try {
@@ -58,157 +108,224 @@ export default function LoginScreen() {
     }
   };
 
+  const btnScale = useSharedValue(1);
+  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+
+  // Deep navy background creates premium contrast regardless of system theme
+  const outerBg  = isDark ? colors.midnight    : colors.navyDeep;
+  const cardBg   = isDark ? colors.nightSurface : colors.white;
+  const textPri  = isDark ? colors.white        : colors.navyDeep;
+  const textSub  = isDark ? colors.slateText    : colors.coolGray;
+  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+  const inputTxt = isDark ? colors.white        : colors.navyDeep;
+
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: outerBg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.wordmark}>Kyros</Text>
-        <Text style={styles.subtitle}>Doctor-first hormonal health</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email or phone</Text>
-          <Controller
-            control={control}
-            name="email_or_phone"
-            render={({ field }) => (
-              <TextInput
-                style={[styles.input, errors.email_or_phone && styles.inputError]}
-                value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                accessibilityLabel="Email or phone"
-                placeholderTextColor={colors.stone}
-                placeholder="you@example.com or +919876543210"
+        {/* ── Logo area ───────────────────────────────────────────────────── */}
+        <View style={styles.logoArea}>
+          <Text style={styles.wordmark}>Kyros</Text>
+          <Text style={styles.tagline}>Doctor-first hormonal health</Text>
+        </View>
+
+        {/* ── Form card (clay + glass effect) ─────────────────────────────── */}
+        <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <Text style={[styles.cardTitle, { color: textPri }]}>Sign in</Text>
+          <Text style={[styles.cardSub, { color: textSub }]}>
+            Enter your email or phone to continue
+          </Text>
+
+          <View style={styles.fields}>
+            <Field
+              label="Email or phone"
+              error={errors.email_or_phone?.message}
+              inputBg={inputBg}
+              inputBdr={inputBdr}
+              textColor={textPri}
+            >
+              <Controller
+                control={control}
+                name="email_or_phone"
+                render={({ field: f }) => (
+                  <TextInput
+                    value={f.value}
+                    onChangeText={f.onChange}
+                    onBlur={f.onBlur}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    accessibilityLabel="Email or phone"
+                    placeholderTextColor={textSub}
+                    placeholder="you@example.com or +91…"
+                    style={[styles.textInput, { color: inputTxt }]}
+                  />
+                )}
               />
-            )}
-          />
-          {errors.email_or_phone && (
-            <Text style={styles.fieldError}>{errors.email_or_phone.message}</Text>
-          )}
+            </Field>
 
-          <Text style={[styles.label, { marginTop: spacing[4] }]}>Password</Text>
-          <Controller
-            control={control}
-            name="password"
-            render={({ field }) => (
-              <TextInput
-                style={[styles.input, errors.password && styles.inputError]}
-                value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                secureTextEntry
-                autoComplete="password"
-                accessibilityLabel="Password"
-                placeholderTextColor={colors.stone}
-                placeholder="••••••••"
+            <Field
+              label="Password"
+              error={errors.password?.message}
+              inputBg={inputBg}
+              inputBdr={inputBdr}
+              textColor={textPri}
+            >
+              <Controller
+                control={control}
+                name="password"
+                render={({ field: f }) => (
+                  <TextInput
+                    value={f.value}
+                    onChangeText={f.onChange}
+                    onBlur={f.onBlur}
+                    secureTextEntry
+                    autoComplete="password"
+                    accessibilityLabel="Password"
+                    placeholderTextColor={textSub}
+                    placeholder="••••••••"
+                    style={[styles.textInput, { color: inputTxt }]}
+                  />
+                )}
               />
-            )}
-          />
-          {errors.password && (
-            <Text style={styles.fieldError}>{errors.password.message}</Text>
-          )}
+            </Field>
+          </View>
 
-          {apiError && <Text style={styles.apiError}>{apiError}</Text>}
+          {apiError ? (
+            <Text style={styles.apiError}>{apiError}</Text>
+          ) : null}
 
-          <Pressable
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isSubmitting}
-            accessibilityLabel="Sign in"
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.ivory} />
-            ) : (
-              <Text style={styles.buttonText}>Sign in</Text>
-            )}
-          </Pressable>
+          {/* Animated submit button */}
+          <Animated.View style={btnAnim}>
+            <Pressable
+              style={[styles.button, isSubmitting && styles.buttonBusy]}
+              onPress={handleSubmit(onSubmit)}
+              onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+              onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+              disabled={isSubmitting}
+              accessibilityLabel="Sign in"
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Sign in</Text>
+              )}
+            </Pressable>
+          </Animated.View>
 
-          <Link href="/(auth)/signup" style={styles.link}>
+          <Link href="/(auth)/signup" style={[styles.signupLink, { color: textSub }]}>
             New to Kyros? Create an account
           </Link>
         </View>
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
+  flex: { flex: 1 },
   container: {
     flexGrow: 1,
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing[6],
     paddingTop: spacing[16],
     paddingBottom: spacing[8],
   },
+
+  // Logo area — sits on the deep navy background
+  logoArea: {
+    alignItems: 'center',
+    marginBottom: spacing[8],
+    gap: spacing[2],
+  },
   wordmark: {
     fontFamily: fontFamily.display,
-    fontSize: fontSize.display,
-    color: colors.forest,
+    fontSize: 48,
+    color: colors.white,
     fontWeight: '500',
+    letterSpacing: -0.5,
   },
-  subtitle: {
+  tagline: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
-    marginTop: spacing[1],
-    marginBottom: spacing[12],
+    color: 'rgba(255,255,255,0.60)',
+    letterSpacing: 0.2,
   },
-  form: { gap: spacing[1] },
-  label: {
+
+  // Form card (clay: large radius, soft shadow, solid surface)
+  card: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[6],
+    gap: spacing[4],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+    elevation: 16,
+  },
+  cardTitle: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.h3,
+    fontWeight: '700',
+  },
+  cardSub: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    marginTop: -spacing[2],
+  },
+
+  fields: { gap: spacing[4] },
+
+  textInput: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-    marginBottom: spacing[1],
+    padding: 0,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
-    padding: spacing[3],
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    backgroundColor: colors.white,
-  },
-  inputError: { borderColor: colors.alert },
-  fieldError: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.alert,
-    marginTop: spacing[1],
-  },
+
   apiError: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.alert,
-    marginTop: spacing[3],
+    fontSize: fontSize.sm,
+    color: colors.criticalRed,
     textAlign: 'center',
   },
+
+  // Primary button (full-width, 56px, bold radius)
   button: {
-    backgroundColor: colors.forest,
-    borderRadius: 8,
-    paddingVertical: spacing[3],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[6],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ivory,
+    fontSize: fontSize.bodyLg,
+    color: colors.white,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
-  link: {
+
+  signupLink: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.jade,
+    fontSize: fontSize.sm,
     textAlign: 'center',
-    marginTop: spacing[4],
+    paddingVertical: spacing[2],
   },
 });

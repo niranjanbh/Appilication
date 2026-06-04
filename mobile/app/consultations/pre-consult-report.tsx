@@ -1,40 +1,22 @@
-/**
- * Pre-consultation report screen — read-only patient view.
- *
- * Shows: lab summary with trend indicators, medication adherence, wearable stats,
- * patient-flagged concerns, and a PDF download button.
- * Low-confidence OCR biomarker fields (flag ≠ null) are highlighted.
- */
-
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  getPreConsultReport,
-  type BiomarkerSummary,
-  type PreConsultReport,
-} from '../../lib/api/pre-consult-reports';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { getPreConsultReport, type BiomarkerSummary, type PreConsultReport } from '../../lib/api/pre-consult-reports';
 import { apiFetch } from '../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
-
-// Convenience aliases for tokens that exist under different names in mobile
-const F = fontSize;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function trendSymbol(t: BiomarkerSummary['trend']): string {
   if (t === 'up') return '↑';
   if (t === 'down') return '↓';
   return '↔';
 }
-
-function trendColor(t: BiomarkerSummary['trend']): string {
-  if (t === 'up') return colors.terracotta;
-  if (t === 'down') return colors.forest;
-  return colors.stone;
+function trendColor(t: BiomarkerSummary['trend'], isDark: boolean): string {
+  if (t === 'up') return colors.criticalRed;
+  if (t === 'down') return colors.successGreen;
+  return isDark ? colors.slateText : colors.coolGray;
 }
-
-function formatDate(iso: string): string {
+function formatDate(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true,
@@ -44,48 +26,72 @@ function formatDate(iso: string): string {
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, cardBg, cardBdr, textPri }: {
+  title: string; children: React.ReactNode;
+  cardBg: string; cardBdr: string; textPri: string; textSub: string;
+}) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[sec.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+      <Text style={[sec.title, { color: textPri, borderBottomColor: cardBdr }]}>{title}</Text>
       {children}
     </View>
   );
 }
+const sec = StyleSheet.create({
+  card: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[5],
+    borderWidth: 1,
+    gap: spacing[3],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  title: {
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.bodyLg,
+    fontWeight: '600',
+    borderBottomWidth: 1,
+    paddingBottom: spacing[3],
+  },
+});
 
 // ── Lab summary ───────────────────────────────────────────────────────────────
 
-function LabSummarySection({ summary }: { summary: PreConsultReport['lab_summary'] }) {
-  if (!summary || !summary.biomarkers || summary.biomarkers.length === 0) {
+function LabSummarySection({ summary, isDark, cardBg, cardBdr, textPri, textSub }: {
+  summary: PreConsultReport['lab_summary']; isDark: boolean;
+  cardBg: string; cardBdr: string; textPri: string; textSub: string;
+}) {
+  if (!summary?.biomarkers?.length) {
     return (
-      <Section title="Lab Summary (last 90 days)">
-        <Text style={styles.emptyText}>No lab data available yet.</Text>
+      <Section title="Lab Summary (last 90 days)" cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
+        <Text style={[styles.emptyText, { color: textSub }]}>No lab data available yet.</Text>
       </Section>
     );
   }
-
   return (
-    <Section title={`Lab Summary (last ${summary.window_days} days)`}>
-      {summary.biomarkers.map((bm) => (
-        <View key={bm.name} style={[styles.biomarkerRow, bm.flag && styles.biomarkerFlagged]}>
-          <View style={styles.biomarkerLeft}>
-            <Text style={styles.biomarkerName}>{bm.name}</Text>
-            <Text style={styles.biomarkerRef}>
-              Ref: {bm.ref_low ?? '—'} – {bm.ref_high ?? '—'} {bm.unit ?? ''}
-            </Text>
+    <Section title={`Lab Summary (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
+      {summary.biomarkers.map(bm => (
+        <View key={bm.name} style={[styles.bioRow, bm.flag && { backgroundColor: colors.warningAmber + '12', borderRadius: borderRadius.lg, paddingHorizontal: spacing[3] }]}>
+          <View style={styles.bioLeft}>
+            <Text style={[styles.bioName, { color: textPri }]}>{bm.name}</Text>
+            <Text style={[styles.bioRef, { color: textSub }]}>Ref: {bm.ref_low ?? '—'}–{bm.ref_high ?? '—'} {bm.unit ?? ''}</Text>
           </View>
-          <View style={styles.biomarkerRight}>
-            <Text style={[styles.biomarkerValue, bm.flag === 'high' && styles.valueFlagHigh, bm.flag === 'low' && styles.valueFlagLow]}>
+          <View style={styles.bioRight}>
+            <Text style={[
+              styles.bioValue,
+              { color: bm.flag === 'high' ? colors.criticalRed : bm.flag === 'low' ? colors.warningAmber : textPri },
+            ]}>
               {bm.value ?? '—'} {bm.unit ?? ''}
             </Text>
-            <Text style={[styles.trendSymbol, { color: trendColor(bm.trend) }]}>
-              {trendSymbol(bm.trend)}
-            </Text>
+            <Text style={[styles.bioTrend, { color: trendColor(bm.trend, isDark) }]}>{trendSymbol(bm.trend)}</Text>
           </View>
         </View>
       ))}
-      {summary.biomarkers.some((b) => b.flag) && (
-        <Text style={styles.flagNote}>Highlighted rows have out-of-range values.</Text>
+      {summary.biomarkers.some(bm => bm.flag) && (
+        <Text style={[styles.flagNote, { color: textSub }]}>Highlighted rows have out-of-range values.</Text>
       )}
     </Section>
   );
@@ -93,28 +99,36 @@ function LabSummarySection({ summary }: { summary: PreConsultReport['lab_summary
 
 // ── Adherence section ─────────────────────────────────────────────────────────
 
-function AdherenceSection({ summary }: { summary: PreConsultReport['adherence_summary'] }) {
+function AdherenceSection({ summary, cardBg, cardBdr, textPri, textSub }: {
+  summary: PreConsultReport['adherence_summary'];
+  cardBg: string; cardBdr: string; textPri: string; textSub: string;
+}) {
   if (!summary || summary.compliance_pct === null) {
     return (
-      <Section title="Medication Adherence">
-        <Text style={styles.emptyText}>No medication reminder data yet.</Text>
+      <Section title="Medication Adherence" cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
+        <Text style={[styles.emptyText, { color: textSub }]}>No medication reminder data yet.</Text>
       </Section>
     );
   }
-
-  const pct = summary.compliance_pct;
-  const barColor = pct >= 80 ? colors.forest : pct >= 50 ? colors.saffron : colors.terracotta;
-
+  const pct      = summary.compliance_pct;
+  const barColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
   return (
-    <Section title={`Medication Adherence (last ${summary.window_days} days)`}>
-      <View style={styles.adherenceBar}>
+    <Section title={`Medication Adherence (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
+      <View style={[styles.adherenceTrack, { backgroundColor: colors.borderLight }]}>
         <View style={[styles.adherenceFill, { width: `${pct}%` as `${number}%`, backgroundColor: barColor }]} />
       </View>
       <Text style={[styles.adherencePct, { color: barColor }]}>{pct}%</Text>
       <View style={styles.adherenceStats}>
-        <Text style={styles.adherenceStat}>Taken: {summary.taken}</Text>
-        <Text style={styles.adherenceStat}>Skipped: {summary.skipped}</Text>
-        <Text style={styles.adherenceStat}>Snoozed: {summary.snoozed}</Text>
+        {[
+          { label: 'Taken',   value: summary.taken },
+          { label: 'Skipped', value: summary.skipped },
+          { label: 'Snoozed', value: summary.snoozed },
+        ].map(({ label, value }) => (
+          <View key={label} style={styles.adherenceStat}>
+            <Text style={[styles.adherenceStatValue, { color: textPri }]}>{value}</Text>
+            <Text style={[styles.adherenceStatLabel, { color: textSub }]}>{label}</Text>
+          </View>
+        ))}
       </View>
     </Section>
   );
@@ -122,28 +136,31 @@ function AdherenceSection({ summary }: { summary: PreConsultReport['adherence_su
 
 // ── Wearable section ──────────────────────────────────────────────────────────
 
-function WearableSection({ summary }: { summary: PreConsultReport['wearable_summary'] }) {
+function WearableSection({ summary, cardBg, cardBdr, textPri, textSub }: {
+  summary: PreConsultReport['wearable_summary'];
+  cardBg: string; cardBdr: string; textPri: string; textSub: string;
+}) {
   if (!summary) {
     return (
-      <Section title="Health Summary">
-        <Text style={styles.emptyText}>No wearable data available.</Text>
+      <Section title="Health Summary" cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
+        <Text style={[styles.emptyText, { color: textSub }]}>No wearable data available.</Text>
       </Section>
     );
   }
-
   const stats = [
-    { label: 'Avg Daily Steps', value: summary.avg_steps ? summary.avg_steps.toLocaleString('en-IN') : '—' },
-    { label: 'Avg Resting HR', value: summary.avg_resting_hr ? `${summary.avg_resting_hr} bpm` : '—' },
-    { label: 'Avg Sleep', value: summary.avg_sleep_hours ? `${summary.avg_sleep_hours} hrs` : '—' },
+    { icon: '👟', label: 'Avg Steps',   value: summary.avg_steps ? summary.avg_steps.toLocaleString('en-IN') : '—' },
+    { icon: '❤️', label: 'Resting HR',  value: summary.avg_resting_hr ? `${summary.avg_resting_hr}` : '—', unit: 'bpm' },
+    { icon: '😴', label: 'Avg Sleep',   value: summary.avg_sleep_hours ? `${summary.avg_sleep_hours}` : '—', unit: 'hrs' },
   ];
-
   return (
-    <Section title={`Health Summary (last ${summary.window_days} days)`}>
+    <Section title={`Health Summary (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
       <View style={styles.statsRow}>
-        {stats.map((s) => (
-          <View key={s.label} style={styles.statCard}>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
+        {stats.map(s => (
+          <View key={s.label} style={[styles.statCard, { backgroundColor: colors.electricBlue + '12' }]}>
+            <Text style={styles.statIcon}>{s.icon}</Text>
+            <Text style={[styles.statValue, { color: textPri }]}>{s.value}</Text>
+            {s.unit && <Text style={[styles.statUnit, { color: textSub }]}>{s.unit}</Text>}
+            <Text style={[styles.statLabel, { color: textSub }]}>{s.label}</Text>
           </View>
         ))}
       </View>
@@ -153,17 +170,20 @@ function WearableSection({ summary }: { summary: PreConsultReport['wearable_summ
 
 // ── Flags section ─────────────────────────────────────────────────────────────
 
-function FlagsSection({ flags }: { flags: PreConsultReport['patient_flags'] }) {
+function FlagsSection({ flags, cardBg, cardBdr, textPri, textSub }: {
+  flags: PreConsultReport['patient_flags'];
+  cardBg: string; cardBdr: string; textPri: string; textSub: string;
+}) {
   const items = flags?.flags ?? [];
   return (
-    <Section title="Your Flagged Concerns">
+    <Section title="Your Flagged Concerns" cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
       {items.length === 0 ? (
-        <Text style={styles.emptyText}>No concerns flagged for this consultation.</Text>
+        <Text style={[styles.emptyText, { color: textSub }]}>No concerns flagged for this consultation.</Text>
       ) : (
         items.map((f, i) => (
           <View key={i} style={styles.flagItem}>
-            <Text style={styles.flagBullet}>•</Text>
-            <Text style={styles.flagText}>{f}</Text>
+            <Text style={[styles.flagBullet, { color: colors.electricBlue }]}>•</Text>
+            <Text style={[styles.flagText, { color: textPri }]}>{f}</Text>
           </View>
         ))
       )}
@@ -176,9 +196,11 @@ function FlagsSection({ flags }: { flags: PreConsultReport['patient_flags'] }) {
 export default function PreConsultReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [report, setReport] = useState<PreConsultReport | null>(null);
+  const isDark = useColorScheme() === 'dark';
+
+  const [report,  setReport]  = useState<PreConsultReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -188,57 +210,66 @@ export default function PreConsultReportScreen() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Preserve all existing download logic
   const handleDownload = async () => {
     if (!report?.pdf_url) return;
     try {
-      const { url } = await apiFetch<{ url: string }>(
-        `/v1/clinic/patient/consultations/${id}/pre-consult-report/download`,
-      );
+      const { url } = await apiFetch<{ url: string }>(`/v1/clinic/patient/consultations/${id}/pre-consult-report/download`);
       await Linking.openURL(url);
     } catch {
-      // Graceful — user can try again
+      // graceful
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.forest} />
-      </View>
-    );
-  }
+  const dlScale = useSharedValue(1);
+  const dlAnim  = useAnimatedStyle(() => ({ transform: [{ scale: dlScale.value }] }));
 
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+
+  if (loading) {
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;
+  }
   if (error || !report) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error ?? 'Report not available yet.'}</Text>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Report not available yet.'}</Text>
         <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-          <Text style={styles.backBtnText}>Go back</Text>
+          <Text style={[styles.backBtnText, { color: colors.electricBlue }]}>Go back</Text>
         </Pressable>
       </View>
     );
   }
 
+  const sharedProps = { isDark, cardBg, cardBdr, textPri, textSub };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Pre-Consultation Report</Text>
-        <Text style={styles.generated}>Generated {formatDate(report.generated_at)}</Text>
+        <Text style={[styles.title, { color: textPri }]}>Pre-Consultation Report</Text>
+        <Text style={[styles.generated, { color: textSub }]}>Generated {formatDate(report.generated_at)}</Text>
       </View>
 
-      <LabSummarySection summary={report.lab_summary} />
-      <AdherenceSection summary={report.adherence_summary} />
-      <WearableSection summary={report.wearable_summary} />
-      <FlagsSection flags={report.patient_flags} />
+      <LabSummarySection  summary={report.lab_summary}       {...sharedProps} />
+      <AdherenceSection   summary={report.adherence_summary} {...sharedProps} />
+      <WearableSection    summary={report.wearable_summary}  {...sharedProps} />
+      <FlagsSection       flags={report.patient_flags}       {...sharedProps} />
 
       {report.pdf_url && (
-        <Pressable
-          onPress={handleDownload}
-          style={styles.downloadBtn}
-          accessibilityLabel="Download PDF report"
-        >
-          <Text style={styles.downloadBtnText}>Download PDF</Text>
-        </Pressable>
+        <Animated.View style={dlAnim}>
+          <Pressable
+            onPress={handleDownload}
+            onPressIn={() => { dlScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+            onPressOut={() => { dlScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+            style={styles.dlBtn}
+            accessibilityLabel="Download PDF report"
+          >
+            <Text style={styles.dlBtnText}>↓ Download PDF</Text>
+          </Pressable>
+        </Animated.View>
       )}
     </ScrollView>
   );
@@ -247,78 +278,59 @@ export default function PreConsultReportScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.ivory },
-  content: { padding: spacing[4], paddingBottom: spacing[8] },
+  scroll: { flex: 1 },
+  content: { padding: spacing[5], paddingBottom: spacing[10], gap: spacing[4] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing[6] },
-  header: { marginBottom: spacing[4] },
-  title: { fontFamily: fontFamily.display, fontSize: F.h2, color: colors.ink },
-  generated: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone, marginTop: spacing[1] },
 
-  section: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-  },
-  sectionTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: F.bodyLg,
-    color: colors.ink,
-    marginBottom: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.stone + '30',
-    paddingBottom: spacing[2],
-  },
-  emptyText: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone },
+  header: { gap: spacing[1] },
+  title:     { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600' },
+  generated: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 
-  // Lab summary
-  biomarkerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing[2],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.stone + '20',
-  },
-  biomarkerFlagged: { backgroundColor: colors.saffron + '15', borderRadius: borderRadius.sm, paddingHorizontal: spacing[2] },
-  biomarkerLeft: { flex: 1 },
-  biomarkerName: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.ink, textTransform: 'capitalize' },
-  biomarkerRef: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone, marginTop: 2 },
-  biomarkerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  biomarkerValue: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.ink },
-  valueFlagHigh: { color: colors.terracotta },
-  valueFlagLow: { color: colors.forest },
-  trendSymbol: { fontFamily: fontFamily.body, fontSize: F.body, fontWeight: '600' },
-  flagNote: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone, marginTop: spacing[2] },
+  emptyText: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 
-  // Adherence
-  adherenceBar: { height: 10, backgroundColor: colors.stone + '30', borderRadius: 999, overflow: 'hidden', marginBottom: spacing[2] },
-  adherenceFill: { height: '100%', borderRadius: 999 },
-  adherencePct: { fontFamily: fontFamily.display, fontSize: F.h2, marginBottom: spacing[2] },
-  adherenceStats: { flexDirection: 'row', gap: spacing[4] },
-  adherenceStat: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone },
+  bioRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing[2] },
+  bioLeft: { flex: 1 },
+  bioName: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600', textTransform: 'capitalize' },
+  bioRef:  { fontFamily: fontFamily.body, fontSize: fontSize.xs, marginTop: 2 },
+  bioRight:{ flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  bioValue:{ fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
+  bioTrend:{ fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '700' },
+  flagNote:{ fontFamily: fontFamily.body, fontSize: fontSize.caption, marginTop: spacing[1] },
 
-  // Wearable
+  adherenceTrack: { height: 10, borderRadius: borderRadius.full, overflow: 'hidden' },
+  adherenceFill:  { height: '100%', borderRadius: borderRadius.full },
+  adherencePct:   { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600' },
+  adherenceStats: { flexDirection: 'row', gap: spacing[6] },
+  adherenceStat:  { alignItems: 'center', gap: 2 },
+  adherenceStatValue: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
+  adherenceStatLabel: { fontFamily: fontFamily.body, fontSize: fontSize.xs },
+
   statsRow: { flexDirection: 'row', gap: spacing[3] },
-  statCard: { flex: 1, backgroundColor: colors.sage + '20', borderRadius: borderRadius.md, padding: spacing[3], alignItems: 'center' },
-  statValue: { fontFamily: fontFamily.display, fontSize: F.h3, color: colors.ink },
-  statLabel: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.stone, marginTop: spacing[1], textAlign: 'center' },
+  statCard: { flex: 1, borderRadius: borderRadius.xl, padding: spacing[3], alignItems: 'center', gap: 2 },
+  statIcon: { fontSize: 22, marginBottom: 2 },
+  statValue:{ fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600' },
+  statUnit: { fontFamily: fontFamily.body, fontSize: fontSize.xs },
+  statLabel:{ fontFamily: fontFamily.body, fontSize: fontSize.xs, textAlign: 'center' },
 
-  // Flags
-  flagItem: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[1] },
-  flagBullet: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.forest },
-  flagText: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.ink, flex: 1 },
+  flagItem:  { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[1] },
+  flagBullet:{ fontFamily: fontFamily.body, fontSize: fontSize.body },
+  flagText:  { fontFamily: fontFamily.body, fontSize: fontSize.body, flex: 1, lineHeight: 22 },
 
-  // Buttons
-  downloadBtn: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing[3],
+  dlBtn: {
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  downloadBtnText: { fontFamily: fontFamily.body, fontSize: F.body, color: colors.white, fontWeight: '600' },
-  backBtn: { marginTop: spacing[4] },
-  backBtnText: { fontFamily: fontFamily.body, fontSize: F.caption, color: colors.forest },
-  errorText: { fontFamily: fontFamily.body, fontSize: F.body, color: colors.terracotta, textAlign: 'center' },
+  dlBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+
+  backBtn:     { marginTop: spacing[4] },
+  backBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
+  errorText:   { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
 });

@@ -1,14 +1,3 @@
-/**
- * Lab report upload screen.
- *
- * Steps:
- *   1. Pick a PDF (document picker) or photo (camera / library)
- *   2. Initiate upload → get presigned POST URL
- *   3. Upload file directly to S3
- *   4. Finalize → backend HEAD-verifies and queues OCR task
- *   5. Navigate to the report detail screen
- */
-
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,273 +7,191 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  finalizeUpload,
-  initiateUpload,
-  uploadToS3,
-} from '../../lib/api/lab-reports';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../lib/design-tokens';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { finalizeUpload, initiateUpload, uploadToS3 } from '../../lib/api/lab-reports';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 import { DragDropUpload } from '../../components/web/DragDropUpload';
 import { useBreakpoint } from '../../lib/hooks/useBreakpoint';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface PickedFile {
-  uri: string;
-  name: string;
-  mimeType: string;
-  size: number;
-}
-
+interface PickedFile { uri: string; name: string; mimeType: string; size: number; }
 type UploadStep = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function mimeLabel(mimeType: string): string {
-  if (mimeType === 'application/pdf') return 'PDF';
-  if (mimeType.startsWith('image/')) return 'Image';
-  return 'File';
+function mimeLabel(m: string) { return m === 'application/pdf' ? 'PDF' : 'IMG'; }
+function formatBytes(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function UploadReportScreen() {
-  const router = useRouter();
+  const router       = useRouter();
+  const isDark       = useColorScheme() === 'dark';
   const { isDesktop } = useBreakpoint();
-  const [picked, setPicked] = useState<PickedFile | null>(null);
-  const [step, setStep] = useState<UploadStep>('idle');
+  const [picked, setPicked]   = useState<PickedFile | null>(null);
+  const [step, setStep]       = useState<UploadStep>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Preserve all existing pick / upload logic
   const pickDocument = useCallback(async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf'],
-      copyToCacheDirectory: true,
-    });
+    const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset) return;
-    setPicked({
-      uri: asset.uri,
-      name: asset.name,
-      mimeType: asset.mimeType ?? 'application/pdf',
-      size: asset.size ?? 0,
-    });
-    setStep('idle');
-    setErrorMsg('');
+    setPicked({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType ?? 'application/pdf', size: asset.size ?? 0 });
+    setStep('idle'); setErrorMsg('');
   }, []);
 
   const pickPhoto = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow photo access to upload a lab report image.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.9,
-      allowsMultipleSelection: false,
-    });
+    if (!perm.granted) { Alert.alert('Permission needed', 'Allow photo access to upload a lab report image.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, allowsMultipleSelection: false });
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset) return;
-    const mimeType = asset.type === 'image' ? 'image/jpeg' : 'image/jpeg';
-    const filename = asset.fileName ?? `lab_report_${Date.now()}.jpg`;
-    setPicked({
-      uri: asset.uri,
-      name: filename,
-      mimeType,
-      size: asset.fileSize ?? 0,
-    });
-    setStep('idle');
-    setErrorMsg('');
+    setPicked({ uri: asset.uri, name: asset.fileName ?? `lab_report_${Date.now()}.jpg`, mimeType: 'image/jpeg', size: asset.fileSize ?? 0 });
+    setStep('idle'); setErrorMsg('');
   }, []);
 
   const takePhoto = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow camera access to photograph a lab report.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
-      allowsEditing: false,
-    });
+    if (!perm.granted) { Alert.alert('Permission needed', 'Allow camera access to photograph a lab report.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.9, allowsEditing: false });
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset) return;
-    const filename = `lab_report_${Date.now()}.jpg`;
-    setPicked({
-      uri: asset.uri,
-      name: filename,
-      mimeType: 'image/jpeg',
-      size: asset.fileSize ?? 0,
-    });
-    setStep('idle');
-    setErrorMsg('');
+    setPicked({ uri: asset.uri, name: `lab_report_${Date.now()}.jpg`, mimeType: 'image/jpeg', size: asset.fileSize ?? 0 });
+    setStep('idle'); setErrorMsg('');
   }, []);
 
-  // Web drag-and-drop: convert a browser File to the same PickedFile shape.
   const handleWebFilePicked = useCallback((file: File) => {
-    const url = URL.createObjectURL(file);
-    setPicked({
-      uri: url,
-      name: file.name,
-      mimeType: file.type || 'application/pdf',
-      size: file.size,
-    });
-    setStep('idle');
-    setErrorMsg('');
+    setPicked({ uri: URL.createObjectURL(file), name: file.name, mimeType: file.type || 'application/pdf', size: file.size });
+    setStep('idle'); setErrorMsg('');
   }, []);
 
   const handleUpload = useCallback(async () => {
     if (!picked) return;
-    setStep('uploading');
-    setErrorMsg('');
-
+    setStep('uploading'); setErrorMsg('');
     try {
-      const initiated = await initiateUpload({
-        original_filename: picked.name,
-        content_type: picked.mimeType,
-        file_size_bytes: picked.size || 1,
-      });
-
-      await uploadToS3({
-        upload_url: initiated.upload_url,
-        fields: initiated.fields,
-        file_uri: picked.uri,
-        content_type: picked.mimeType,
-        filename: picked.name,
-      });
-
+      const initiated = await initiateUpload({ original_filename: picked.name, content_type: picked.mimeType, file_size_bytes: picked.size || 1 });
+      await uploadToS3({ upload_url: initiated.upload_url, fields: initiated.fields, file_uri: picked.uri, content_type: picked.mimeType, filename: picked.name });
       setStep('finalizing');
       await finalizeUpload(initiated.lab_report_id);
-
       setStep('done');
       router.replace(`/reports/${initiated.lab_report_id}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-      setErrorMsg(msg);
+      setErrorMsg(err instanceof Error ? err.message : 'Upload failed. Please try again.');
       setStep('error');
     }
   }, [picked, router]);
 
   const isWorking = step === 'uploading' || step === 'finalizing';
 
+  const uploadScale = useSharedValue(1);
+  const uploadAnim  = useAnimatedStyle(() => ({ transform: [{ scale: uploadScale.value }] }));
+
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+
   return (
     <ScrollView
-      style={styles.scroll}
+      style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.heading}>Upload Lab Report</Text>
-      <Text style={styles.sub}>
-        Accepted formats: PDF, JPEG, PNG · Max size: 10 MB
-      </Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.heading, { color: textPri }]}>Upload Lab Report</Text>
+        <Text style={[styles.sub, { color: textSub }]}>
+          Accepted: PDF, JPEG, PNG · Max 10 MB
+        </Text>
+      </View>
 
-      {/* Drag-and-drop zone — desktop web only */}
+      {/* Drag-drop — desktop web */}
       {isDesktop && Platform.OS === 'web' && (
-        <View style={styles.dndSection}>
-          <DragDropUpload
-            onFilePicked={handleWebFilePicked}
-            disabled={step === 'uploading' || step === 'finalizing'}
-          />
-        </View>
+        <DragDropUpload onFilePicked={handleWebFilePicked} disabled={isWorking} />
       )}
 
-      {/* Pick source buttons — mobile / mobile web */}
-      <View style={styles.pickSection}>
-        <Pressable
-          style={styles.pickButton}
-          onPress={pickDocument}
-          disabled={isWorking}
-          accessibilityLabel="Pick PDF from files"
-        >
-          <Text style={styles.pickIcon}>📄</Text>
-          <Text style={styles.pickLabel}>PDF from files</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.pickButton}
-          onPress={pickPhoto}
-          disabled={isWorking}
-          accessibilityLabel="Pick photo from gallery"
-        >
-          <Text style={styles.pickIcon}>🖼️</Text>
-          <Text style={styles.pickLabel}>Photo from gallery</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.pickButton}
-          onPress={takePhoto}
-          disabled={isWorking}
-          accessibilityLabel="Take photo with camera"
-        >
-          <Text style={styles.pickIcon}>📷</Text>
-          <Text style={styles.pickLabel}>Take a photo</Text>
-        </Pressable>
+      {/* Pick source buttons */}
+      <View style={styles.pickRow}>
+        {[
+          { icon: '📄', label: 'PDF from files',   onPress: pickDocument,  a11y: 'Pick PDF from files' },
+          { icon: '🖼️', label: 'Photo from gallery', onPress: pickPhoto,    a11y: 'Pick photo from gallery' },
+          { icon: '📷', label: 'Take a photo',     onPress: takePhoto,     a11y: 'Take photo with camera' },
+        ].map(({ icon, label, onPress, a11y }) => (
+          <Pressable
+            key={label}
+            style={[styles.pickBtn, { backgroundColor: cardBg, borderColor: cardBdr }]}
+            onPress={onPress}
+            disabled={isWorking}
+            accessibilityLabel={a11y}
+          >
+            <Text style={styles.pickIcon}>{icon}</Text>
+            <Text style={[styles.pickLabel, { color: textPri }]}>{label}</Text>
+          </Pressable>
+        ))}
       </View>
 
       {/* Selected file preview */}
       {picked && (
-        <View style={styles.preview}>
-          <View style={styles.previewIcon}>
-            <Text style={styles.previewIconText}>{mimeLabel(picked.mimeType)}</Text>
+        <View style={[styles.preview, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+          <View style={[styles.previewIconWrap, { backgroundColor: colors.electricBlue + '18' }]}>
+            <Text style={[styles.previewIconText, { color: colors.electricBlue }]}>{mimeLabel(picked.mimeType)}</Text>
           </View>
           <View style={styles.previewMeta}>
-            <Text style={styles.previewName} numberOfLines={2}>
-              {picked.name}
-            </Text>
-            <Text style={styles.previewSize}>{formatBytes(picked.size)}</Text>
+            <Text style={[styles.previewName, { color: textPri }]} numberOfLines={2}>{picked.name}</Text>
+            <Text style={[styles.previewSize, { color: textSub }]}>{formatBytes(picked.size)}</Text>
           </View>
           {!isWorking && (
             <Pressable onPress={() => setPicked(null)} accessibilityLabel="Remove selected file">
-              <Text style={styles.removeText}>✕</Text>
+              <Text style={[styles.removeText, { color: textSub }]}>✕</Text>
             </Pressable>
           )}
         </View>
       )}
 
-      {/* Progress indicator */}
+      {/* Upload progress */}
       {isWorking && (
-        <View style={styles.progressBox}>
-          <ActivityIndicator color={colors.forest} />
-          <Text style={styles.progressLabel}>
+        <View style={[styles.progressBox, { backgroundColor: colors.electricBlue + '12', borderColor: colors.electricBlue + '30' }]}>
+          <ActivityIndicator color={colors.electricBlue} />
+          <Text style={[styles.progressLabel, { color: colors.electricBlue }]}>
             {step === 'uploading' ? 'Uploading file…' : 'Queuing OCR scan…'}
           </Text>
         </View>
       )}
 
       {/* Error */}
-      {step === 'error' && errorMsg ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{errorMsg}</Text>
+      {step === 'error' && errorMsg && (
+        <View style={[styles.errorBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
+          <Text style={[styles.errorText, { color: colors.criticalRed }]}>{errorMsg}</Text>
         </View>
-      ) : null}
+      )}
 
       {/* Upload CTA */}
-      <Pressable
-        style={[styles.uploadButton, (!picked || isWorking) && styles.disabled]}
-        onPress={() => void handleUpload()}
-        disabled={!picked || isWorking}
-        accessibilityLabel="Upload report"
-      >
-        {isWorking ? (
-          <ActivityIndicator color={colors.white} />
-        ) : (
-          <Text style={styles.uploadButtonText}>Upload report</Text>
-        )}
-      </Pressable>
+      <Animated.View style={uploadAnim}>
+        <Pressable
+          style={[styles.uploadBtn, (!picked || isWorking) && styles.disabled]}
+          onPress={() => void handleUpload()}
+          onPressIn={() => { uploadScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+          onPressOut={() => { uploadScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+          disabled={!picked || isWorking}
+          accessibilityLabel="Upload report"
+        >
+          {isWorking ? (
+            <ActivityIndicator color={colors.white} size="small" />
+          ) : (
+            <Text style={styles.uploadBtnText}>Upload report</Text>
+          )}
+        </Pressable>
+      </Animated.View>
 
       <Pressable
         style={styles.cancelLink}
@@ -292,19 +199,14 @@ export default function UploadReportScreen() {
         disabled={isWorking}
         accessibilityLabel="Cancel"
       >
-        <Text style={styles.cancelText}>Cancel</Text>
+        <Text style={[styles.cancelText, { color: textSub }]}>Cancel</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-  },
+  scroll: { flex: 1 },
   container: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
@@ -312,126 +214,87 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[12],
     gap: spacing[4],
   },
-  heading: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
-  },
-  sub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    lineHeight: 20,
-  },
-  dndSection: {
-    marginBottom: spacing[2],
-  },
-  pickSection: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  pickButton: {
+
+  header: { gap: spacing[1] },
+  heading: { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600' },
+  sub:     { fontFamily: fontFamily.body, fontSize: fontSize.caption, lineHeight: 20 },
+
+  pickRow: { flexDirection: 'row', gap: spacing[3] },
+  pickBtn: {
     flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    paddingVertical: spacing[5],
     alignItems: 'center',
     gap: spacing[2],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  pickIcon: { fontSize: 26 },
-  pickLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.ink,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
+  pickIcon:  { fontSize: 26 },
+  pickLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', textAlign: 'center' },
+
   preview: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
     padding: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  previewIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.forest + '18',
+  previewIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  previewIconText: {
-    fontFamily: fontFamily.body,
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.forest,
-    letterSpacing: 0.5,
-  },
-  previewMeta: { flex: 1, gap: 2 },
-  previewName: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-  },
-  previewSize: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  removeText: {
-    fontFamily: fontFamily.body,
-    fontSize: 18,
-    color: colors.stone,
-    paddingHorizontal: spacing[2],
-  },
+  previewIconText: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '700', letterSpacing: 0.5 },
+  previewMeta:     { flex: 1, gap: 2 },
+  previewName:     { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  previewSize:     { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  removeText:      { fontFamily: fontFamily.body, fontSize: 18, paddingHorizontal: spacing[2] },
+
   progressBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    backgroundColor: colors.sage + '30',
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
     padding: spacing[4],
   },
-  progressLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.forest,
-  },
+  progressLabel: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
   errorBox: {
-    backgroundColor: colors.terracotta + '18',
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
     padding: spacing[4],
   },
-  errorText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.terracotta,
-    lineHeight: 20,
-  },
-  uploadButton: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
+  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, lineHeight: 20 },
+
+  uploadBtn: {
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  uploadButtonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  disabled: { opacity: 0.45 },
-  cancelLink: {
-    alignItems: 'center',
-  },
-  cancelText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
+  disabled:       { opacity: 0.45 },
+  uploadBtnText:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+
+  cancelLink: { alignItems: 'center' },
+  cancelText: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 });

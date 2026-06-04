@@ -26,7 +26,7 @@ from app.core.security import (
 )
 from app.db.enums import ActorRole, UserRole
 from app.db.redis import RedisClient
-from app.integrations import msg91
+from app.integrations import authkey
 from app.models.identity import User
 from app.repositories import auth as auth_repo
 from app.repositories import users as users_repo
@@ -64,7 +64,7 @@ def _otp_debug_key(phone: str) -> str:
 
 
 async def _issue_otp(redis: RedisClient, phone: str) -> str:
-    """Generate OTP, store HMAC hash in Redis, send via MSG91."""
+    """Generate OTP, store HMAC hash in Redis, deliver via WhatsApp (SMS fallback)."""
     if await redis.exists(_otp_cooldown_key(phone)):
         raise OtpCooldownError()
 
@@ -79,7 +79,11 @@ async def _issue_otp(redis: RedisClient, phone: str) -> str:
             pipe.set(_otp_debug_key(phone), code, ex=settings.otp_ttl_seconds)
         await pipe.execute()
 
-    await msg91.send_otp_sms(phone, code)
+    # Try WhatsApp first; fall back to SMS if delivery fails
+    delivered = await authkey.send_otp_whatsapp(phone, code)
+    if not delivered:
+        await authkey.send_otp_sms(phone, code)
+
     return code
 
 

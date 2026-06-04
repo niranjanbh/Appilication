@@ -1,13 +1,7 @@
-/**
- * Education library screen.
- *
- * Shows doctor-assigned content at the top (highlighted with a badge),
- * then the browsable published library below.
- */
-
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import {
   listPatientEducation,
   type EducationAssignment,
@@ -16,86 +10,126 @@ import {
 } from '../../lib/api/education';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 const TYPE_ICON: Record<string, string> = {
   article: '📄',
-  video: '▶️',
-  pdf: '📑',
+  video:   '▶️',
+  pdf:     '📑',
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // ── Assignment card ───────────────────────────────────────────────────────────
 
-function AssignmentCard({ assignment, onPress }: { assignment: EducationAssignment; onPress: () => void }) {
-  const { content } = assignment;
+function AssignmentCard({
+  assignment,
+  isDark,
+  onPress,
+}: {
+  assignment: EducationAssignment;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const scale  = useSharedValue(1);
+  const anim   = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const isRead = !!assignment.read_at;
+  const { content } = assignment;
+
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? colors.electricBlue + '40' : colors.electricBlue + '30';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+
   return (
-    <Pressable
-      style={[styles.card, styles.assignedCard, isRead && styles.cardRead]}
-      onPress={onPress}
-      accessibilityLabel={`Open ${content.title}`}
-    >
-      <View style={styles.cardTop}>
-        <Text style={styles.typeIcon}>{TYPE_ICON[content.content_type] ?? '📄'}</Text>
-        <View style={styles.assignedBadge}>
-          <Text style={styles.assignedBadgeText}>Assigned by doctor</Text>
+    <Animated.View style={[anim, isRead && styles.readOpacity]}>
+      <Pressable
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr, borderLeftWidth: 3 }]}
+        onPress={onPress}
+        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+        accessibilityLabel={`Open ${content.title}`}
+      >
+        <View style={styles.cardTop}>
+          <Text style={styles.typeIcon}>{TYPE_ICON[content.content_type] ?? '📄'}</Text>
+          <View style={[styles.assignedBadge, { backgroundColor: colors.electricBlue + '18' }]}>
+            <Text style={[styles.assignedBadgeText, { color: colors.electricBlue }]}>Doctor assigned</Text>
+          </View>
+          {isRead && (
+            <View style={[styles.readBadge, { backgroundColor: colors.successGreen + '18' }]}>
+              <Text style={[styles.readBadgeText, { color: colors.successGreen }]}>✓ Read</Text>
+            </View>
+          )}
         </View>
-        {isRead && <Text style={styles.readBadge}>✓ Read</Text>}
-      </View>
-      <Text style={styles.cardTitle}>{content.title}</Text>
-      {assignment.notes ? (
-        <Text style={styles.cardNotes}>"{assignment.notes}"</Text>
-      ) : null}
-      <Text style={styles.cardMeta}>Assigned {formatDate(assignment.created_at)}</Text>
-      {content.ai_disclosure && (
-        <Text style={styles.aiDisclosure}>AI-assisted content · Doctor reviewed</Text>
-      )}
-    </Pressable>
+        <Text style={[styles.cardTitle, { color: textPri }]}>{content.title}</Text>
+        {assignment.notes ? <Text style={[styles.cardNotes, { color: textSub }]}>"{assignment.notes}"</Text> : null}
+        <Text style={[styles.cardMeta, { color: textSub }]}>Assigned {formatDate(assignment.created_at)}</Text>
+        {content.ai_disclosure && (
+          <Text style={[styles.aiNote, { color: colors.warningAmber }]}>AI-assisted · Doctor reviewed</Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ── Library card ──────────────────────────────────────────────────────────────
 
-function LibraryCard({ content, onPress }: { content: EducationContent; onPress: () => void }) {
+function LibraryCard({
+  content,
+  isDark,
+  onPress,
+}: {
+  content: EducationContent;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+
   return (
-    <Pressable
-      style={styles.card}
-      onPress={onPress}
-      accessibilityLabel={`Open ${content.title}`}
-    >
-      <View style={styles.cardTop}>
-        <Text style={styles.typeIcon}>{TYPE_ICON[content.content_type] ?? '📄'}</Text>
-      </View>
-      <Text style={styles.cardTitle}>{content.title}</Text>
-      {content.condition_categories.length > 0 && (
-        <View style={styles.tagRow}>
-          {content.condition_categories.slice(0, 3).map((cat) => (
-            <View key={cat} style={styles.tag}>
-              <Text style={styles.tagText}>{cat.replace('_', ' ')}</Text>
-            </View>
-          ))}
+    <Animated.View style={anim}>
+      <Pressable
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
+        onPress={onPress}
+        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+        accessibilityLabel={`Open ${content.title}`}
+      >
+        <View style={styles.cardTop}>
+          <Text style={styles.typeIcon}>{TYPE_ICON[content.content_type] ?? '📄'}</Text>
         </View>
-      )}
-      {content.ai_disclosure && (
-        <Text style={styles.aiDisclosure}>AI-assisted · Doctor reviewed</Text>
-      )}
-    </Pressable>
+        <Text style={[styles.cardTitle, { color: textPri }]}>{content.title}</Text>
+        {content.condition_categories.length > 0 && (
+          <View style={styles.tagRow}>
+            {content.condition_categories.slice(0, 3).map(cat => (
+              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+                <Text style={[styles.tagText, { color: isDark ? colors.slateText : colors.navyDeep }]}>
+                  {cat.replace('_', ' ')}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {content.ai_disclosure && (
+          <Text style={[styles.aiNote, { color: colors.warningAmber }]}>AI-assisted · Doctor reviewed</Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function EducationIndexScreen() {
-  const router = useRouter();
-  const [data, setData] = useState<PatientEducationResponse | null>(null);
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
+  const [data, setData]     = useState<PatientEducationResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]   = useState<string | null>(null);
 
   useEffect(() => {
     listPatientEducation()
@@ -109,33 +143,29 @@ export default function EducationIndexScreen() {
     router.push(`/education/${contentId}${query}`);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.forest} />
-      </View>
-    );
-  }
+  const bg      = isDark ? colors.midnight  : colors.skyMist;
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
 
+  if (loading) {
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;
+  }
   if (error || !data) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error ?? 'No content available.'}</Text>
-      </View>
-    );
+    return <View style={[styles.center, { backgroundColor: bg }]}><Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'No content available.'}</Text></View>;
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.screenTitle}>Learn</Text>
+    <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={styles.content}>
+      <Text style={[styles.screenTitle, { color: textPri }]}>Learn</Text>
 
       {data.assignments.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>Assigned by your doctor</Text>
-          {data.assignments.map((a) => (
+          <Text style={[styles.sectionLabel, { color: textSub }]}>Assigned by your doctor</Text>
+          {data.assignments.map(a => (
             <AssignmentCard
               key={a.id}
               assignment={a}
+              isDark={isDark}
               onPress={() => goToContent(a.content_id, a.id)}
             />
           ))}
@@ -144,17 +174,18 @@ export default function EducationIndexScreen() {
 
       {data.library.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>Browse library</Text>
-          {data.library.map((c) => (
-            <LibraryCard key={c.id} content={c} onPress={() => goToContent(c.id)} />
+          <Text style={[styles.sectionLabel, { color: textSub }]}>Browse library</Text>
+          {data.library.map(c => (
+            <LibraryCard key={c.id} content={c} isDark={isDark} onPress={() => goToContent(c.id)} />
           ))}
         </>
       )}
 
       {data.assignments.length === 0 && data.library.length === 0 && (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Nothing here yet</Text>
-          <Text style={styles.emptyBody}>
+          <Text style={styles.emptyIcon}>📚</Text>
+          <Text style={[styles.emptyTitle, { color: textPri }]}>Nothing here yet</Text>
+          <Text style={[styles.emptyBody, { color: textSub }]}>
             Your doctor will assign educational content after your consultation.
           </Text>
         </View>
@@ -166,36 +197,57 @@ export default function EducationIndexScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.ivory },
-  content: { padding: spacing[4], paddingBottom: spacing[8] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  screenTitle: { fontFamily: fontFamily.display, fontSize: fontSize.h2, color: colors.ink, marginBottom: spacing[4] },
-  sectionLabel: { fontFamily: fontFamily.display, fontSize: fontSize.bodyLg, color: colors.stone, marginBottom: spacing[2], marginTop: spacing[2] },
+  container: { flex: 1 },
+  content:   { padding: spacing[6], paddingBottom: spacing[8], gap: spacing[4] },
+  center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
+
+  screenTitle: {
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.h2,
+    fontWeight: '600',
+    marginBottom: spacing[2],
+  },
+  sectionLabel: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: spacing[2],
+    marginBottom: spacing[2],
+  },
 
   card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing[4],
-    marginBottom: spacing[3],
+    marginBottom: spacing[1],
+    borderWidth: 1,
+    gap: spacing[2],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  assignedCard: { borderLeftWidth: 3, borderLeftColor: colors.forest },
-  cardRead: { opacity: 0.7 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginBottom: spacing[2] },
+  readOpacity: { opacity: 0.70 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   typeIcon: { fontSize: fontSize.bodyLg },
-  assignedBadge: { backgroundColor: colors.forest + '20', borderRadius: borderRadius.sm, paddingHorizontal: spacing[2], paddingVertical: 2 },
-  assignedBadgeText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.forest, fontWeight: '600' },
-  readBadge: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone, marginLeft: 'auto' },
-  cardTitle: { fontFamily: fontFamily.display, fontSize: fontSize.body, color: colors.ink, marginBottom: spacing[1] },
-  cardNotes: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone, fontStyle: 'italic', marginBottom: spacing[1] },
-  cardMeta: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone },
-  aiDisclosure: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.saffron, marginTop: spacing[1] },
+  assignedBadge: { borderRadius: borderRadius.full, paddingHorizontal: spacing[2], paddingVertical: 2 },
+  assignedBadgeText: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '700' },
+  readBadge: { borderRadius: borderRadius.full, paddingHorizontal: spacing[2], paddingVertical: 2 },
+  readBadgeText: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '700' },
+  cardTitle: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  cardNotes: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontStyle: 'italic' },
+  cardMeta:  { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  aiNote:    { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
 
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1], marginTop: spacing[1] },
-  tag: { backgroundColor: colors.sage + '30', borderRadius: borderRadius.sm, paddingHorizontal: spacing[2], paddingVertical: 2 },
-  tagText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.forest, textTransform: 'capitalize' },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1] },
+  tag:    { borderRadius: borderRadius.full, paddingHorizontal: spacing[2], paddingVertical: 2 },
+  tagText: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '600', textTransform: 'capitalize' },
 
-  empty: { alignItems: 'center', paddingVertical: spacing[8] },
-  emptyTitle: { fontFamily: fontFamily.display, fontSize: fontSize.h3, color: colors.ink, marginBottom: spacing[2] },
-  emptyBody: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.stone, textAlign: 'center', maxWidth: 280 },
-  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.terracotta },
+  empty:      { alignItems: 'center', paddingVertical: spacing[8], gap: spacing[3] },
+  emptyIcon:  { fontSize: 48 },
+  emptyTitle: { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '500', textAlign: 'center' },
+  emptyBody:  { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', maxWidth: 280, lineHeight: 22 },
 });

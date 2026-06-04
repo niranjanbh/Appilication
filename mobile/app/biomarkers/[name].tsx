@@ -1,13 +1,8 @@
 /**
  * Biomarker trend screen — app/biomarkers/[name].tsx
  *
- * Shows a longitudinal line chart for a single biomarker across all processed
- * lab reports.  Features:
- *   - Victory Native XL CartesianChart with Skia rendering (60fps target)
- *   - Reference range band: sage tint (normal zone) + saffron tint (out-of-range zones)
- *   - 7d / 30d / 90d / 1y / All range selector
- *   - Better / Steady / Worse trend indicator with fade-in animation
- *   - Tap a data point → tooltip (date, value, lab); consultation link if available
+ * Victory Native XL CartesianChart with Skia rendering (60fps).
+ * Reference range band, 7d/30d/90d/1y/All selector, trend badge, tap tooltip.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -30,13 +26,7 @@ import {
   type BiomarkerTrendResponse,
   type TrendDirection,
 } from '../../lib/api/biomarker-trends';
-import {
-  borderRadius,
-  colors,
-  fontFamily,
-  fontSize,
-  spacing,
-} from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,124 +40,101 @@ const RANGES: { label: string; value: BiomarkerRange }[] = [
 
 const CHART_HEIGHT = 220;
 
-// Skia color strings (rgba)
-const SAGE_BAND   = 'rgba(143, 168, 142, 0.25)';  // sage #8FA88E at 25%
-const SAFFRON_ZONE = 'rgba(224, 142, 60, 0.15)';   // saffron #E08E3C at 15%
-const FOREST_LINE  = '#0F3D2E';
-const STONE_LINE   = 'rgba(107, 107, 104, 0.10)';  // Stone 10% for boundary lines
+// Skia color strings — use brand colors for chart elements
+const DATA_LINE    = colors.navyDeep;          // main data line
+const DATA_DOT_OOB = colors.warningAmber;      // out-of-range dot
+const SAGE_BAND    = 'rgba(143,168,142,0.22)'; // normal zone fill
+const SAFFRON_ZONE = 'rgba(212,131,10,0.12)';  // out-of-range zone
+const BOUND_LINE   = 'rgba(107,107,104,0.12)'; // ref boundary lines
+const PRESS_DOT    = colors.electricBlue;       // crosshair dot
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ChartDatum {
-  x: number;       // sequential index (0-based) for even spacing
-  y: number;       // biomarker value
-  refLow: number;  // canonical ref_low (same across all points)
-  refHigh: number; // canonical ref_high (same across all points)
-}
-
-interface TooltipState {
-  point: BiomarkerDataPoint;
-  chartX: number;
+  x: number;
+  y: number;
+  refLow:  number;
+  refHigh: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
 function trendLabel(t: TrendDirection): string {
   if (t === 'better') return '↑ Better';
   if (t === 'worse')  return '↓ Worse';
   return '→ Steady';
 }
-
 function trendColor(t: TrendDirection): string {
-  if (t === 'better') return colors.forest;
-  if (t === 'worse')  return colors.terracotta;
-  return colors.stone;
+  if (t === 'better') return colors.successGreen;
+  if (t === 'worse')  return colors.criticalRed;
+  return colors.coolGray;
 }
-
-function buildChartData(
-  points: BiomarkerDataPoint[],
-  refLow: number | null,
-  refHigh: number | null,
-): ChartDatum[] {
-  const fallbackLow  = refLow  ?? 0;
-  const fallbackHigh = refHigh ?? 0;
-  return points.map((p, i) => ({
-    x: i,
-    y: p.value,
-    refLow:  p.ref_low  ?? fallbackLow,
-    refHigh: p.ref_high ?? fallbackHigh,
-  }));
+function buildChartData(pts: BiomarkerDataPoint[], refLow: number | null, refHigh: number | null): ChartDatum[] {
+  const fl = refLow ?? 0; const fh = refHigh ?? 0;
+  return pts.map((p, i) => ({ x: i, y: p.value, refLow: p.ref_low ?? fl, refHigh: p.ref_high ?? fh }));
 }
-
-function yDomain(
-  data: ChartDatum[],
-  refLow: number | null,
-  refHigh: number | null,
-): [number, number] {
-  if (data.length === 0) return [0, 10];
-  const values = data.map((d) => d.y);
-  const min = Math.min(...values, refLow ?? Infinity);
-  const max = Math.max(...values, refHigh ?? -Infinity);
-  const pad = (max - min) * 0.15 || 1;
+function yDomain(data: ChartDatum[], refLow: number | null, refHigh: number | null): [number, number] {
+  if (!data.length) return [0, 10];
+  const vals = data.map(d => d.y);
+  const min  = Math.min(...vals, refLow ?? Infinity);
+  const max  = Math.max(...vals, refHigh ?? -Infinity);
+  const pad  = (max - min) * 0.15 || 1;
   return [min - pad, max + pad];
 }
 
 // ── Trend badge ───────────────────────────────────────────────────────────────
 
-function TrendBadge({ trend }: { trend: TrendDirection }) {
+function TrendBadge({ trend, isDark }: { trend: TrendDirection; isDark: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
+    Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [trend, opacity]);
 
+  const badgeBg = isDark ? colors.nightElev : colors.white;
+  const badgeBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
   return (
-    <Animated.View style={[styles.trendBadge, { opacity }]}>
-      <Text style={[styles.trendLabel, { color: trendColor(trend) }]}>
-        {trendLabel(trend)}
-      </Text>
+    <Animated.View style={[styles.trendBadge, { opacity, backgroundColor: badgeBg, borderColor: badgeBdr }]}>
+      <Text style={[styles.trendLabel, { color: trendColor(trend) }]}>{trendLabel(trend)}</Text>
     </Animated.View>
   );
 }
 
 // ── Range selector ────────────────────────────────────────────────────────────
 
-function RangeSelector({
-  selected,
-  onSelect,
-}: {
+function RangeSelector({ selected, onSelect, isDark }: {
   selected: BiomarkerRange;
   onSelect: (r: BiomarkerRange) => void;
+  isDark: boolean;
 }) {
+  const activeBg  = colors.navyDeep;
+  const inactiveBg = isDark ? colors.nightElev : colors.white;
+  const activeBdr  = colors.navyDeep;
+  const inactiveBdr = isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight;
+
   return (
     <View style={styles.rangeRow}>
-      {RANGES.map((r) => (
+      {RANGES.map(r => (
         <Pressable
           key={r.value}
-          style={[styles.rangeBtn, selected === r.value && styles.rangeBtnActive]}
+          style={[
+            styles.rangeBtn,
+            {
+              backgroundColor: selected === r.value ? activeBg  : inactiveBg,
+              borderColor:     selected === r.value ? activeBdr : inactiveBdr,
+            },
+          ]}
           onPress={() => onSelect(r.value)}
           accessibilityLabel={`Show ${r.label} range`}
           accessibilityState={{ selected: selected === r.value }}
         >
-          <Text
-            style={[
-              styles.rangeBtnText,
-              selected === r.value && styles.rangeBtnTextActive,
-            ]}
-          >
+          <Text style={[
+            styles.rangeBtnText,
+            { color: selected === r.value ? colors.white : (isDark ? colors.slateText : colors.coolGray) },
+          ]}>
             {r.label}
           </Text>
         </Pressable>
@@ -178,44 +145,38 @@ function RangeSelector({
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
-function Tooltip({
-  point,
-  onDismiss,
-  onOpenConsultation,
-}: {
+function Tooltip({ point, onDismiss, onOpenConsultation, isDark }: {
   point: BiomarkerDataPoint;
   onDismiss: () => void;
   onOpenConsultation: (id: string) => void;
+  isDark: boolean;
 }) {
   const flagText = point.flag && point.flag !== 'normal'
     ? ` · ${point.flag === 'high' ? '↑ High' : '↓ Low'}`
     : '';
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,31,63,0.08)';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
 
   return (
     <Pressable style={styles.tooltipOverlay} onPress={onDismiss} accessible={false}>
-      <View style={styles.tooltip}>
-        <Text style={styles.tooltipDate}>{formatDate(point.report_date)}</Text>
-        <Text style={styles.tooltipValue}>
-          {point.value} {point.unit}
-          {flagText}
-        </Text>
+      <View style={[styles.tooltip, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+        <Text style={[styles.tooltipDate,  { color: textSub }]}>{formatDate(point.report_date)}</Text>
+        <Text style={[styles.tooltipValue, { color: textPri }]}>{point.value} {point.unit}{flagText}</Text>
         {point.ref_low != null && point.ref_high != null && (
-          <Text style={styles.tooltipRef}>
-            Ref: {point.ref_low}–{point.ref_high} {point.unit}
-          </Text>
+          <Text style={[styles.tooltipRef, { color: textSub }]}>Ref: {point.ref_low}–{point.ref_high} {point.unit}</Text>
         )}
-        {point.lab_name ? (
-          <Text style={styles.tooltipLab}>{point.lab_name}</Text>
-        ) : null}
-        {point.consultation_id ? (
+        {point.lab_name && <Text style={[styles.tooltipLab, { color: textSub }]}>{point.lab_name}</Text>}
+        {point.consultation_id && (
           <Pressable
             style={styles.tooltipConsultBtn}
             onPress={() => onOpenConsultation(point.consultation_id!)}
             accessibilityLabel="View linked consultation"
           >
-            <Text style={styles.tooltipConsultText}>View consultation →</Text>
+            <Text style={[styles.tooltipConsultText, { color: colors.electricBlue }]}>View consultation →</Text>
           </Pressable>
-        ) : null}
+        )}
       </View>
     </Pressable>
   );
@@ -223,155 +184,82 @@ function Tooltip({
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
 
-function BiomarkerChart({
-  data,
-  dataPoints,
-  refLow,
-  refHigh,
-  onPointTap,
-}: {
+function BiomarkerChart({ data, dataPoints, refLow, refHigh, onPointTap, isDark }: {
   data: ChartDatum[];
   dataPoints: BiomarkerDataPoint[];
   refLow: number | null;
   refHigh: number | null;
-  onPointTap: (point: BiomarkerDataPoint) => void;
+  onPointTap: (p: BiomarkerDataPoint) => void;
+  isDark: boolean;
 }) {
-  const hasRefRange = refLow != null && refHigh != null;
+  const hasRef = refLow != null && refHigh != null;
   const domain = yDomain(data, refLow, refHigh);
-  const { state, isActive } = useChartPressState({ x: 0, y: { y: 0, refLow: 0, refHigh: 0 } });
-
-  // When press is active, fire the tap callback
-  const lastIndexRef = useRef<number>(-1);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { state, isActive } = useChartPressState({ x: 0, y: { y: 0, refLow: 0, refHigh: 0 } } as any);
+  const lastIndexRef = useRef<number>(-1); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const chartBg = isDark ? colors.nightSurface : colors.white;
+  const axisColor = isDark ? colors.slateText : colors.stone;
 
   return (
-    <View style={styles.chartContainer}>
+    <View style={[styles.chartContainer, { backgroundColor: chartBg }]}>
       <CartesianChart
-        data={data}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data={data as any}
         xKey="x"
         yKeys={['y', 'refLow', 'refHigh']}
         domain={{ y: domain }}
-        chartPressState={state}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        chartPressState={state as any}
         padding={{ left: 8, right: 8, top: 12, bottom: 8 }}
         axisOptions={{
           tickCount: { x: 0, y: 4 },
-          labelColor: colors.stone,
+          labelColor: axisColor,
           labelPosition: 'outset',
           axisSide: { x: 'bottom', y: 'left' },
         }}
       >
-        {({ points, chartBounds }) => {
+        {({ points, chartBounds }: { points: { y: { x: number; y: number | null }[]; refHigh: { y: number | null }[]; refLow: { y: number | null }[] }; chartBounds: { left: number; right: number; top: number; bottom: number } }) => {
           const refHighY = points.refHigh[0]?.y ?? chartBounds.top;
           const refLowY  = points.refLow[0]?.y  ?? chartBounds.bottom;
-
           return (
             <Group>
-              {/* Out-of-range zones (saffron) — drawn below the normal band */}
-              {hasRefRange && (
+              {hasRef && (
                 <>
-                  <Rect
-                    x={chartBounds.left}
-                    y={chartBounds.top}
-                    width={chartBounds.right - chartBounds.left}
-                    height={Math.max(0, refHighY - chartBounds.top)}
-                    color={SAFFRON_ZONE}
-                  />
-                  <Rect
-                    x={chartBounds.left}
-                    y={refLowY}
-                    width={chartBounds.right - chartBounds.left}
-                    height={Math.max(0, chartBounds.bottom - refLowY)}
-                    color={SAFFRON_ZONE}
-                  />
+                  <Rect x={chartBounds.left} y={chartBounds.top} width={chartBounds.right - chartBounds.left} height={Math.max(0, refHighY - chartBounds.top)} color={SAFFRON_ZONE} />
+                  <Rect x={chartBounds.left} y={refLowY} width={chartBounds.right - chartBounds.left} height={Math.max(0, chartBounds.bottom - refLowY)} color={SAFFRON_ZONE} />
+                  <Rect x={chartBounds.left} y={refHighY} width={chartBounds.right - chartBounds.left} height={Math.max(0, refLowY - refHighY)} color={SAGE_BAND} />
+                  <Rect x={chartBounds.left} y={refHighY} width={chartBounds.right - chartBounds.left} height={1} color={BOUND_LINE} />
+                  <Rect x={chartBounds.left} y={refLowY}  width={chartBounds.right - chartBounds.left} height={1} color={BOUND_LINE} />
                 </>
               )}
-
-              {/* Normal range band (sage) */}
-              {hasRefRange && (
-                <Rect
-                  x={chartBounds.left}
-                  y={refHighY}
-                  width={chartBounds.right - chartBounds.left}
-                  height={Math.max(0, refLowY - refHighY)}
-                  color={SAGE_BAND}
-                />
-              )}
-
-              {/* Reference range boundary lines (Stone 10%) */}
-              {hasRefRange && (
-                <>
-                  <Rect
-                    x={chartBounds.left}
-                    y={refHighY}
-                    width={chartBounds.right - chartBounds.left}
-                    height={1}
-                    color={STONE_LINE}
-                  />
-                  <Rect
-                    x={chartBounds.left}
-                    y={refLowY}
-                    width={chartBounds.right - chartBounds.left}
-                    height={1}
-                    color={STONE_LINE}
-                  />
-                </>
-              )}
-
-              {/* Data line */}
-              <Line
-                points={points.y}
-                color={FOREST_LINE}
-                strokeWidth={2}
-                animate={{ type: 'timing', duration: 220 }}
-              />
-
-              {/* Data dots */}
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <Line points={points.y as any} color={DATA_LINE} strokeWidth={2} animate={{ type: 'timing', duration: 220 }} />
               {points.y.map((p, i) => {
                 if (p.y == null) return null;
                 const pt = dataPoints[i];
-                const isOutOfRange = pt?.flag && pt.flag !== 'normal';
+                const isOob    = pt?.flag && pt.flag !== 'normal';
                 const isLatest = i === points.y.length - 1;
-                const r = isLatest ? 7 : 4;
                 return (
-                  <Circle
-                    key={i}
-                    cx={p.x}
-                    cy={p.y}
-                    r={r}
-                    color={isOutOfRange ? colors.saffron : FOREST_LINE}
-                  />
+                  <Circle key={i} cx={p.x} cy={p.y as number} r={isLatest ? 7 : 4}
+                    color={isOob ? DATA_DOT_OOB : DATA_LINE} />
                 );
               })}
-
-              {/* Press crosshair dot */}
               {isActive && (
-                <Circle
-                  cx={state.x.position}
-                  cy={state.y.y.position}
-                  r={6}
-                  color={FOREST_LINE}
-                  opacity={0.8}
-                />
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                <Circle cx={(state as any).x.position} cy={(state as any).y.y.position} r={6} color={PRESS_DOT} opacity={0.9} />
               )}
             </Group>
           );
         }}
       </CartesianChart>
-
-      {/* Invisible tap targets over each data point */}
       {data.map((d, i) => {
         const pt = dataPoints[i];
         if (!pt) return null;
-        // approximate x position as fraction of chart width
         const fracX = data.length > 1 ? i / (data.length - 1) : 0.5;
         return (
           <Pressable
             key={i}
-            style={[
-              styles.tapTarget,
-              {
-                left: `${fracX * 100}%` as unknown as number,
-              },
-            ]}
+            style={[styles.tapTarget, { left: `${fracX * 100}%` as unknown as number }]}
             onPress={() => onPointTap(pt)}
             accessibilityLabel={`Data point ${i + 1}: ${pt.value} ${pt.unit} on ${formatDate(pt.report_date)}`}
           />
@@ -381,14 +269,13 @@ function BiomarkerChart({
   );
 }
 
-// ── Loading skeleton ──────────────────────────────────────────────────────────
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function ChartSkeleton() {
+function ChartSkeleton({ isDark }: { isDark: boolean }) {
   return (
-    <View style={[styles.chartContainer, styles.skeleton]}>
-      {/* Sage band placeholder */}
-      <View style={styles.skeletonBand} />
-      <Text style={styles.skeletonCaption}>Loading trend…</Text>
+    <View style={[styles.chartContainer, { backgroundColor: isDark ? colors.nightSurface : colors.white, alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[styles.skeletonBand, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]} />
+      <Text style={[styles.skeletonCaption, { color: isDark ? colors.slateText : colors.coolGray }]}>Loading trend…</Text>
     </View>
   );
 }
@@ -397,18 +284,18 @@ function ChartSkeleton() {
 
 export default function BiomarkerTrendScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
-  const router = useRouter();
+  const router   = useRouter();
+  const isDark   = useColorScheme() === 'dark';
 
-  const [range, setRange] = useState<BiomarkerRange>('all');
-  const [data, setData] = useState<BiomarkerTrendResponse | null>(null);
+  const [range,   setRange]   = useState<BiomarkerRange>('all');
+  const [data,    setData]    = useState<BiomarkerTrendResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<BiomarkerDataPoint | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!name) return;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const result = await getBiomarkerTrend(decodeURIComponent(name as string), range);
       setData(result);
@@ -419,72 +306,63 @@ export default function BiomarkerTrendScreen() {
     }
   }, [name, range]);
 
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const handleRangeChange = useCallback(
-    (r: BiomarkerRange) => {
-      setRange(r);
-      setTooltip(null);
-    },
-    [],
-  );
-
-  const handleOpenConsultation = useCallback(
-    (consultationId: string) => {
-      setTooltip(null);
-      router.push(`/consultations/${consultationId}`);
-    },
-    [router],
-  );
+  const handleRangeChange = useCallback((r: BiomarkerRange) => { setRange(r); setTooltip(null); }, []);
+  const handleOpenConsultation = useCallback((consultationId: string) => {
+    setTooltip(null);
+    router.push(`/consultations/${consultationId}`);
+  }, [router]);
 
   const biomarkerName = data?.biomarker_name ?? decodeURIComponent(name as string ?? '');
   const unit = data?.unit ?? '';
 
-  // ── Error state ──────────────────────────────────────────────────────────
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error}</Text>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchData()}>
-          <Text style={styles.retryText}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
         </Pressable>
       </View>
     );
   }
 
-  // ── Empty state (<3 readings) ─────────────────────────────────────────────
-
-  const hasData = (data?.data_points.length ?? 0) > 0;
+  const hasData      = (data?.data_points.length ?? 0) > 0;
   const tooFewPoints = (data?.data_points.length ?? 0) < 3;
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.biomarkerName}>{biomarkerName}</Text>
-        {unit ? <Text style={styles.unit}>{unit}</Text> : null}
+        <Text style={[styles.biomarkerName, { color: textPri }]}>{biomarkerName}</Text>
+        {unit ? <Text style={[styles.unit, { color: textSub }]}>{unit}</Text> : null}
       </View>
 
-      {/* Current value block (latest data point) */}
+      {/* Current value + trend */}
       {hasData && data && (
         <View style={styles.currentBlock}>
-          <Text style={styles.currentValue}>
+          <Text style={[styles.currentValue, { color: textPri }]}>
             {data.data_points[data.data_points.length - 1].value}
           </Text>
-          {unit ? <Text style={styles.currentUnit}>{unit}</Text> : null}
-          <TrendBadge trend={data.trend} />
+          {unit ? <Text style={[styles.currentUnit, { color: textSub }]}>{unit}</Text> : null}
+          <TrendBadge trend={data.trend} isDark={isDark} />
         </View>
       )}
 
       {/* Range selector */}
-      <RangeSelector selected={range} onSelect={handleRangeChange} />
+      <RangeSelector selected={range} onSelect={handleRangeChange} isDark={isDark} />
 
-      {/* Chart or skeleton */}
+      {/* Chart */}
       {loading ? (
-        <ChartSkeleton />
+        <ChartSkeleton isDark={isDark} />
       ) : hasData && data && !tooFewPoints ? (
         <>
           <BiomarkerChart
@@ -493,27 +371,26 @@ export default function BiomarkerTrendScreen() {
             refLow={data.ref_low}
             refHigh={data.ref_high}
             onPointTap={setTooltip}
+            isDark={isDark}
           />
           {data.ref_low != null && data.ref_high != null && (
-            <Text style={styles.refRangeLabel}>
+            <Text style={[styles.refRangeLabel, { color: textSub }]}>
               Reference range: {data.ref_low}–{data.ref_high} {unit}
             </Text>
           )}
         </>
-      ) : hasData && tooFewPoints ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>
-            Only {data!.data_points.length} {biomarkerName} value{data!.data_points.length === 1 ? '' : 's'} so far.
-          </Text>
-          <Text style={styles.emptySub}>
-            Trends become useful with three or more readings.
-          </Text>
-        </View>
       ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No {biomarkerName} values yet.</Text>
-          <Text style={styles.emptySub}>
-            Upload a lab report to start tracking this biomarker over time.
+        <View style={[styles.emptyState, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+          <Text style={styles.emptyIcon}>{tooFewPoints ? '📈' : '🔬'}</Text>
+          <Text style={[styles.emptyTitle, { color: textPri }]}>
+            {tooFewPoints
+              ? `Only ${data!.data_points.length} reading${data!.data_points.length === 1 ? '' : 's'} so far`
+              : `No ${biomarkerName} values yet`}
+          </Text>
+          <Text style={[styles.emptySub, { color: textSub }]}>
+            {tooFewPoints
+              ? 'Trends become useful with three or more readings.'
+              : 'Upload a lab report to start tracking this biomarker over time.'}
           </Text>
         </View>
       )}
@@ -521,29 +398,20 @@ export default function BiomarkerTrendScreen() {
       {/* History table */}
       {hasData && data && (
         <View style={styles.historySection}>
-          <Text style={styles.sectionTitle}>History</Text>
+          <Text style={[styles.sectionTitle, { color: textPri }]}>History</Text>
           {[...data.data_points].reverse().map((pt, i) => (
-            <View key={pt.report_id + i} style={styles.historyRow}>
-              <Text style={styles.historyDate}>{formatDate(pt.report_date)}</Text>
-              <Text style={styles.historyValue}>
-                {pt.value} {pt.unit}
-              </Text>
+            <View key={pt.report_id + i} style={[styles.historyRow, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+              <Text style={[styles.historyDate, { color: textSub }]}>{formatDate(pt.report_date)}</Text>
+              <Text style={[styles.historyValue, { color: textPri }]}>{pt.value} {pt.unit}</Text>
               {pt.flag && pt.flag !== 'normal' && (
-                <View
-                  style={[
-                    styles.flagChip,
-                    { backgroundColor: colors.saffron + '22' },
-                  ]}
-                >
-                  <Text style={[styles.flagText, { color: colors.saffron }]}>
+                <View style={[styles.flagChip, { backgroundColor: colors.warningAmber + '20' }]}>
+                  <Text style={[styles.flagText, { color: colors.warningAmber }]}>
                     {pt.flag === 'high' ? '↑ High' : '↓ Low'}
                   </Text>
                 </View>
               )}
               {pt.ref_low != null && pt.ref_high != null && (
-                <Text style={styles.historyRef}>
-                  {pt.ref_low}–{pt.ref_high}
-                </Text>
+                <Text style={[styles.historyRef, { color: textSub }]}>{pt.ref_low}–{pt.ref_high}</Text>
               )}
             </View>
           ))}
@@ -556,6 +424,7 @@ export default function BiomarkerTrendScreen() {
           point={tooltip}
           onDismiss={() => setTooltip(null)}
           onOpenConsultation={handleOpenConsultation}
+          isDark={isDark}
         />
       )}
     </ScrollView>
@@ -565,259 +434,116 @@ export default function BiomarkerTrendScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-  },
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[16],
-    gap: spacing[4],
-  },
-  center: {
-    flex: 1,
-    backgroundColor: colors.ivory,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[4],
-    paddingHorizontal: spacing[8],
-  },
-  errorText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.terracotta,
-    textAlign: 'center',
-  },
-  retryBtn: { alignItems: 'center' },
-  retryText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.forest,
-  },
-  header: {
-    gap: spacing[1],
-  },
-  biomarkerName: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
-  },
-  unit: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  currentBlock: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing[2],
-    flexWrap: 'wrap',
-  },
-  currentValue: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.display,
-    color: colors.forest,
-    fontWeight: '500',
-  },
-  currentUnit: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.stone,
-  },
+  scroll:    { flex: 1 },
+  container: { flexGrow: 1, paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[16], gap: spacing[4] },
+  center:    { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[4], paddingHorizontal: spacing[8] },
+  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
+  retryBtn:  { alignItems: 'center' },
+  retryText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
+
+  header:        { gap: spacing[1] },
+  biomarkerName: { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600' },
+  unit:          { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+
+  currentBlock: { flexDirection: 'row', alignItems: 'baseline', gap: spacing[2], flexWrap: 'wrap' },
+  currentValue: { fontFamily: fontFamily.display, fontSize: fontSize.display, fontWeight: '500' },
+  currentUnit:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg },
+
   trendBadge: {
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.white,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.ivory,
   },
-  trendLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-  },
-  rangeRow: {
-    flexDirection: 'row',
-    gap: spacing[1],
-  },
+  trendLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
+
+  rangeRow: { flexDirection: 'row', gap: spacing[2] },
   rangeBtn: {
     flex: 1,
     paddingVertical: spacing[2],
     alignItems: 'center',
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.forest,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  rangeBtnActive: {
-    backgroundColor: colors.forest,
-  },
-  rangeBtnText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.forest,
-    fontWeight: '500',
-  },
-  rangeBtnTextActive: {
-    color: colors.ivory,
-  },
+  rangeBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
+
   chartContainer: {
     height: CHART_HEIGHT,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  skeleton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  skeletonBand: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '30%',
-    height: '40%',
-    backgroundColor: colors.sage + '40',
-  },
-  skeletonCaption: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  tapTarget: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 32,
-    transform: [{ translateX: -16 }],
-  },
-  refRangeLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    textAlign: 'center',
-  },
+  skeletonBand:    { position: 'absolute', left: 0, right: 0, top: '30%', height: '40%' },
+  skeletonCaption: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+
+  tapTarget: { position: 'absolute', top: 0, bottom: 0, width: 32, transform: [{ translateX: -16 }] },
+
+  refRangeLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, textAlign: 'center' },
+
   emptyState: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing[6],
     alignItems: 'center',
-    gap: spacing[2],
+    gap: spacing[3],
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  emptyTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  historySection: {
-    gap: spacing[2],
-  },
-  sectionTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.forest,
-    fontWeight: '500',
-  },
+  emptyIcon:  { fontSize: 40 },
+  emptyTitle: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '700', textAlign: 'center' },
+  emptySub:   { fontFamily: fontFamily.body, fontSize: fontSize.caption, textAlign: 'center', lineHeight: 20 },
+
+  historySection: { gap: spacing[2] },
+  sectionTitle:   { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '500' },
   historyRow: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.xl,
     padding: spacing[3],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
     flexWrap: 'wrap',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  historyDate: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    flex: 1,
-  },
-  historyValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-    fontVariant: ['tabular-nums'],
-  },
-  historyRef: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    fontVariant: ['tabular-nums'],
-  },
-  flagChip: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  flagText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-  },
-  tooltipOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  historyDate:  { fontFamily: fontFamily.body, fontSize: fontSize.caption, flex: 1 },
+  historyValue: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  historyRef:   { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontVariant: ['tabular-nums'] },
+  flagChip:     { paddingHorizontal: spacing[2], paddingVertical: 2, borderRadius: borderRadius.full },
+  flagText:     { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
+
+  tooltipOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   tooltip: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing[4],
     marginHorizontal: spacing[8],
     gap: spacing[2],
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  tooltipDate: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  tooltipValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
-  tooltipRef: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  tooltipLab: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-  },
-  tooltipConsultBtn: {
-    paddingTop: spacing[1],
-  },
-  tooltipConsultText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.forest,
-    fontWeight: '600',
-  },
+  tooltipDate:        { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  tooltipValue:       { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  tooltipRef:         { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  tooltipLab:         { fontFamily: fontFamily.body, fontSize: fontSize.caption },
+  tooltipConsultBtn:  { paddingTop: spacing[1] },
+  tooltipConsultText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
 });

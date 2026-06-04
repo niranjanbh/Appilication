@@ -12,16 +12,18 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { z } from 'zod';
 import { signupApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳', name: 'India' },
-  { code: '+1', flag: '🇺🇸', name: 'USA / Canada' },
+  { code: '+1',  flag: '🇺🇸', name: 'USA / Canada' },
   { code: '+44', flag: '🇬🇧', name: 'United Kingdom' },
   { code: '+971', flag: '🇦🇪', name: 'UAE' },
   { code: '+65', flag: '🇸🇬', name: 'Singapore' },
@@ -30,17 +32,18 @@ const COUNTRY_CODES = [
 ] as const;
 
 const schema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
+  name:        z.string().min(2, 'Name must be at least 2 characters'),
   phoneNumber: z.string().regex(/^\d{7,12}$/, 'Enter digits only, no spaces or dashes'),
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  email:       z.string().email('Enter a valid email address'),
+  password:    z.string().min(8, 'Password must be at least 8 characters'),
 });
 type FormValues = z.infer<typeof schema>;
 
 export default function SignupScreen() {
-  const router = useRouter();
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [countryCode, setCountryCode] = useState('+91');
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
+  const [apiError, setApiError]         = useState<string | null>(null);
+  const [countryCode, setCountryCode]   = useState('+91');
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
@@ -50,6 +53,7 @@ export default function SignupScreen() {
 
   const selectedCountry = COUNTRY_CODES.find(c => c.code === countryCode) ?? COUNTRY_CODES[0];
 
+  // Preserve 100% of existing submit logic
   const onSubmit = async (values: FormValues) => {
     setApiError(null);
     const phone = `${countryCode}${values.phoneNumber}`;
@@ -67,170 +71,195 @@ export default function SignupScreen() {
     }
   };
 
+  const btnScale = useSharedValue(1);
+  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+
+  const outerBg  = isDark ? colors.midnight    : colors.navyDeep;
+  const cardBg   = isDark ? colors.nightSurface : colors.white;
+  const textPri  = isDark ? colors.white        : colors.navyDeep;
+  const textSub  = isDark ? colors.slateText    : colors.coolGray;
+  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+  const inputTxt = isDark ? colors.white        : colors.navyDeep;
+  const modalBg  = isDark ? colors.nightSurface : colors.white;
+
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: outerBg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.wordmark}>Kyros</Text>
-        <Text style={styles.subtitle}>Create your account</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
 
-        <View style={styles.form}>
-          {/* Name */}
-          <View>
-            <Text style={styles.label}>Full name</Text>
-            <Controller
-              control={control}
-              name="name"
-              render={({ field }) => (
-                <TextInput
-                  style={[styles.input, errors.name && styles.inputError]}
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  autoCapitalize="words"
-                  autoComplete="name"
-                  accessibilityLabel="Full name"
-                  placeholderTextColor={colors.stone}
-                  placeholder="Priya Sharma"
-                />
-              )}
-            />
-            {errors.name && <Text style={styles.fieldError}>{errors.name.message}</Text>}
-          </View>
+        {/* Logo */}
+        <View style={styles.logoArea}>
+          <Text style={styles.wordmark}>Kyros</Text>
+          <Text style={styles.tagline}>Create your account</Text>
+        </View>
 
-          {/* Phone with country code picker */}
-          <View>
-            <Text style={styles.label}>Phone number</Text>
-            <View style={styles.phoneRow}>
-              <Pressable
-                style={[styles.countryButton, errors.phoneNumber && styles.inputError]}
-                onPress={() => setPickerVisible(true)}
-                accessibilityLabel="Select country code"
-              >
-                <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
-                <Text style={styles.countryCode}>{countryCode}</Text>
-                <Text style={styles.chevron}>▾</Text>
-              </Pressable>
+        {/* Form card */}
+        <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <View style={styles.fields}>
+
+            {/* Name */}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: textPri }]}>Full name</Text>
               <Controller
                 control={control}
-                name="phoneNumber"
+                name="name"
                 render={({ field }) => (
-                  <TextInput
-                    style={[styles.phoneInput, errors.phoneNumber && styles.inputError]}
-                    value={field.value}
-                    onChangeText={field.onChange}
-                    onBlur={field.onBlur}
-                    keyboardType="phone-pad"
-                    autoComplete="tel-national"
-                    accessibilityLabel="Phone number"
-                    placeholderTextColor={colors.stone}
-                    placeholder="9876543210"
-                  />
+                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.name ? colors.criticalRed : inputBdr }]}>
+                    <TextInput
+                      style={[styles.textInput, { color: inputTxt }]}
+                      value={field.value}
+                      onChangeText={field.onChange}
+                      onBlur={field.onBlur}
+                      autoCapitalize="words"
+                      autoComplete="name"
+                      accessibilityLabel="Full name"
+                      placeholderTextColor={textSub}
+                      placeholder="Priya Sharma"
+                    />
+                  </View>
                 )}
               />
+              {errors.name && <Text style={styles.fieldError}>{errors.name.message}</Text>}
             </View>
-            {errors.phoneNumber && (
-              <Text style={styles.fieldError}>{errors.phoneNumber.message}</Text>
-            )}
-          </View>
 
-          {/* Email */}
-          <View>
-            <Text style={styles.label}>Email address</Text>
-            <Controller
-              control={control}
-              name="email"
-              render={({ field }) => (
-                <TextInput
-                  style={[styles.input, errors.email && styles.inputError]}
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                  accessibilityLabel="Email address"
-                  placeholderTextColor={colors.stone}
-                  placeholder="priya@example.com"
+            {/* Phone */}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: textPri }]}>Phone number</Text>
+              <View style={styles.phoneRow}>
+                <Pressable
+                  style={[styles.countryBtn, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.criticalRed : inputBdr }]}
+                  onPress={() => setPickerVisible(true)}
+                  accessibilityLabel="Select country code"
+                >
+                  <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+                  <Text style={[styles.countryCode, { color: inputTxt }]}>{countryCode}</Text>
+                  <Text style={[styles.chevron, { color: textSub }]}>▾</Text>
+                </Pressable>
+                <Controller
+                  control={control}
+                  name="phoneNumber"
+                  render={({ field }) => (
+                    <View style={[styles.inputWrap, styles.phoneInputWrap, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.criticalRed : inputBdr }]}>
+                      <TextInput
+                        style={[styles.textInput, { color: inputTxt }]}
+                        value={field.value}
+                        onChangeText={field.onChange}
+                        onBlur={field.onBlur}
+                        keyboardType="phone-pad"
+                        autoComplete="tel-national"
+                        accessibilityLabel="Phone number"
+                        placeholderTextColor={textSub}
+                        placeholder="9876543210"
+                      />
+                    </View>
+                  )}
                 />
-              )}
-            />
-            {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
+              </View>
+              {errors.phoneNumber && <Text style={styles.fieldError}>{errors.phoneNumber.message}</Text>}
+            </View>
+
+            {/* Email */}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: textPri }]}>Email address</Text>
+              <Controller
+                control={control}
+                name="email"
+                render={({ field }) => (
+                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.email ? colors.criticalRed : inputBdr }]}>
+                    <TextInput
+                      style={[styles.textInput, { color: inputTxt }]}
+                      value={field.value}
+                      onChangeText={field.onChange}
+                      onBlur={field.onBlur}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      autoComplete="email"
+                      accessibilityLabel="Email address"
+                      placeholderTextColor={textSub}
+                      placeholder="priya@example.com"
+                    />
+                  </View>
+                )}
+              />
+              {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
+            </View>
+
+            {/* Password */}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: textPri }]}>Password</Text>
+              <Controller
+                control={control}
+                name="password"
+                render={({ field }) => (
+                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.password ? colors.criticalRed : inputBdr }]}>
+                    <TextInput
+                      style={[styles.textInput, { color: inputTxt }]}
+                      value={field.value}
+                      onChangeText={field.onChange}
+                      onBlur={field.onBlur}
+                      secureTextEntry
+                      autoComplete="password-new"
+                      accessibilityLabel="Password"
+                      placeholderTextColor={textSub}
+                      placeholder="8+ characters"
+                    />
+                  </View>
+                )}
+              />
+              {errors.password && <Text style={styles.fieldError}>{errors.password.message}</Text>}
+            </View>
+
           </View>
 
-          {/* Password */}
-          <View>
-            <Text style={styles.label}>Password</Text>
-            <Controller
-              control={control}
-              name="password"
-              render={({ field }) => (
-                <TextInput
-                  style={[styles.input, errors.password && styles.inputError]}
-                  value={field.value}
-                  onChangeText={field.onChange}
-                  onBlur={field.onBlur}
-                  autoCapitalize="none"
-                  autoComplete="password-new"
-                  secureTextEntry
-                  accessibilityLabel="Password"
-                  placeholderTextColor={colors.stone}
-                  placeholder="8+ characters"
-                />
+          {apiError ? <Text style={styles.apiError}>{apiError}</Text> : null}
+
+          <Animated.View style={btnAnim}>
+            <Pressable
+              style={[styles.button, isSubmitting && styles.buttonBusy]}
+              onPress={handleSubmit(onSubmit)}
+              onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+              onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+              disabled={isSubmitting}
+              accessibilityLabel="Create account"
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Create account</Text>
               )}
-            />
-            {errors.password && <Text style={styles.fieldError}>{errors.password.message}</Text>}
-          </View>
+            </Pressable>
+          </Animated.View>
 
-          {apiError && <Text style={styles.apiError}>{apiError}</Text>}
-
-          <Pressable
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isSubmitting}
-            accessibilityLabel="Create account"
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.ivory} />
-            ) : (
-              <Text style={styles.buttonText}>Create account</Text>
-            )}
-          </Pressable>
-
-          <Link href="/(auth)/login" style={styles.link}>
+          <Link href="/(auth)/login" style={[styles.signInLink, { color: textSub }]}>
             Already have an account? Sign in
           </Link>
         </View>
+
       </ScrollView>
 
-      {/* Country code picker modal */}
-      <Modal
-        visible={pickerVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPickerVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setPickerVisible(false)}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Select country code</Text>
+      {/* Country code picker — modal */}
+      <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+        <Pressable style={styles.overlay} onPress={() => setPickerVisible(false)}>
+          <View style={[styles.sheet, { backgroundColor: modalBg }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetTitle, { color: textPri }]}>Select country</Text>
             {COUNTRY_CODES.map(item => (
               <Pressable
                 key={item.code}
-                style={[
-                  styles.modalOption,
-                  item.code === countryCode && styles.modalOptionSelected,
-                ]}
-                onPress={() => {
-                  setCountryCode(item.code);
-                  setPickerVisible(false);
-                }}
+                style={[styles.sheetRow, item.code === countryCode && { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}
+                onPress={() => { setCountryCode(item.code); setPickerVisible(false); }}
                 accessibilityLabel={`${item.name} ${item.code}`}
               >
-                <Text style={styles.modalFlag}>{item.flag}</Text>
-                <Text style={styles.modalOptionName}>{item.name}</Text>
-                <Text style={styles.modalOptionCode}>{item.code}</Text>
+                <Text style={styles.sheetFlag}>{item.flag}</Text>
+                <Text style={[styles.sheetName, { color: textPri }]}>{item.name}</Text>
+                <Text style={[styles.sheetCode, { color: textSub }]}>{item.code}</Text>
               </Pressable>
             ))}
           </View>
@@ -241,159 +270,152 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
+  flex: { flex: 1 },
   container: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],
     paddingBottom: spacing[8],
   },
+
+  logoArea: { alignItems: 'center', marginBottom: spacing[6], gap: spacing[1] },
   wordmark: {
     fontFamily: fontFamily.display,
-    fontSize: fontSize.h1,
-    color: colors.forest,
+    fontSize: 48,
+    color: colors.white,
     fontWeight: '500',
   },
-  subtitle: {
+  tagline: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.stone,
-    marginTop: spacing[1],
-    marginBottom: spacing[8],
+    fontSize: fontSize.body,
+    color: 'rgba(255,255,255,0.60)',
   },
-  form: { gap: spacing[3] },
+
+  card: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[6],
+    gap: spacing[4],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+    elevation: 16,
+  },
+
+  fields: { gap: spacing[4] },
+  field:  { gap: spacing[1] },
   label: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-    marginBottom: spacing[1],
+    fontSize: fontSize.sm,
+    fontWeight: '600',
   },
-  input: {
+  inputWrap: {
+    borderRadius: borderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
-    padding: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
+  },
+  phoneInputWrap: { flex: 1 },
+  textInput: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
-    backgroundColor: colors.white,
+    padding: 0,
   },
-  inputError: { borderColor: colors.alert },
   fieldError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.alert,
-    marginTop: spacing[1],
+    color: colors.criticalRed,
   },
-  phoneRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-  },
-  countryButton: {
+  phoneRow:   { flexDirection: 'row', gap: spacing[2] },
+  countryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
+    borderRadius: borderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
     paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-    backgroundColor: colors.white,
+    paddingVertical: spacing[4],
   },
   countryFlag: { fontSize: 18 },
   countryCode: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
     fontWeight: '500',
   },
-  chevron: {
-    fontFamily: fontFamily.body,
-    fontSize: 11,
-    color: colors.stone,
-    marginLeft: spacing[1],
-  },
-  phoneInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.stone,
-    borderRadius: 8,
-    padding: spacing[3],
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    backgroundColor: colors.white,
-  },
+  chevron: { fontSize: 11, marginLeft: 2 },
+
   apiError: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.alert,
+    fontSize: fontSize.sm,
+    color: colors.criticalRed,
     textAlign: 'center',
   },
   button: {
-    backgroundColor: colors.forest,
-    borderRadius: 8,
-    paddingVertical: spacing[3],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[4],
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ivory,
-    fontWeight: '600',
-  },
-  link: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.jade,
-    textAlign: 'center',
-    marginTop: spacing[4],
-  },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: spacing[6],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[10],
-  },
-  modalTitle: {
-    fontFamily: fontFamily.display,
     fontSize: fontSize.bodyLg,
-    color: colors.ink,
+    color: colors.white,
     fontWeight: '600',
+  },
+  signInLink: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    paddingVertical: spacing[2],
+  },
+
+  // Modal sheet
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.50)', justifyContent: 'flex-end' },
+  sheet: {
+    borderTopLeftRadius: borderRadius.xxl,
+    borderTopRightRadius: borderRadius.xxl,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[10],
+    gap: spacing[1],
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderLight,
+    alignSelf: 'center',
     marginBottom: spacing[4],
   },
-  modalOption: {
+  sheetTitle: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.bodyLg,
+    fontWeight: '700',
+    marginBottom: spacing[4],
+  },
+  sheetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing[3],
-    borderRadius: 8,
-    paddingHorizontal: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: borderRadius.lg,
   },
-  modalOptionSelected: {
-    backgroundColor: colors.ivory,
-  },
-  modalFlag: { fontSize: 22, width: 36 },
-  modalOptionName: {
+  sheetFlag: { fontSize: 22, width: 38 },
+  sheetName: {
     flex: 1,
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
+    fontWeight: '500',
   },
-  modalOptionCode: {
+  sheetCode: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
-    fontWeight: '500',
   },
 });

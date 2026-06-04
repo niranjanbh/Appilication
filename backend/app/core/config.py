@@ -37,10 +37,11 @@ class Settings(BaseSettings):
     otp_resend_cooldown_seconds: int = 60
     otp_max_attempts: int = 5
 
-    # MSG91
-    msg91_auth_key: str = ""
-    msg91_sender_id: str = "KYROS"
-    msg91_template_id: str = ""
+    # authkey.io — OTP (WhatsApp + SMS) and WhatsApp utility templates
+    authkey_api_key: str = ""
+    authkey_otp_template_name: str = "kyros_otp"   # approved WhatsApp OTP template name
+    authkey_sender_id: str = "KYROS"                # DLT-registered SMS sender ID
+    authkey_sms_template_id: str = ""               # DLT SMS template ID (OTP fallback)
 
     # CORS — list[str] | str: the Union makes pydantic-settings pass parse failures
     # through to the field_validator below, which handles comma-separated .env values.
@@ -74,9 +75,7 @@ class Settings(BaseSettings):
     razorpay_webhook_secret: str = ""
     gst_number: str = ""
 
-    # WhatsApp (AiSensy)
-    aisensy_api_key: str = ""
-    aisensy_campaign_name: str = "kyros_utility"
+    # WhatsApp utility templates are sent via authkey.io (see authkey_* keys above)
 
     # Email (SMTP — mailhog in dev, real SMTP in prod)
     smtp_host: str = "mailhog"

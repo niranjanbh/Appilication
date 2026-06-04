@@ -111,7 +111,7 @@ def send_whatsapp_task(
     template_name: str,
     params: list[str],
 ) -> dict[str, Any]:
-    """Send a WhatsApp utility template message via AiSensy."""
+    """Send a WhatsApp utility template message via authkey.io."""
     log = logger.bind(task_name="send_whatsapp", task_id=self.request.id, template=template_name)
     log.info("task.started")
 
@@ -134,7 +134,7 @@ def send_whatsapp_task(
 async def _send_whatsapp_async(
     *, phone: str, template_name: str, params: list[str]
 ) -> bool:
-    from app.integrations.aisensy import send_whatsapp_template
+    from app.integrations.authkey import send_whatsapp_template
     return await send_whatsapp_template(phone=phone, template_name=template_name, params=params)
 
 

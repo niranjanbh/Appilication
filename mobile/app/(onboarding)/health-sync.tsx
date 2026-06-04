@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { captureConsentApi } from '../../lib/api/consent';
 import { postHealthSync } from '../../lib/api/health-sync';
 import { useAuth } from '../../lib/auth/context';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 import { fetchHealthData } from '../../lib/native/health-data';
 import { requestHealthPermissions } from '../../lib/native/health';
 import { registerHealthSyncTask } from '../../lib/native/background-sync';
@@ -15,50 +16,40 @@ const HEALTH_SYNC_TEXT =
   'I can revoke this permission at any time from Profile → My consents.';
 
 const DATA_POINTS = [
-  'Steps and activity',
-  'Heart rate and HRV',
-  'Sleep duration',
-  'Weight and body composition',
-  'Blood pressure and glucose',
+  { icon: '👟', label: 'Steps and activity' },
+  { icon: '❤️', label: 'Heart rate and HRV' },
+  { icon: '😴', label: 'Sleep duration' },
+  { icon: '⚖️', label: 'Weight and body composition' },
+  { icon: '🩸', label: 'Blood pressure and glucose' },
 ];
+
+const TOTAL_STEPS = 5;
+const STEP = 4;
 
 export default function HealthSyncScreen() {
   const router = useRouter();
   const { markOnboardingComplete } = useAuth();
+  const isDark = useColorScheme() === 'dark';
   const [loading, setLoading] = useState(false);
 
   const finish = async () => {
-    // ABHA linking is next (optional) — it owns the markOnboardingComplete call.
     router.push('/(onboarding)/abha-link');
   };
 
+  // Preserve 100% of existing health sync logic
   const handleAllow = async () => {
     setLoading(true);
     try {
       const result = await requestHealthPermissions();
       if (result.granted) {
-        await captureConsentApi({
-          consent_type: 'health_sync',
-          version: '1.0',
-          granted: true,
-          consent_text: HEALTH_SYNC_TEXT,
-        });
-
-        // Seed the first sync immediately so the doctor has data on day one.
+        await captureConsentApi({ consent_type: 'health_sync', version: '1.0', granted: true, consent_text: HEALTH_SYNC_TEXT });
         const source = Platform.OS === 'ios' ? 'apple_health' : 'google_health_connect';
-        const until = new Date();
-        const since = new Date(until.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const until  = new Date();
+        const since  = new Date(until.getTime() - 7 * 24 * 60 * 60 * 1000);
         const datapoints = await fetchHealthData(source, since, until);
         if (datapoints.length > 0) {
-          await postHealthSync({
-            source,
-            data_range_start: since.toISOString(),
-            data_range_end: until.toISOString(),
-            datapoints,
-          });
+          await postHealthSync({ source, data_range_start: since.toISOString(), data_range_end: until.toISOString(), datapoints });
         }
-
-        // Arm the recurring 4-hour background sync.
         await registerHealthSyncTask();
       }
     } catch {
@@ -69,65 +60,91 @@ export default function HealthSyncScreen() {
     }
   };
 
-  const handleSkip = async () => {
-    await finish();
-  };
+  const handleSkip = async () => { await finish(); };
 
   const platformLabel = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
-  const isWeb = Platform.OS === 'web';
+  const isWeb         = Platform.OS === 'web';
+
+  const btnScale = useSharedValue(1);
+  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.content}>
-        <Text style={styles.step}>Step 4 of 5</Text>
-        <Text style={styles.title}>
-          {isWeb ? 'Health data sync' : `Connect ${platformLabel}`}
-        </Text>
-        <Text style={styles.subtitle}>
-          {isWeb
-            ? 'Health data sync is available on the mobile app.'
-            : `Kyros can read health data from ${platformLabel} to give your doctor a richer picture between consultations.`}
-        </Text>
 
+        {/* Step progress */}
+        <View style={styles.stepRow}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${(STEP / TOTAL_STEPS) * 100}%` as never }]} />
+          </View>
+          <Text style={[styles.stepLabel, { color: textSub }]}>Step {STEP} of {TOTAL_STEPS}</Text>
+        </View>
+
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: textPri }]}>
+            {isWeb ? 'Health data sync' : `Connect ${platformLabel}`}
+          </Text>
+          <Text style={[styles.subtitle, { color: textSub }]}>
+            {isWeb
+              ? 'Health data sync is available on the mobile app.'
+              : `Kyros can read health data from ${platformLabel} to give your doctor a richer picture between consultations.`}
+          </Text>
+        </View>
+
+        {/* Data points card */}
         {!isWeb && (
-          <View style={styles.dataPoints}>
-            <Text style={styles.dataPointsLabel}>What we read:</Text>
-            {DATA_POINTS.map(point => (
-              <View key={point} style={styles.dataPoint}>
-                <Text style={styles.dataPointBullet}>·</Text>
-                <Text style={styles.dataPointText}>{point}</Text>
+          <View style={[styles.dataCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+            <Text style={[styles.dataCardTitle, { color: textPri }]}>What we read</Text>
+            {DATA_POINTS.map(({ icon, label }) => (
+              <View key={label} style={styles.dataRow}>
+                <View style={[styles.dataIconWrap, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+                  <Text style={styles.dataIcon}>{icon}</Text>
+                </View>
+                <Text style={[styles.dataLabel, { color: textPri }]}>{label}</Text>
               </View>
             ))}
-            <Text style={styles.dataNote}>
+            <Text style={[styles.dataNote, { color: textSub }]}>
               We never write to {platformLabel}. Revoke access any time in Profile → My consents.
             </Text>
           </View>
         )}
       </View>
 
+      {/* Footer */}
       <View style={styles.footer}>
         {!isWeb && (
-          <Pressable
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleAllow}
-            disabled={loading}
-            accessibilityLabel={`Allow ${platformLabel} access`}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.ivory} />
-            ) : (
-              <Text style={styles.buttonText}>Allow access</Text>
-            )}
-          </Pressable>
+          <Animated.View style={btnAnim}>
+            <Pressable
+              style={[styles.button, loading && styles.buttonMuted]}
+              onPress={handleAllow}
+              onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+              onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+              disabled={loading}
+              accessibilityLabel={`Allow ${platformLabel} access`}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Allow access</Text>
+              )}
+            </Pressable>
+          </Animated.View>
         )}
 
         <Pressable
-          style={styles.skipButton}
+          style={styles.skipBtn}
           onPress={handleSkip}
           disabled={loading}
           accessibilityLabel="Skip health sync"
         >
-          <Text style={styles.skipText}>
+          <Text style={[styles.skipText, { color: textSub }]}>
             {isWeb ? 'Continue' : 'Skip for now'}
           </Text>
         </Pressable>
@@ -139,86 +156,98 @@ export default function HealthSyncScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.ivory,
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[12],
+    paddingTop: spacing[6],
     paddingBottom: spacing[8],
     justifyContent: 'space-between',
   },
   content: { gap: spacing[6] },
-  step: {
+
+  stepRow: { gap: spacing[2] },
+  progressTrack: { height: 4, backgroundColor: colors.borderLight, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: colors.electricBlue, borderRadius: 2 },
+  stepLabel: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    fontWeight: '500',
+    fontSize: fontSize.xs,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+
+  header: { gap: spacing[2] },
   title: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   subtitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
     lineHeight: 22,
   },
-  dataPoints: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: spacing[4],
-    gap: spacing[2],
+
+  dataCard: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[5],
+    gap: spacing[3],
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
-  dataPointsLabel: {
+  dataCardTitle: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '600',
-    marginBottom: spacing[2],
-  },
-  dataPoint: { flexDirection: 'row', gap: spacing[2] },
-  dataPointBullet: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.forest,
+    fontSize: fontSize.bodyLg,
     fontWeight: '700',
+    marginBottom: spacing[1],
   },
-  dataPointText: {
+  dataRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  dataIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  dataIcon:  { fontSize: 18 },
+  dataLabel: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.ink,
+    fontWeight: '500',
   },
   dataNote: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.stone,
-    marginTop: spacing[2],
     lineHeight: 18,
+    marginTop: spacing[1],
   },
+
   footer: { gap: spacing[3] },
   button: {
-    backgroundColor: colors.forest,
-    borderRadius: 8,
-    paddingVertical: spacing[4],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonMuted: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.ivory,
+    color: colors.white,
     fontWeight: '600',
   },
-  skipButton: {
-    paddingVertical: spacing[3],
-    alignItems: 'center',
-  },
+  skipBtn: { height: 48, alignItems: 'center', justifyContent: 'center' },
   skipText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
   },
 });

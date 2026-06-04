@@ -14,52 +14,241 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { HMSPrebuilt } from '@100mslive/react-native-room-kit';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../../lib/api/client';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface JoinResponse {
-  room_id: string;
-  token: string;
-  endpoint: string;
-}
+interface JoinResponse { room_id: string; token: string; endpoint: string; }
 
 type ScreenState =
   | { phase: 'loading' }
   | { phase: 'consent'; joinResp: JoinResponse }
-  | { phase: 'call'; joinResp: JoinResponse }
-  | { phase: 'error'; message: string };
+  | { phase: 'call';    joinResp: JoinResponse }
+  | { phase: 'error';   message: string };
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+const POLL_INTERVAL_MS  = 5000;
+const MAX_POLL_ATTEMPTS = 24;
+const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 
-const POLL_INTERVAL_MS = 5000;
-const MAX_POLL_ATTEMPTS = 24; // ~2 minutes of polling
+// ── Waiting room ──────────────────────────────────────────────────────────────
 
-// ── Component ──────────────────────────────────────────────────────────────────
+function WaitingRoom({ isDark }: { isDark: boolean }) {
+  const bg = isDark ? colors.midnight : colors.skyMist;
+  const textPri = isDark ? colors.white : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+  return (
+    <View style={[wr.container, { backgroundColor: bg }]}>
+      <View style={[wr.iconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
+        <ActivityIndicator size="large" color={colors.electricBlue} />
+      </View>
+      <Text style={[wr.title, { color: textPri }]}>Preparing your consultation…</Text>
+      <Text style={[wr.sub, { color: textSub }]}>
+        Your video room is being set up. This takes a moment.
+      </Text>
+    </View>
+  );
+}
+
+const wr = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing[8], gap: spacing[5] },
+  iconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  title: { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600', textAlign: 'center' },
+  sub:   { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
+});
+
+// ── Error state ───────────────────────────────────────────────────────────────
+
+function ErrorState({ message, onBack, isDark }: { message: string; onBack: () => void; isDark: boolean }) {
+  const scale = useSharedValue(1);
+  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const bg     = isDark ? colors.midnight     : colors.skyMist;
+  const cardBg = isDark ? colors.nightSurface : colors.white;
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+  return (
+    <View style={[er.container, { backgroundColor: bg }]}>
+      <View style={[er.card, { backgroundColor: cardBg, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)' }]}>
+        <View style={[er.iconWrap, { backgroundColor: colors.criticalRed + '15' }]}>
+          <Text style={er.icon}>⚠️</Text>
+        </View>
+        <Text style={[er.title, { color: textPri }]}>Unable to join</Text>
+        <Text style={[er.body, { color: textSub }]}>{message}</Text>
+        <Animated.View style={anim}>
+          <Pressable
+            style={er.button}
+            onPress={onBack}
+            onPressIn={() => { scale.value = withSpring(0.97, SPRING); }}
+            onPressOut={() => { scale.value = withSpring(1, SPRING); }}
+            accessibilityLabel="Go back"
+          >
+            <Text style={er.buttonText}>Go back</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+const er = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing[6] },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: borderRadius.xxl,
+    padding: spacing[6],
+    alignItems: 'center',
+    gap: spacing[4],
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  iconWrap: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  icon:     { fontSize: 30 },
+  title:    { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600', textAlign: 'center' },
+  body:     { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
+  button: {
+    height: 52,
+    paddingHorizontal: spacing[8],
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.white, fontWeight: '700' },
+});
+
+// ── Recording consent dialog ───────────────────────────────────────────────────
+
+function RecordingConsentDialog({
+  onAllow,
+  onSkip,
+  isDark,
+}: {
+  onAllow: () => void;
+  onSkip:  () => void;
+  isDark:  boolean;
+}) {
+  const allowScale = useSharedValue(1);
+  const allowAnim  = useAnimatedStyle(() => ({ transform: [{ scale: allowScale.value }] }));
+  const skipScale  = useSharedValue(1);
+  const skipAnim   = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
+
+  const sheetBg = isDark ? colors.nightSurface : colors.white;
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+
+  return (
+    <Modal transparent animationType="fade" visible>
+      <View style={cd.overlay}>
+        <View style={[cd.sheet, { backgroundColor: sheetBg }]}>
+          <View style={cd.handle} />
+          <View style={[cd.iconWrap, { backgroundColor: colors.navyDeep + '15' }]}>
+            <Text style={cd.icon}>📹</Text>
+          </View>
+          <Text style={[cd.title, { color: textPri }]}>Recording consent</Text>
+          <Text style={[cd.body, { color: textSub }]}>
+            Would you like this consultation to be recorded? The recording is stored securely and used only to support your care.
+          </Text>
+          <Animated.View style={allowAnim}>
+            <Pressable
+              style={cd.allowBtn}
+              onPress={onAllow}
+              onPressIn={() => { allowScale.value = withSpring(0.97, SPRING); }}
+              onPressOut={() => { allowScale.value = withSpring(1, SPRING); }}
+              accessibilityLabel="Allow recording"
+            >
+              <Text style={cd.allowBtnText}>Allow recording</Text>
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={skipAnim}>
+            <Pressable
+              style={[cd.skipBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight }]}
+              onPress={onSkip}
+              onPressIn={() => { skipScale.value = withSpring(0.97, SPRING); }}
+              onPressOut={() => { skipScale.value = withSpring(1, SPRING); }}
+              accessibilityLabel="Join without recording"
+            >
+              <Text style={[cd.skipBtnText, { color: textSub }]}>No thanks, join without recording</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const cd = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: {
+    borderTopLeftRadius: borderRadius.xxl,
+    borderTopRightRadius: borderRadius.xxl,
+    padding: spacing[6],
+    paddingBottom: spacing[10],
+    gap: spacing[4],
+    alignItems: 'center',
+  },
+  handle:  { width: 36, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, marginBottom: spacing[2] },
+  iconWrap:{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: spacing[1] },
+  icon:    { fontSize: 30 },
+  title:   { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600', textAlign: 'center' },
+  body:    { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
+  allowBtn: {
+    width: '100%',
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  allowBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  skipBtn:  { width: '100%', height: 52, borderWidth: 1, borderRadius: borderRadius.xxl, alignItems: 'center', justifyContent: 'center' },
+  skipBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '500' },
+});
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function JoinScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const { id }  = useLocalSearchParams<{ id: string }>();
+  const router  = useRouter();
+  const isDark  = useColorScheme() === 'dark';
   const [state, setState] = useState<ScreenState>({ phase: 'loading' });
   const pollAttempts = useRef(0);
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Preserve ALL existing token fetch + polling logic
   const fetchToken = useCallback(async () => {
     try {
-      const joinResp = await apiFetch<JoinResponse>(
-        `/v1/clinic/patient/consultations/${id}/join`,
-        { method: 'GET' },
-      );
+      const joinResp = await apiFetch<JoinResponse>(`/v1/clinic/patient/consultations/${id}/join`, { method: 'GET' });
       setState({ phase: 'consent', joinResp });
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : '';
       if (errMsg.includes('503')) {
-        // Room not provisioned yet — poll
         pollAttempts.current += 1;
         if (pollAttempts.current >= MAX_POLL_ATTEMPTS) {
           setState({ phase: 'error', message: 'Video room is taking longer than expected. Please try again in a moment.' });
@@ -68,29 +257,21 @@ export default function JoinScreen() {
         pollTimer.current = setTimeout(fetchToken, POLL_INTERVAL_MS);
         return;
       }
-      if (errMsg.includes('404')) {
-        setState({ phase: 'error', message: 'Consultation not found.' });
-        return;
-      }
+      if (errMsg.includes('404')) { setState({ phase: 'error', message: 'Consultation not found.' }); return; }
       setState({ phase: 'error', message: 'Could not connect to the call. Please try again.' });
     }
   }, [id]);
 
   useEffect(() => {
     fetchToken();
-    return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
-    };
+    return () => { if (pollTimer.current) clearTimeout(pollTimer.current); };
   }, [fetchToken]);
 
   const handleConsentAllow = useCallback(async (joinResp: JoinResponse) => {
     try {
-      await apiFetch(
-        `/v1/clinic/patient/consultations/${id}/recording-consent`,
-        { method: 'POST' },
-      );
+      await apiFetch(`/v1/clinic/patient/consultations/${id}/recording-consent`, { method: 'POST' });
     } catch {
-      // Non-critical: consent capture failure does not block joining
+      // Non-critical
     }
     setState({ phase: 'call', joinResp });
   }, [id]);
@@ -103,27 +284,21 @@ export default function JoinScreen() {
     router.replace(`/consultations/${id}` as never);
   }, [id, router]);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
-
-  if (state.phase === 'loading') {
-    return <WaitingRoom />;
-  }
-
-  if (state.phase === 'error') {
-    return <ErrorState message={state.message} onBack={() => router.back()} />;
-  }
+  if (state.phase === 'loading') return <WaitingRoom isDark={isDark} />;
+  if (state.phase === 'error')   return <ErrorState message={state.message} onBack={() => router.back()} isDark={isDark} />;
 
   if (state.phase === 'consent') {
     const joinResp = state.joinResp;
     return (
       <RecordingConsentDialog
+        isDark={isDark}
         onAllow={() => handleConsentAllow(joinResp)}
         onSkip={() => handleConsentSkip(joinResp)}
       />
     );
   }
 
-  // phase === 'call'
+  // phase === 'call' — full-screen HMS SDK, keep black bg
   return (
     <View style={styles.callContainer}>
       <HMSPrebuilt
@@ -140,163 +315,6 @@ export default function JoinScreen() {
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function WaitingRoom() {
-  return (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.forest} />
-      <Text style={styles.waitingTitle}>Preparing your consultation…</Text>
-      <Text style={styles.waitingSubtitle}>
-        Your video room is being set up. This takes a moment.
-      </Text>
-    </View>
-  );
-}
-
-function ErrorState({ message, onBack }: { message: string; onBack: () => void }) {
-  return (
-    <View style={styles.centered}>
-      <Text style={styles.errorTitle}>Unable to join</Text>
-      <Text style={styles.errorBody}>{message}</Text>
-      <Pressable style={styles.button} onPress={onBack} accessibilityLabel="Go back">
-        <Text style={styles.buttonText}>Go back</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function RecordingConsentDialog({
-  onAllow,
-  onSkip,
-}: {
-  onAllow: () => void;
-  onSkip: () => void;
-}) {
-  return (
-    <Modal transparent animationType="fade" visible>
-      <View style={styles.overlay}>
-        <View style={styles.dialogCard}>
-          <Text style={styles.dialogTitle}>Recording consent</Text>
-          <Text style={styles.dialogBody}>
-            Would you like this consultation to be recorded? The recording is stored securely
-            and used only to support your care.
-          </Text>
-          <Pressable
-            style={styles.button}
-            onPress={onAllow}
-            accessibilityLabel="Allow recording"
-          >
-            <Text style={styles.buttonText}>Allow recording</Text>
-          </Pressable>
-          <Pressable
-            style={styles.buttonSecondary}
-            onPress={onSkip}
-            accessibilityLabel="Join without recording"
-          >
-            <Text style={styles.buttonTextSecondary}>No thanks, join without recording</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ── Styles ─────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  callContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[6],
-    backgroundColor: colors.ivory,
-  },
-  waitingTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.ink,
-    marginTop: spacing[4],
-    textAlign: 'center',
-  },
-  waitingSubtitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    marginTop: spacing[2],
-    textAlign: 'center',
-  },
-  errorTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.ink,
-    marginBottom: spacing[2],
-    textAlign: 'center',
-  },
-  errorBody: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-    marginBottom: spacing[6],
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[4],
-  },
-  dialogCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[6],
-    width: '100%',
-    maxWidth: 400,
-  },
-  dialogTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h3,
-    color: colors.ink,
-    marginBottom: spacing[3],
-  },
-  dialogBody: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    lineHeight: 22,
-    marginBottom: spacing[6],
-  },
-  button: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[4],
-    alignItems: 'center',
-    marginBottom: spacing[3],
-  },
-  buttonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.white,
-    fontWeight: '600',
-  },
-  buttonSecondary: {
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[4],
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.stone,
-  },
-  buttonTextSecondary: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '500',
-  },
+  callContainer: { flex: 1, backgroundColor: '#000' },
 });

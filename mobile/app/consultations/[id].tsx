@@ -6,21 +6,18 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useColorScheme,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
-import { colors, fontFamily, fontSize, spacing, borderRadius } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ConsultationStatus =
-  | 'scheduled'
-  | 'confirmed'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled'
-  | 'no_show';
+  | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
 
 interface Consultation {
   id: string;
@@ -41,52 +38,41 @@ interface Consultation {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
   });
 }
-
-function formatRupees(paise: number): string {
-  return `₹${(paise / 100).toFixed(0)}`;
-}
-
+function formatRupees(p: number): string { return `₹${(p / 100).toFixed(0)}`; }
 function formatCategory(cat: string): string {
-  return cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
-  scheduled: 'Scheduled',
-  confirmed: 'Confirmed',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  no_show: 'No Show',
+  scheduled: 'Scheduled', confirmed: 'Confirmed', in_progress: 'In Progress',
+  completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
-  scheduled: colors.forest,
-  confirmed: '#2563EB',
-  in_progress: '#D97706',
-  completed: colors.stone,
-  cancelled: '#DC2626',
-  no_show: '#DC2626',
+  scheduled:   colors.navyDeep,
+  confirmed:   colors.electricBlue,
+  in_progress: colors.warningAmber,
+  completed:   colors.successGreen,
+  cancelled:   colors.criticalRed,
+  no_show:     colors.criticalRed,
 };
 
 const CANCELLABLE: ConsultationStatus[] = ['scheduled', 'confirmed'];
 
 // ── Detail row ─────────────────────────────────────────────────────────────────
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, textPri, textSub, borderColor }: {
+  label: string; value: string; textPri: string; textSub: string; borderColor: string;
+}) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+    <View style={[styles.row, { borderBottomColor: borderColor }]}>
+      <Text style={[styles.rowLabel, { color: textSub }]}>{label}</Text>
+      <Text style={[styles.rowValue, { color: textPri }]}>{value}</Text>
     </View>
   );
 }
@@ -94,13 +80,14 @@ function Row({ label, value }: { label: string; value: string }) {
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
 export default function ConsultationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const { id }   = useLocalSearchParams<{ id: string }>();
+  const router   = useRouter();
+  const isDark   = useColorScheme() === 'dark';
 
   const [consultation, setConsultation] = useState<Consultation | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading,    setLoading]    = useState(true);
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error,      setError]      = useState<string | null>(null);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -114,10 +101,9 @@ export default function ConsultationDetailScreen() {
     }
   }, [id]);
 
-  useEffect(() => {
-    fetchDetail();
-  }, [fetchDetail]);
+  useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
+  // Preserve all existing cancel logic
   const handleCancel = useCallback(() => {
     Alert.alert(
       'Cancel consultation?',
@@ -146,91 +132,107 @@ export default function ConsultationDetailScreen() {
     );
   }, [id, fetchDetail]);
 
+  const joinScale   = useSharedValue(1);
+  const joinAnim    = useAnimatedStyle(() => ({ transform: [{ scale: joinScale.value }] }));
+  const cancelScale = useSharedValue(1);
+  const cancelAnim  = useAnimatedStyle(() => ({ transform: [{ scale: cancelScale.value }] }));
+
+  const bg        = isDark ? colors.midnight     : colors.skyMist;
+  const textPri   = isDark ? colors.white        : colors.navyDeep;
+  const textSub   = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg    = isDark ? colors.nightSurface : colors.white;
+  const cardBdr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const divider   = isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight;
+
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.forest} />
-      </View>
-    );
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
   }
 
   if (error || !consultation) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error ?? 'Consultation not found.'}</Text>
+      <View style={[styles.center, { backgroundColor: bg }]}>
+        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Consultation not found.'}</Text>
         <Pressable onPress={() => router.back()} accessibilityLabel="Go back">
-          <Text style={styles.link}>Go back</Text>
+          <Text style={[styles.link, { color: colors.electricBlue }]}>Go back</Text>
         </Pressable>
       </View>
     );
   }
 
-  const statusColor = STATUS_COLOR[consultation.status];
+  const sc        = STATUS_COLOR[consultation.status];
   const canCancel = CANCELLABLE.includes(consultation.status);
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
-      {/* Status banner */}
-      <View style={[styles.statusBanner, { backgroundColor: statusColor + '18' }]}>
-        <Text style={[styles.statusText, { color: statusColor }]}>
-          {STATUS_LABEL[consultation.status]}
-        </Text>
+    <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+
+      {/* Status pill */}
+      <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>
+        <View style={[styles.statusDot, { backgroundColor: sc }]} />
+        <Text style={[styles.statusText, { color: sc }]}>{STATUS_LABEL[consultation.status]}</Text>
       </View>
 
-      {/* Category + type */}
-      <Text style={styles.category}>{formatCategory(consultation.condition_category)}</Text>
-      <Text style={styles.type}>
+      {/* Hero title */}
+      <Text style={[styles.category, { color: textPri }]}>
+        {formatCategory(consultation.condition_category)}
+      </Text>
+      <Text style={[styles.type, { color: textSub }]}>
         {consultation.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'}
       </Text>
 
-      {/* Details */}
-      <View style={styles.section}>
-        <Row label="Scheduled" value={formatDateTime(consultation.scheduled_start_at)} />
-        <Row label="Fee" value={formatRupees(consultation.consultation_fee_paise)} />
-        {consultation.cancellation_reason ? (
-          <Row label="Cancellation reason" value={consultation.cancellation_reason} />
-        ) : null}
-        {consultation.actual_start_at ? (
-          <Row label="Started at" value={formatDateTime(consultation.actual_start_at)} />
-        ) : null}
-        {consultation.actual_end_at ? (
-          <Row label="Ended at" value={formatDateTime(consultation.actual_end_at)} />
-        ) : null}
+      {/* Details card */}
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+        <Row label="Scheduled"  value={formatDateTime(consultation.scheduled_start_at)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        <Row label="Fee"        value={formatRupees(consultation.consultation_fee_paise)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        {consultation.cancellation_reason && (
+          <Row label="Cancellation" value={consultation.cancellation_reason} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
+        {consultation.actual_start_at && (
+          <Row label="Started at" value={formatDateTime(consultation.actual_start_at)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
+        {consultation.actual_end_at && (
+          <Row label="Ended at" value={formatDateTime(consultation.actual_end_at)} textPri={textPri} textSub={textSub} borderColor="transparent" />
+        )}
       </View>
 
-      {/* Join button for confirmed / in-progress */}
-      {(consultation.status === 'confirmed' || consultation.status === 'in_progress') &&
-        consultation.video_room_id ? (
-        <Pressable
-          style={styles.joinButton}
-          onPress={() => router.push(`/consultations/join/${consultation.id}`)}
-          accessibilityLabel="Join video consultation"
-        >
-          <Text style={styles.joinButtonText}>Join video call</Text>
-        </Pressable>
-      ) : null}
+      {/* Join video call */}
+      {(consultation.status === 'confirmed' || consultation.status === 'in_progress') && consultation.video_room_id && (
+        <Animated.View style={joinAnim}>
+          <Pressable
+            style={styles.joinBtn}
+            onPress={() => router.push(`/consultations/join/${consultation.id}`)}
+            onPressIn={() => { joinScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+            onPressOut={() => { joinScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+            accessibilityLabel="Join video consultation"
+          >
+            <Text style={styles.joinBtnIcon}>📹</Text>
+            <Text style={styles.joinBtnText}>Join video call</Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* Cancel */}
-      {canCancel ? (
-        <Pressable
-          style={[styles.cancelButton, cancelling && styles.disabled]}
-          onPress={handleCancel}
-          disabled={cancelling}
-          accessibilityLabel="Cancel this consultation"
-        >
-          <Text style={styles.cancelButtonText}>
-            {cancelling ? 'Cancelling…' : 'Cancel appointment'}
-          </Text>
-        </Pressable>
-      ) : null}
+      {canCancel && (
+        <Animated.View style={cancelAnim}>
+          <Pressable
+            style={[styles.cancelBtn, { borderColor: colors.criticalRed + '60' }, cancelling && styles.disabled]}
+            onPress={handleCancel}
+            onPressIn={() => { cancelScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+            onPressOut={() => { cancelScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+            disabled={cancelling}
+            accessibilityLabel="Cancel this consultation"
+          >
+            <Text style={[styles.cancelBtnText, { color: colors.criticalRed }]}>
+              {cancelling ? 'Cancelling…' : 'Cancel appointment'}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </ScrollView>
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.ivory },
+  flex: { flex: 1 },
   container: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
@@ -239,94 +241,71 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
-  statusBanner: {
+
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
     alignSelf: 'flex-start',
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     borderRadius: borderRadius.full,
   },
-  statusText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-  },
-  category: {
-    fontFamily: fontFamily.display,
-    fontSize: fontSize.h2,
-    color: colors.forest,
-    fontWeight: '500',
-    marginTop: spacing[1],
-  },
-  type: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-  },
-  section: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing[4],
-    gap: spacing[3],
-    marginTop: spacing[2],
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '700' },
+
+  category: { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600', lineHeight: 32 },
+  type:     { fontFamily: fontFamily.body, fontSize: fontSize.body },
+
+  card: {
+    borderRadius: borderRadius.xxl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
+    borderBottomWidth: 1,
     gap: spacing[3],
   },
-  rowLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
-    color: colors.stone,
-    flex: 1,
-  },
-  rowValue: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
-    color: colors.ink,
-    fontWeight: '500',
-    flex: 2,
-    textAlign: 'right',
-  },
-  joinButton: {
-    backgroundColor: colors.forest,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
+  rowLabel: { fontFamily: fontFamily.body, fontSize: fontSize.sm, flex: 1 },
+  rowValue: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600', flex: 2, textAlign: 'right' },
+
+  joinBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
+    gap: spacing[2],
+    height: 56,
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  joinButtonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  cancelButton: {
-    borderWidth: 1,
-    borderColor: '#DC2626',
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
+  joinBtnIcon: { fontSize: 20 },
+  joinBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+
+  cancelBtn: {
+    height: 52,
+    borderWidth: 1.5,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
   },
-  cancelButtonText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '600',
-    color: '#DC2626',
-  },
-  disabled: { opacity: 0.5 },
-  errorText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-  },
-  link: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.forest,
-    fontWeight: '600',
-  },
+  cancelBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  disabled: { opacity: 0.50 },
+
+  errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
+  link:      { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
 });

@@ -10,8 +10,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import {
   createReminderApi,
@@ -26,38 +28,30 @@ import {
   requestNotificationPermissions,
   scheduleReminderNotification,
 } from '../../lib/native/notifications';
-import {
-  borderRadius,
-  colors,
-  fontFamily,
-  fontSize,
-  spacing,
-} from '../../lib/design-tokens';
-import type {
-  AdherenceAction,
-  Reminder,
-  ReminderAction,
-  ReminderCreate,
-  ReminderType,
-} from '../../types/wellness';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
 
-const REMINDER_TYPES: { value: ReminderType; label: string }[] = [
-  { value: 'water', label: 'Water' },
-  { value: 'supplement', label: 'Supplement' },
-  { value: 'medication', label: 'Medication' },
-  { value: 'gym', label: 'Gym' },
-  { value: 'custom', label: 'Custom' },
+const REMINDER_TYPES: { value: ReminderType; label: string; icon: string }[] = [
+  { value: 'water',      label: 'Water',      icon: '💧' },
+  { value: 'supplement', label: 'Supplement', icon: '🌿' },
+  { value: 'medication', label: 'Medication', icon: '💊' },
+  { value: 'gym',        label: 'Gym',        icon: '🏋️' },
+  { value: 'custom',     label: 'Custom',     icon: '🔔' },
 ];
 
 const TYPE_EMOJI: Record<ReminderType, string> = {
-  water: '💧',
-  supplement: '💊',
-  medication: '💊',
-  gym: '🏋️',
-  custom: '🔔',
+  water: '💧', supplement: '🌿', medication: '💊', gym: '🏋️', custom: '🔔',
 };
 
-// ── Create/Edit modal ─────────────────────────────────────────────────────────
+const TYPE_COLOR: Record<ReminderType, string> = {
+  water:      '#EBF3FF',
+  supplement: '#EDFAF3',
+  medication: '#F3EFFF',
+  gym:        '#FFF4E5',
+  custom:     colors.nightElev,
+};
+
+// ── Reminder form modal ───────────────────────────────────────────────────────
 
 interface ReminderFormState {
   type: ReminderType;
@@ -68,11 +62,7 @@ interface ReminderFormState {
 }
 
 const DEFAULT_FORM: ReminderFormState = {
-  type: 'water',
-  label: '',
-  scheduleHour: '08',
-  scheduleMinute: '00',
-  intervalMinutes: '',
+  type: 'water', label: '', scheduleHour: '08', scheduleMinute: '00', intervalMinutes: '',
 };
 
 interface ReminderFormModalProps {
@@ -81,9 +71,10 @@ interface ReminderFormModalProps {
   onClose: () => void;
   onSave: (payload: ReminderCreate, editing: Reminder | null) => void;
   isSaving: boolean;
+  isDark: boolean;
 }
 
-function ReminderFormModal({ visible, editing, onClose, onSave, isSaving }: ReminderFormModalProps) {
+function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark }: ReminderFormModalProps) {
   const [form, setForm] = useState<ReminderFormState>(DEFAULT_FORM);
 
   useEffect(() => {
@@ -91,13 +82,9 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving }: Remi
       const cron = editing.schedule_cron ?? '';
       const cronParts = cron.split(' ');
       setForm({
-        type: editing.type,
-        label: editing.label,
-        scheduleHour: cronParts[1] ?? '08',
-        scheduleMinute: cronParts[0] ?? '00',
-        intervalMinutes: editing.schedule_interval_minutes
-          ? String(editing.schedule_interval_minutes)
-          : '',
+        type: editing.type, label: editing.label,
+        scheduleHour: cronParts[1] ?? '08', scheduleMinute: cronParts[0] ?? '00',
+        intervalMinutes: editing.schedule_interval_minutes ? String(editing.schedule_interval_minutes) : '',
       });
     } else {
       setForm(DEFAULT_FORM);
@@ -109,112 +96,120 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving }: Remi
       Alert.alert('Label required', 'Please enter a name for this reminder.');
       return;
     }
-    const hour = parseInt(form.scheduleHour, 10);
-    const minute = parseInt(form.scheduleMinute, 10);
-    const validHour = !isNaN(hour) && hour >= 0 && hour <= 23;
-    const validMinute = !isNaN(minute) && minute >= 0 && minute <= 59;
-
+    const hour    = parseInt(form.scheduleHour, 10);
+    const minute  = parseInt(form.scheduleMinute, 10);
+    const validH  = !isNaN(hour)   && hour   >= 0 && hour   <= 23;
+    const validM  = !isNaN(minute) && minute >= 0 && minute <= 59;
     const payload: ReminderCreate = {
       type: form.type,
       label: form.label.trim(),
-      schedule_cron:
-        validHour && validMinute
-          ? `${minute} ${hour} * * *`
-          : null,
-      schedule_interval_minutes: form.intervalMinutes
-        ? parseInt(form.intervalMinutes, 10) || null
-        : null,
+      schedule_cron: validH && validM ? `${minute} ${hour} * * *` : null,
+      schedule_interval_minutes: form.intervalMinutes ? parseInt(form.intervalMinutes, 10) || null : null,
       notification_channels: ['push'],
     };
     onSave(payload, editing);
   }
 
+  const modalBg  = isDark ? colors.nightSurface : colors.white;
+  const sheetBg  = isDark ? colors.midnight     : colors.skyMist;
+  const textPri  = isDark ? colors.white     : colors.navyDeep;
+  const textSub  = isDark ? colors.slateText : colors.coolGray;
+  const inputBg  = isDark ? colors.nightElev : colors.white;
+  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
+      <View style={[m.container, { backgroundColor: sheetBg }]}>
+        {/* Header */}
+        <View style={[m.header, { backgroundColor: modalBg, borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : colors.borderLight }]}>
           <Pressable onPress={onClose} accessibilityLabel="Cancel">
-            <Text style={styles.modalCancel}>Cancel</Text>
+            <Text style={[m.cancel, { color: textSub }]}>Cancel</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>{editing ? 'Edit reminder' : 'New reminder'}</Text>
+          <Text style={[m.title, { color: textPri }]}>{editing ? 'Edit reminder' : 'New reminder'}</Text>
           <Pressable onPress={handleSave} disabled={isSaving} accessibilityLabel="Save reminder">
-            {isSaving ? (
-              <ActivityIndicator color={colors.forest} size="small" />
-            ) : (
-              <Text style={styles.modalSave}>Save</Text>
-            )}
+            {isSaving ? <ActivityIndicator color={colors.electricBlue} size="small" /> : <Text style={m.save}>Save</Text>}
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.modalBody}>
-          {/* Type picker */}
-          <Text style={styles.fieldLabel}>Type</Text>
-          <View style={styles.typeRow}>
-            {REMINDER_TYPES.map((t) => (
-              <Pressable
-                key={t.value}
-                style={[styles.typeChip, form.type === t.value && styles.typeChipActive]}
-                onPress={() => setForm((f) => ({ ...f, type: t.value }))}
-                accessibilityLabel={`Reminder type ${t.label}`}
-              >
-                <Text style={[styles.typeChipText, form.type === t.value && styles.typeChipTextActive]}>
-                  {t.label}
-                </Text>
-              </Pressable>
-            ))}
+        <ScrollView contentContainerStyle={m.body}>
+          {/* Type chips */}
+          <Text style={[m.fieldLabel, { color: textSub }]}>Type</Text>
+          <View style={m.typeRow}>
+            {REMINDER_TYPES.map(t => {
+              const active = form.type === t.value;
+              return (
+                <Pressable
+                  key={t.value}
+                  style={[m.typeChip, { backgroundColor: active ? colors.navyDeep : (isDark ? colors.nightElev : colors.white), borderColor: active ? colors.navyDeep : inputBdr }]}
+                  onPress={() => setForm(f => ({ ...f, type: t.value }))}
+                  accessibilityLabel={`Reminder type ${t.label}`}
+                >
+                  <Text style={m.typeChipIcon}>{t.icon}</Text>
+                  <Text style={[m.typeChipText, { color: active ? colors.white : textPri }]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* Label */}
-          <Text style={styles.fieldLabel}>Name</Text>
-          <TextInput
-            style={styles.input}
-            value={form.label}
-            onChangeText={(v) => setForm((f) => ({ ...f, label: v }))}
-            placeholder="e.g. Vitamin D, 8 glasses water"
-            placeholderTextColor={colors.stone}
-            maxLength={255}
-            accessibilityLabel="Reminder name"
-          />
-
-          {/* Schedule time */}
-          <Text style={styles.fieldLabel}>Daily time (HH MM)</Text>
-          <View style={styles.timeRow}>
+          <Text style={[m.fieldLabel, { color: textSub }]}>Name</Text>
+          <View style={[m.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
             <TextInput
-              style={[styles.input, styles.timeInput]}
-              value={form.scheduleHour}
-              onChangeText={(v) => setForm((f) => ({ ...f, scheduleHour: v }))}
-              keyboardType="number-pad"
-              maxLength={2}
-              placeholder="08"
-              placeholderTextColor={colors.stone}
-              accessibilityLabel="Hour"
-            />
-            <Text style={styles.timeSep}>:</Text>
-            <TextInput
-              style={[styles.input, styles.timeInput]}
-              value={form.scheduleMinute}
-              onChangeText={(v) => setForm((f) => ({ ...f, scheduleMinute: v }))}
-              keyboardType="number-pad"
-              maxLength={2}
-              placeholder="00"
-              placeholderTextColor={colors.stone}
-              accessibilityLabel="Minute"
+              style={[m.input, { color: textPri }]}
+              value={form.label}
+              onChangeText={v => setForm(f => ({ ...f, label: v }))}
+              placeholder="e.g. Vitamin D, 8 glasses water"
+              placeholderTextColor={textSub}
+              maxLength={255}
+              accessibilityLabel="Reminder name"
             />
           </View>
 
-          {/* Interval (for water) */}
+          {/* Schedule time */}
+          <Text style={[m.fieldLabel, { color: textSub }]}>Daily time (HH : MM)</Text>
+          <View style={m.timeRow}>
+            <View style={[m.inputWrap, m.timeInput, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+              <TextInput
+                style={[m.input, m.timeCenter, { color: textPri }]}
+                value={form.scheduleHour}
+                onChangeText={v => setForm(f => ({ ...f, scheduleHour: v }))}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="08"
+                placeholderTextColor={textSub}
+                accessibilityLabel="Hour"
+              />
+            </View>
+            <Text style={[m.timeSep, { color: textSub }]}>:</Text>
+            <View style={[m.inputWrap, m.timeInput, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+              <TextInput
+                style={[m.input, m.timeCenter, { color: textPri }]}
+                value={form.scheduleMinute}
+                onChangeText={v => setForm(f => ({ ...f, scheduleMinute: v }))}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="00"
+                placeholderTextColor={textSub}
+                accessibilityLabel="Minute"
+              />
+            </View>
+          </View>
+
+          {/* Interval (water only) */}
           {form.type === 'water' && (
             <>
-              <Text style={styles.fieldLabel}>Or repeat every (minutes)</Text>
-              <TextInput
-                style={styles.input}
-                value={form.intervalMinutes}
-                onChangeText={(v) => setForm((f) => ({ ...f, intervalMinutes: v }))}
-                keyboardType="number-pad"
-                placeholder="e.g. 90"
-                placeholderTextColor={colors.stone}
-                accessibilityLabel="Interval in minutes"
-              />
+              <Text style={[m.fieldLabel, { color: textSub }]}>Or repeat every (minutes)</Text>
+              <View style={[m.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+                <TextInput
+                  style={[m.input, { color: textPri }]}
+                  value={form.intervalMinutes}
+                  onChangeText={v => setForm(f => ({ ...f, intervalMinutes: v }))}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 90"
+                  placeholderTextColor={textSub}
+                  accessibilityLabel="Interval in minutes"
+                />
+              </View>
             </>
           )}
         </ScrollView>
@@ -222,6 +217,53 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving }: Remi
     </Modal>
   );
 }
+
+const m = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[4],
+    borderBottomWidth: 1,
+  },
+  title:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
+  cancel: { fontFamily: fontFamily.body, fontSize: fontSize.body },
+  save:   { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.electricBlue, fontWeight: '700' },
+  body:   { padding: spacing[5], gap: spacing[4] },
+  fieldLabel: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: -spacing[2],
+  },
+  inputWrap: {
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  input: { fontFamily: fontFamily.body, fontSize: fontSize.body, padding: 0 },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  typeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+  },
+  typeChipIcon: { fontSize: 14 },
+  typeChipText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '500' },
+  timeRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  timeInput: { flex: 1 },
+  timeCenter: { textAlign: 'center' },
+  timeSep: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '600' },
+});
 
 // ── Adherence dialog ──────────────────────────────────────────────────────────
 
@@ -232,33 +274,39 @@ interface AdherenceDialogProps {
   label: string;
   onLog: (reminderId: string, scheduledAt: string, action: AdherenceAction) => void;
   onClose: () => void;
+  isDark: boolean;
 }
 
-function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClose }: AdherenceDialogProps) {
+function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClose, isDark }: AdherenceDialogProps) {
+  const sheetBg = isDark ? colors.nightSurface : colors.white;
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.adherenceSheet}>
-          <Text style={styles.adherenceTitle}>{label}</Text>
-          <Text style={styles.adherenceSub}>Did you take this?</Text>
+      <View style={ad.overlay}>
+        <View style={[ad.sheet, { backgroundColor: sheetBg }]}>
+          <View style={ad.handle} />
+          <Text style={[ad.title, { color: textPri }]}>{label}</Text>
+          <Text style={[ad.sub, { color: textSub }]}>Did you take this?</Text>
           {(
             [
-              { action: 'taken' as AdherenceAction, label: 'Taken ✓', style: styles.btnTaken },
-              { action: 'skipped' as AdherenceAction, label: 'Skip', style: styles.btnSkip },
-              { action: 'snoozed' as AdherenceAction, label: 'Snooze 15 min', style: styles.btnSnooze },
-            ] as const
-          ).map(({ action, label: btnLabel, style }) => (
+              { action: 'taken'   as AdherenceAction, label: '✓  Taken',      bg: colors.successGreen,                          border: undefined },
+              { action: 'skipped' as AdherenceAction, label: 'Skip',           bg: isDark ? colors.nightElev : colors.borderLight, border: undefined },
+              { action: 'snoozed' as AdherenceAction, label: 'Snooze 15 min', bg: colors.warningAmber + '25',                    border: colors.warningAmber },
+            ]
+          ).map(({ action, label: btnLabel, bg, border }) => (
             <Pressable
               key={action}
-              style={[styles.adherenceBtn, style]}
+              style={[ad.btn, { backgroundColor: bg, borderColor: border, borderWidth: border ? 1 : 0 }]}
               onPress={() => onLog(reminderId, scheduledAt, action)}
               accessibilityLabel={btnLabel}
             >
-              <Text style={styles.adherenceBtnText}>{btnLabel}</Text>
+              <Text style={[ad.btnText, { color: action === 'taken' ? colors.white : textPri }]}>{btnLabel}</Text>
             </Pressable>
           ))}
           <Pressable onPress={onClose} accessibilityLabel="Dismiss">
-            <Text style={styles.adherenceDismiss}>Dismiss</Text>
+            <Text style={[ad.dismiss, { color: textSub }]}>Dismiss</Text>
           </Pressable>
         </View>
       </View>
@@ -266,36 +314,66 @@ function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClo
   );
 }
 
+const ad = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    borderTopLeftRadius: borderRadius.xxl,
+    borderTopRightRadius: borderRadius.xxl,
+    padding: spacing[6],
+    gap: spacing[3],
+    paddingBottom: spacing[10],
+  },
+  handle: { width: 36, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: spacing[2] },
+  title:   { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', textAlign: 'center' },
+  sub:     { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
+  btn:     { height: 52, borderRadius: borderRadius.xxl, alignItems: 'center', justifyContent: 'center' },
+  btnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  dismiss: { fontFamily: fontFamily.body, fontSize: fontSize.caption, textAlign: 'center', paddingTop: spacing[2] },
+});
+
 // ── Reminder card ─────────────────────────────────────────────────────────────
 
 interface ReminderCardProps {
   reminder: Reminder;
+  isDark: boolean;
   onEdit: (r: Reminder) => void;
   onDelete: (r: Reminder) => void;
 }
 
-function ReminderCard({ reminder, onEdit, onDelete }: ReminderCardProps) {
-  const pct = Math.round(reminder.adherence_rate * 100);
-  const badgeColor = pct >= 80 ? colors.jade : pct >= 50 ? colors.saffron : colors.terracotta;
+function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps) {
+  const scale  = useSharedValue(1);
+  const anim   = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const pct    = Math.round(reminder.adherence_rate * 100);
+  const pctColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
+
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const iconBg  = isDark ? colors.nightElev : (TYPE_COLOR[reminder.type] ?? colors.iceBlue);
 
   function confirmDelete() {
-    Alert.alert(
-      'Delete reminder',
-      `Remove "${reminder.label}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete(reminder) },
-      ],
-    );
+    Alert.alert('Delete reminder', `Remove "${reminder.label}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => onDelete(reminder) },
+    ]);
   }
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardLeft}>
-        <Text style={styles.cardEmoji}>{TYPE_EMOJI[reminder.type]}</Text>
-        <View style={styles.cardContent}>
-          <Text style={styles.cardLabel}>{reminder.label}</Text>
-          <Text style={styles.cardSub}>
+    <Animated.View style={anim}>
+      <Pressable
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
+        onPressIn={() => { scale.value = withSpring(0.98, { mass: 0.3, stiffness: 500 }); }}
+        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+        onLongPress={() => onEdit(reminder)}
+        accessibilityLabel={`Reminder: ${reminder.label}`}
+      >
+        <View style={[styles.reminderIcon, { backgroundColor: iconBg }]}>
+          <Text style={styles.reminderEmoji}>{TYPE_EMOJI[reminder.type]}</Text>
+        </View>
+        <View style={styles.reminderContent}>
+          <Text style={[styles.reminderLabel, { color: textPri }]}>{reminder.label}</Text>
+          <Text style={[styles.reminderSub, { color: textSub }]}>
             {reminder.schedule_cron
               ? `Daily at ${reminder.schedule_cron.split(' ')[1]}:${reminder.schedule_cron.split(' ')[0].padStart(2, '0')}`
               : reminder.schedule_interval_minutes
@@ -303,38 +381,36 @@ function ReminderCard({ reminder, onEdit, onDelete }: ReminderCardProps) {
               : 'No schedule'}
           </Text>
         </View>
-      </View>
-      <View style={styles.cardRight}>
-        <View style={[styles.adherenceBadge, { backgroundColor: badgeColor + '22' }]}>
-          <Text style={[styles.adherencePct, { color: badgeColor }]}>{pct}%</Text>
+        <View style={[styles.adherenceBadge, { backgroundColor: pctColor + '18' }]}>
+          <Text style={[styles.adherencePct, { color: pctColor }]}>{pct}%</Text>
         </View>
-        <Pressable onPress={() => onEdit(reminder)} style={styles.iconBtn} accessibilityLabel="Edit reminder">
-          <Text style={styles.iconBtnText}>✎</Text>
-        </Pressable>
-        <Pressable onPress={confirmDelete} style={styles.iconBtn} accessibilityLabel="Delete reminder">
-          <Text style={[styles.iconBtnText, { color: colors.terracotta }]}>✕</Text>
-        </Pressable>
-      </View>
-    </View>
+        <View style={styles.actions}>
+          <Pressable onPress={() => onEdit(reminder)} style={styles.actionBtn} accessibilityLabel="Edit reminder">
+            <Text style={[styles.actionBtnText, { color: textSub }]}>✎</Text>
+          </Pressable>
+          <Pressable onPress={confirmDelete} style={styles.actionBtn} accessibilityLabel="Delete reminder">
+            <Text style={[styles.actionBtnText, { color: colors.criticalRed }]}>✕</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function RemindersScreen() {
-  const qc = useQueryClient();
+  const qc     = useQueryClient();
+  const isDark = useColorScheme() === 'dark';
   const [modalVisible, setModalVisible] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [adherenceState, setAdherenceState] = useState<{
-    visible: boolean;
-    reminderId: string;
-    scheduledAt: string;
-    label: string;
+    visible: boolean; reminderId: string; scheduledAt: string; label: string;
   }>({ visible: false, reminderId: '', scheduledAt: '', label: '' });
 
   const notifListenerRef = useRef<{ remove: () => void } | null>(null);
 
-  // Register notification categories and listener on mount
+  // Preserve 100% of existing notification and adherence logic
   useEffect(() => {
     registerNotificationCategories();
     requestNotificationPermissions();
@@ -343,33 +419,21 @@ export default function RemindersScreen() {
         if (action === 'taken' || action === 'skipped') {
           logMutation.mutate({ reminderId, scheduledAt, action });
         } else {
-          // snoozed: show adherence dialog so user confirms
-          const reminder = remindersQuery.data?.reminders.find((r) => r.id === reminderId);
-          setAdherenceState({
-            visible: true,
-            reminderId,
-            scheduledAt,
-            label: reminder?.label ?? 'Reminder',
-          });
+          const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+          setAdherenceState({ visible: true, reminderId, scheduledAt, label: reminder?.label ?? 'Reminder' });
         }
       },
     );
-    return () => {
-      notifListenerRef.current?.remove();
-    };
+    return () => { notifListenerRef.current?.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const remindersQuery = useQuery({
-    queryKey: ['reminders'],
-    queryFn: listRemindersApi,
-  });
+  const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: listRemindersApi });
 
   const createMutation = useMutation({
     mutationFn: createReminderApi,
     onSuccess: async (reminder) => {
       await qc.invalidateQueries({ queryKey: ['reminders'] });
-      // Schedule local notification for next occurrence
       const cron = reminder.schedule_cron;
       if (cron) {
         const parts = cron.split(' ');
@@ -386,13 +450,8 @@ export default function RemindersScreen() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ReminderCreate }) =>
-      updateReminderApi(id, payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reminders'] });
-      setModalVisible(false);
-      setEditingReminder(null);
-    },
+    mutationFn: ({ id, payload }: { id: string; payload: ReminderCreate }) => updateReminderApi(id, payload),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); setModalVisible(false); setEditingReminder(null); },
     onError: () => Alert.alert('Error', 'Could not update reminder.'),
   });
 
@@ -403,61 +462,43 @@ export default function RemindersScreen() {
   });
 
   const logMutation = useMutation({
-    mutationFn: ({ reminderId, scheduledAt, action }: {
-      reminderId: string;
-      scheduledAt: string;
-      action: ReminderAction;
-    }) =>
-      logAdherenceApi(reminderId, {
-        scheduled_at: scheduledAt,
-        action,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reminders'] });
-      setAdherenceState((s) => ({ ...s, visible: false }));
-    },
+    mutationFn: ({ reminderId, scheduledAt, action }: { reminderId: string; scheduledAt: string; action: ReminderAction }) =>
+      logAdherenceApi(reminderId, { scheduled_at: scheduledAt, action }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); setAdherenceState(s => ({ ...s, visible: false })); },
     onError: () => Alert.alert('Error', 'Could not log adherence.'),
   });
 
   function handleSave(payload: ReminderCreate, editing: Reminder | null) {
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, payload });
-    } else {
-      createMutation.mutate(payload);
-    }
+    if (editing) updateMutation.mutate({ id: editing.id, payload });
+    else createMutation.mutate(payload);
   }
 
-  function openEdit(reminder: Reminder) {
-    setEditingReminder(reminder);
-    setModalVisible(true);
-  }
-
-  function openCreate() {
-    setEditingReminder(null);
-    setModalVisible(true);
-  }
-
+  function openEdit(r: Reminder)   { setEditingReminder(r); setModalVisible(true); }
+  function openCreate()             { setEditingReminder(null); setModalVisible(true); }
   function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
   }
 
+  const bg = isDark ? colors.midnight : colors.skyMist;
+
   if (remindersQuery.isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.forest} />
-      </View>
-    );
+    return <View style={[styles.centered, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
   }
 
   const reminders = remindersQuery.data?.reminders ?? [];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       {reminders.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No reminders yet</Text>
-          <Text style={styles.emptySub}>
-            Set up water intake, medication, or supplement reminders and track your adherence over time.
+          <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
+            <Text style={styles.emptyIconEmoji}>⏰</Text>
+          </View>
+          <Text style={[styles.emptyTitle, { color: isDark ? colors.white : colors.navyDeep }]}>
+            No reminders yet
+          </Text>
+          <Text style={[styles.emptySub, { color: isDark ? colors.slateText : colors.coolGray }]}>
+            Set up water intake, medication, or supplement reminders and track your adherence.
           </Text>
           <Pressable
             style={styles.createBtn}
@@ -471,17 +512,19 @@ export default function RemindersScreen() {
         <>
           <FlatList
             data={reminders}
-            keyExtractor={(r) => r.id}
+            keyExtractor={r => r.id}
             renderItem={({ item }) => (
-              <ReminderCard reminder={item} onEdit={openEdit} onDelete={(r) => deleteMutation.mutate(r.id)} />
+              <ReminderCard
+                reminder={item}
+                isDark={isDark}
+                onEdit={openEdit}
+                onDelete={r => deleteMutation.mutate(r.id)}
+              />
             )}
             contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
           />
-          <Pressable
-            style={styles.fab}
-            onPress={openCreate}
-            accessibilityLabel="Add reminder"
-          >
+          <Pressable style={styles.fab} onPress={openCreate} accessibilityLabel="Add reminder">
             <Text style={styles.fabText}>+</Text>
           </Pressable>
         </>
@@ -493,6 +536,7 @@ export default function RemindersScreen() {
         onClose={() => { setModalVisible(false); setEditingReminder(null); }}
         onSave={handleSave}
         isSaving={createMutation.isPending || updateMutation.isPending}
+        isDark={isDark}
       />
 
       <AdherenceDialog
@@ -501,7 +545,8 @@ export default function RemindersScreen() {
         scheduledAt={adherenceState.scheduledAt}
         label={adherenceState.label}
         onLog={handleAdherenceLog}
-        onClose={() => setAdherenceState((s) => ({ ...s, visible: false }))}
+        onClose={() => setAdherenceState(s => ({ ...s, visible: false }))}
+        isDark={isDark}
       />
     </View>
   );
@@ -510,80 +555,48 @@ export default function RemindersScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.ivory },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Empty state
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[6],
-    gap: spacing[3],
-  },
-  emptyTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  emptySub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  createBtn: {
-    marginTop: spacing[2],
-    backgroundColor: colors.forest,
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[6],
-    borderRadius: borderRadius.md,
-  },
-  createBtnText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.white,
-    fontWeight: '600',
-  },
-
-  // List
   list: { paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: 100 },
 
-  // Card
   card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.xl,
     padding: spacing[4],
-    marginBottom: spacing[3],
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing[3],
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  cardEmoji: { fontSize: 24, marginRight: spacing[3] },
-  cardContent: { flex: 1 },
-  cardLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    fontWeight: '600',
+  reminderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  cardSub: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone, marginTop: 2 },
-  cardRight: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  reminderEmoji: { fontSize: 22 },
+  reminderContent: { flex: 1 },
+  reminderLabel: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  reminderSub:   { fontFamily: fontFamily.body, fontSize: fontSize.caption, marginTop: 2 },
   adherenceBadge: {
     borderRadius: borderRadius.sm,
     paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-    minWidth: 40,
+    paddingVertical: 3,
+    minWidth: 44,
     alignItems: 'center',
   },
-  adherencePct: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
-  iconBtn: { padding: spacing[1] },
-  iconBtnText: { fontSize: 16, color: colors.stone },
+  adherencePct: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },
+  actions:    { flexDirection: 'row', gap: spacing[1] },
+  actionBtn:  { padding: spacing[1] },
+  actionBtnText: { fontSize: 16 },
 
-  // FAB
   fab: {
     position: 'absolute',
     bottom: spacing[8],
@@ -591,107 +604,46 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.forest,
+    backgroundColor: colors.navyDeep,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.30,
+    shadowRadius: 16,
+    elevation: 8,
   },
   fabText: { fontSize: 28, color: colors.white, lineHeight: 32 },
 
-  // Modal
-  modalContainer: { flex: 1, backgroundColor: colors.ivory },
-  modalHeader: {
-    flexDirection: 'row',
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8], gap: spacing[4] },
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E0D8',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 4,
   },
-  modalTitle: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ink, fontWeight: '600' },
-  modalCancel: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.stone },
-  modalSave: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.forest, fontWeight: '600' },
-  modalBody: { padding: spacing[4], gap: spacing[4] },
-
-  fieldLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    marginBottom: spacing[1],
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.sm,
-    padding: spacing[3],
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.ink,
-    borderWidth: 1,
-    borderColor: '#E5E0D8',
-  },
-  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  typeChip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: '#E5E0D8',
-  },
-  typeChipActive: { backgroundColor: colors.forest, borderColor: colors.forest },
-  typeChipText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.stone },
-  typeChipTextActive: { color: colors.white },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  timeInput: { flex: 1, textAlign: 'center' },
-  timeSep: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.stone },
-
-  // Adherence dialog
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  adherenceSheet: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: spacing[6],
-    gap: spacing[3],
-  },
-  adherenceTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  adherenceSub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-    textAlign: 'center',
-  },
-  adherenceBtn: {
-    paddingVertical: spacing[3],
-    borderRadius: borderRadius.md,
+  emptyIconEmoji: { fontSize: 36 },
+  emptyTitle: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', textAlign: 'center' },
+  emptySub:   { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
+  createBtn: {
+    height: 52,
+    paddingHorizontal: spacing[6],
+    backgroundColor: colors.navyDeep,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing[2],
+    shadowColor: colors.navyDeep,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  btnTaken: { backgroundColor: colors.jade },
-  btnSkip: { backgroundColor: '#E5E0D8' },
-  btnSnooze: { backgroundColor: colors.saffron + '33', borderWidth: 1, borderColor: colors.saffron },
-  adherenceBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600', color: colors.ink },
-  adherenceDismiss: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: colors.stone,
-    textAlign: 'center',
-    paddingTop: spacing[2],
-  },
+  createBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.white, fontWeight: '700' },
 });

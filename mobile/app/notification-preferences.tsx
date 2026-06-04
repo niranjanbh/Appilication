@@ -1,43 +1,89 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, Text, useColorScheme, View } from 'react-native';
 
 import {
   getNotificationPreferencesApi,
   updateNotificationPreferencesApi,
 } from '../lib/api/notifications';
-import { colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
 import type { NotificationPreferences } from '../types/notifications';
 
+// ── Channel toggle row ─────────────────────────────────────────────────────────
+
 interface ChannelRowProps {
+  icon: string;
+  iconBg: string;
   label: string;
   description: string;
   value: boolean;
   onToggle: (v: boolean) => void;
   disabled?: boolean;
+  isDark: boolean;
+  textPri: string;
+  textSub: string;
 }
 
-function ChannelRow({ label, description, value, onToggle, disabled }: ChannelRowProps) {
+function ChannelRow({ icon, iconBg, label, description, value, onToggle, disabled, textPri, textSub }: ChannelRowProps) {
   return (
-    <View style={styles.row}>
-      <View style={styles.rowText}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowDescription}>{description}</Text>
+    <View style={r.row}>
+      <View style={[r.iconWrap, { backgroundColor: iconBg }]}>
+        <Text style={r.icon}>{icon}</Text>
+      </View>
+      <View style={r.text}>
+        <Text style={[r.label, { color: textPri }]}>{label}</Text>
+        <Text style={[r.desc,  { color: textSub }]}>{description}</Text>
       </View>
       <Switch
         value={value}
         onValueChange={onToggle}
         disabled={disabled}
-        trackColor={{ false: '#E5E0D8', true: colors.jade }}
-        thumbColor={colors.white}
+        trackColor={{
+          false: colors.borderLight,
+          true:  colors.electricBlue + '80',
+        }}
+        thumbColor={value ? colors.electricBlue : colors.white}
+        ios_backgroundColor={colors.borderLight}
         accessibilityLabel={`${label} notifications ${value ? 'enabled' : 'disabled'}`}
       />
     </View>
   );
 }
 
+const r = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+    gap: spacing[3],
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  icon: { fontSize: 20 },
+  text: { flex: 1 },
+  label: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.bodyLg,
+    fontWeight: '600',
+  },
+  desc: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    marginTop: 2,
+  },
+});
+
+// ── Main screen ───────────────────────────────────────────────────────────────
+
 export default function NotificationPreferencesScreen() {
   const queryClient = useQueryClient();
+  const isDark      = useColorScheme() === 'dark';
 
   const { data, isLoading } = useQuery<NotificationPreferences>({
     queryKey: ['notification-preferences'],
@@ -58,53 +104,75 @@ export default function NotificationPreferencesScreen() {
 
   const isPending = mutation.isPending;
 
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const iconBlue = isDark ? '#0F1E38' : '#EBF3FF';
+  const iconAmb  = isDark ? '#2A1A05' : '#FFF4E5';
+  const iconGreen = isDark ? '#061E12' : '#EDFAF3';
+
   return (
     <>
       <Stack.Screen options={{ title: 'Notification preferences' }} />
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: bg }]}>
         {isLoading ? (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.forest} />
+            <ActivityIndicator size="large" color={colors.electricBlue} />
           </View>
         ) : (
           <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Notification channels</Text>
-              <Text style={styles.sectionSubtitle}>
-                Choose how Kyros contacts you for appointment confirmations,
-                reminders, and lab results.
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: textPri }]}>Notification channels</Text>
+              <Text style={[styles.subtitle, { color: textSub }]}>
+                Choose how Kyros contacts you for appointment confirmations, reminders, and lab results.
               </Text>
             </View>
 
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
               <ChannelRow
+                icon="🔔"
+                iconBg={iconBlue}
                 label="Push notifications"
                 description="In-app alerts on your device"
                 value={data?.push ?? true}
                 onToggle={() => toggle('push')}
                 disabled={isPending}
+                isDark={isDark}
+                textPri={textPri}
+                textSub={textSub}
               />
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight }]} />
               <ChannelRow
+                icon="💬"
+                iconBg={iconGreen}
                 label="WhatsApp"
-                description="Messages to your registered phone number"
+                description="Messages to your registered phone"
                 value={data?.whatsapp ?? true}
                 onToggle={() => toggle('whatsapp')}
                 disabled={isPending}
+                isDark={isDark}
+                textPri={textPri}
+                textSub={textSub}
               />
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight }]} />
               <ChannelRow
+                icon="✉️"
+                iconBg={iconAmb}
                 label="Email"
-                description="Messages to your registered email address"
+                description="Messages to your registered email"
                 value={data?.email ?? true}
                 onToggle={() => toggle('email')}
                 disabled={isPending}
+                isDark={isDark}
+                textPri={textPri}
+                textSub={textSub}
               />
             </View>
 
-            <Text style={styles.hint}>
-              Disabling a channel stops future messages on that channel. You can
-              re-enable at any time.
+            <Text style={[styles.hint, { color: textSub }]}>
+              Disabling a channel stops future messages on that channel. You can re-enable at any time.
             </Text>
           </>
         )}
@@ -113,74 +181,45 @@ export default function NotificationPreferencesScreen() {
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.ivory,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[6],
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sectionHeader: {
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  header: { gap: spacing[2], marginBottom: spacing[6] },
+  title: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.h3,
-    color: colors.forest,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
+    fontWeight: '700',
   },
-  sectionSubtitle: {
+  subtitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.stone,
-    lineHeight: fontSize.body * 1.6,
+    lineHeight: 22,
   },
+
   card: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    overflow: 'hidden',
+    borderRadius: borderRadius.xxl,
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
     borderWidth: 1,
-    borderColor: '#E5E0D8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  rowText: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  rowLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ink,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  rowDescription: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    color: colors.stone,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E0D8',
-    marginLeft: spacing.lg,
-  },
+  divider: { height: 1, marginLeft: 40 + spacing[3] },
+
   hint: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.stone,
-    marginTop: spacing.md,
-    lineHeight: fontSize.caption * 1.6,
+    lineHeight: 18,
+    marginTop: spacing[4],
   },
 });
