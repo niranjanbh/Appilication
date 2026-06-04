@@ -1,0 +1,95 @@
+name: Deploy Mobile
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'   # e.g. v1.2.3 — triggers a full store build
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'design-tokens/**'
+      - '.github/workflows/deploy-mobile.yml'
+
+concurrency:
+  group: deploy-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── OTA update on every main push (no store review needed) ─────────────────
+  ota-update:
+    name: Publish OTA Update (Expo)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --filter mobile typecheck
+
+      - name: Set up Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish OTA update
+        working-directory: mobile
+        run: eas update --auto --branch production --message "deploy: ${{ github.sha }}"
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
+
+  # ── Full native build + store submit on version tag ─────────────────────────
+  store-build:
+    name: Build & Submit to Stores
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build iOS + Android
+        working-directory: mobile
+        run: eas build --platform all --non-interactive --auto-submit
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
+          # Android keystore + iOS certs are managed by EAS credentials — no manual setup needed
+          # Run `eas credentials` locally once to configure signing.

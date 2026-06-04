@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { MobileMenu } from './MobileMenu';
 
 const NAV_LINKS = [
   { href: '/conditions', label: 'Conditions' },
@@ -38,7 +39,7 @@ export function Navigation() {
           ))}
         </ul>
 
-        {/* CTA */}
+        {/* Right side: desktop CTA + mobile Book link + hamburger */}
         <div className="flex items-center gap-3">
           <Link
             href="/book"
@@ -55,6 +56,8 @@ export function Navigation() {
           >
             Book
           </Link>
+          {/* Mobile: hamburger menu — renders button + panel */}
+          <MobileMenu />
         </div>
       </nav>
     </header>

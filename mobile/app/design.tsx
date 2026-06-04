@@ -4,11 +4,11 @@ import { Card } from '../components/Card';
 import { PullQuote } from '../components/PullQuote';
 import { Stat } from '../components/Stat';
 import { Tag } from '../components/Tag';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontSize, spacing } from '../lib/design-tokens';
 
 function SectionTitle({ children, textSub }: { children: string; textSub: string }) {
   return (
-    <Text style={[styles.sectionTitle, { color: textSub }]}>{children.toUpperCase()}</Text>
+    <Text style={[styles.sectionTitle, { color: textSub }]}>{String(children).toUpperCase()}</Text>
   );
 }
 
@@ -95,7 +95,7 @@ export default function DesignShowcase() {
       </View>
 
       {/* Color Palette */}
-      <SectionTitle textSub={textSub}>Color Tokens ({Object.keys(colors).length})</SectionTitle>
+      <SectionTitle textSub={textSub}>{`Color Tokens (${Object.keys(colors).length})`}</SectionTitle>
       <View style={styles.paletteGrid}>
         {(Object.entries(colors) as [string, string][])
           .filter(([, hex]) => hex.startsWith('#'))

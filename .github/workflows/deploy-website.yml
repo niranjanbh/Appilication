@@ -1,0 +1,55 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'design-tokens/**'
+      - '.github/workflows/deploy-website.yml'
+
+concurrency:
+  group: deploy-website
+  cancel-in-progress: true   # new website push supersedes an in-flight one
+
+jobs:
+  build-and-deploy:
+    name: Build → Deploy to Vercel
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --filter website typecheck
+
+      - name: Build
+        run: pnpm --filter website build
+        env:
+          # Public env vars for Next.js build — non-secret runtime config
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_WEBSITE }}
+          working-directory: ./website
+          vercel-args: '--prod'
