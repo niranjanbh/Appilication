@@ -4,10 +4,20 @@ import { HonestPlaceholder } from '../../components/marketing/HonestPlaceholder'
 import { CTASection } from '../../components/marketing/CTASection';
 
 export const metadata: Metadata = {
-  title: 'Our Doctors',
+  title: 'Our Doctors — NMC-Registered Specialists',
   description:
-    'Kyros Clinic doctors — NMC-registered specialists in thyroid, PCOS, weight management, hormones, skin & hair, and longevity. Being introduced as they join the panel.',
+    'Kyros Clinic doctors are NMC-registered specialists in thyroid, PCOS, weight management, hormones, skin & hair, and longevity. Verified by registration number before onboarding.',
   alternates: { canonical: 'https://kyrosclinic.com/our-doctors' },
+  openGraph: {
+    title: 'Our Doctors — NMC-Registered Specialists at Kyros Clinic',
+    description: 'Every Kyros doctor is NMC-verified, specialty-matched, and committed to continuity of care.',
+    url: 'https://kyrosclinic.com/our-doctors',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'Kyros Clinic specialists' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
+  },
 };
 
 const schema = {

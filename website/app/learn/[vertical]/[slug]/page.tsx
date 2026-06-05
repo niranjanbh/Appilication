@@ -4,6 +4,7 @@ import Link from "next/link";
 import { compileMDX } from "next-mdx-remote/rsc";
 import { getAllArticleParams, getArticle } from "../../../../lib/mdx";
 import { getDoctor } from "../../../../lib/doctors";
+import { getCondition } from "../../../../lib/conditions";
 import { CONDITION_DISPLAY_NAMES } from "../../../../lib/conditionDisplay";
 import { JsonLD } from "../../../../components/schema/JsonLD";
 import { ArticleHeader } from "../../../../components/article/ArticleHeader";
@@ -28,6 +29,9 @@ export function generateMetadata({ params }: Params): Metadata {
   if (!article) return {};
   const doctor = getDoctor(article.doctor_author_id);
   const verticalLabel = CONDITION_DISPLAY_NAMES[params.vertical] ?? params.vertical;
+  const reviewedAt = new Date(article.doctor_reviewed_at).toISOString();
+  const ogImage = getCondition(params.vertical)?.image ?? '/treatments/HeroDashboard.png';
+
   return {
     title: article.title,
     description: article.deck,
@@ -39,11 +43,19 @@ export function generateMetadata({ params }: Params): Metadata {
       description: article.deck,
       url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
       type: "article",
+      publishedTime: reviewedAt,
+      modifiedTime: reviewedAt,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: article.title }],
       ...(doctor ? { authors: [doctor.name] } : {}),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      images: [ogImage],
     },
     other: {
       "article:section": verticalLabel,
-      "article:modified_time": new Date(article.doctor_reviewed_at).toISOString(),
+      "article:published_time": reviewedAt,
+      "article:modified_time": reviewedAt,
     },
   };
 }
@@ -86,10 +98,14 @@ export default async function ArticlePage({ params }: Params) {
         isPartOf: { "@type": "WebSite", name: "Kyros Clinic", url: "https://kyrosclinic.com" },
         ...(doctor ? {
           reviewedBy: {
-            "@type": "Person",
+            "@type": "Physician",
             name: doctor.name,
             jobTitle: doctor.specialty,
-            identifier: `NMC Reg. ${doctor.nmcRegistration}`,
+            hasCredential: {
+              "@type": "EducationalOccupationalCredential",
+              credentialCategory: "NMC Registration",
+              name: `NMC Reg. ${doctor.nmcRegistration}`,
+            },
           },
         } : {}),
       },
@@ -98,6 +114,9 @@ export default async function ArticlePage({ params }: Params) {
         "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
         headline: article.title,
         description: article.deck,
+        image: getCondition(params.vertical)?.image
+          ? `https://kyrosclinic.com${getCondition(params.vertical)!.image}`
+          : `https://kyrosclinic.com/treatments/HeroDashboard.png`,
         url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
         datePublished: reviewedAt,
         dateModified: reviewedAt,
@@ -109,16 +128,24 @@ export default async function ArticlePage({ params }: Params) {
         ...(doctor
           ? {
               author: {
-                "@type": "Person",
+                "@type": "Physician",
                 name: doctor.name,
                 jobTitle: doctor.specialty,
-                identifier: `NMC Reg. ${doctor.nmcRegistration}`,
+                hasCredential: {
+                  "@type": "EducationalOccupationalCredential",
+                  credentialCategory: "NMC Registration",
+                  name: `NMC Reg. ${doctor.nmcRegistration}`,
+                },
               },
               reviewedBy: {
-                "@type": "Person",
+                "@type": "Physician",
                 name: doctor.name,
                 jobTitle: doctor.specialty,
-                identifier: `NMC Reg. ${doctor.nmcRegistration}`,
+                hasCredential: {
+                  "@type": "EducationalOccupationalCredential",
+                  credentialCategory: "NMC Registration",
+                  name: `NMC Reg. ${doctor.nmcRegistration}`,
+                },
               },
             }
           : {}),

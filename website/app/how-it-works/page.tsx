@@ -4,13 +4,19 @@ import { PullQuote } from '../../components/ui/PullQuote';
 import { CTASection } from '../../components/marketing/CTASection';
 
 export const metadata: Metadata = {
-  title: 'How It Works',
+  title: 'How to Consult a Specialist at Kyros Clinic',
   description:
-    'Kyros Clinic: choose your condition, book a specialist consultation, receive a plan, and track your health over time. One doctor who stays with you.',
+    'Choose your condition, complete a short intake, consult a specialist, receive a plan. One doctor who stays with you across follow-ups.',
   alternates: { canonical: 'https://kyrosclinic.com/how-it-works' },
   openGraph: {
-    title: 'How It Works — Kyros Clinic',
+    title: 'How to Consult a Specialist at Kyros Clinic',
+    description: 'A 20-minute video consultation with a specialist who has already read your intake. From anywhere in India.',
     url: 'https://kyrosclinic.com/how-it-works',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'How Kyros Clinic works' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
   },
 };
 

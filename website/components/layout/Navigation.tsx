@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { MobileMenu } from './MobileMenu';
 
 const NAV_LINKS = [
@@ -17,12 +18,9 @@ export function Navigation() {
         aria-label="Main navigation"
       >
         {/* Logo */}
-        <Link
-          href="/"
-          className="font-display text-h3 font-medium text-ivory hover:text-ivory/90 transition-colors duration-micro"
-          aria-label="Kyros Clinic — home"
-        >
-          Kyros Clinic
+        <Link href="/" aria-label="Kyros Clinic — home" className="flex items-center hover:opacity-90 transition-opacity duration-micro">
+          {/* <Image src="/kyros-logo.png" alt="Kyros Clinic" width={120} height={36} priority /> */}
+          KYROS
         </Link>
 
         {/* Desktop nav */}

@@ -16,6 +16,7 @@
 /robots.txt
   Cache-Control: public, max-age=86400
 
+# JS / CSS build chunks — content-hashed by Next.js, safe to cache permanently.
 /*.js
   Cache-Control: public, max-age=31536000, immutable
 
@@ -24,3 +25,19 @@
 
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Treatment images — filenames are stable; no hash needed; cache at edge for 1 year.
+/treatments/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 3D model + texture — large binary assets, never change for a given filename.
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Brand logo
+/kyros-logo.png
+  Cache-Control: public, max-age=31536000, immutable
+
+# OG image — baked at build time.
+/opengraph-image.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

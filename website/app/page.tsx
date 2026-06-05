@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { CONDITIONS } from '../lib/conditions';
 import { JsonLD } from '../components/schema/JsonLD';
 import { PullQuote } from '../components/ui/PullQuote';
-import { ConditionCard } from '../components/marketing/ConditionCard';
+import { FilterableConditions } from '../components/marketing/FilterableConditions';
 import { PillarBlock } from '../components/marketing/PillarBlock';
 import { StatBlock } from '../components/marketing/StatBlock';
 import { CTASection } from '../components/marketing/CTASection';
+import { DashboardSection } from '../components/dashboard/DashboardSection';
 
 export const metadata: Metadata = {
   title: 'Kyros Clinic — Doctor-first hormonal health',
@@ -18,27 +20,22 @@ export const metadata: Metadata = {
     description:
       'India-first telemedicine clinic. One doctor. One place. A platform where privacy is the point.',
     url: 'https://kyrosclinic.com',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'Kyros Clinic telehealth dashboard' }],
   },
-};
-
-const CONDITION_ICONS: Record<string, string> = {
-  thyroid: '🩺',
-  'weight-management': '⚖️',
-  pcos: '🌿',
-  'skin-and-hair': '✨',
-  'mens-intimate-health': '🔒',
-  'hormones-trt': '📊',
-  longevity: '📈',
 };
 
 const schema = {
   '@context': 'https://schema.org',
   '@graph': [
     {
-      '@type': 'Organization',
+      '@type': 'MedicalOrganization',
       '@id': 'https://kyrosclinic.com/#organization',
       name: 'Kyros Clinic',
       url: 'https://kyrosclinic.com',
+      foundingDate: '2026',
+      logo: { '@type': 'ImageObject', url: 'https://kyrosclinic.com/kyros-logo.png' },
+      areaServed: { '@type': 'Country', name: 'India' },
+      priceRange: '₹400–₹1,500',
       description:
         'India-first doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid, weight management, skin and hair, men\'s intimate health, TRT, and longevity.',
       contactPoint: {
@@ -74,36 +71,53 @@ export default function HomePage() {
       <JsonLD data={schema} />
 
       {/* 1. Hero */}
-      <section className="bg-ivory py-20 md:py-28 px-6">
-        <div className="max-w-4xl mx-auto">
-          <p className="font-body text-caption text-stone uppercase tracking-widest mb-4">
-            India-first · Doctor-first · Telemedicine
-          </p>
-          <h1 className="font-display text-h1 md:text-display font-medium text-forest leading-tight mb-6 max-w-3xl">
-            Your hormonal health, seen clearly.
-          </h1>
-          <p className="font-body text-body-lg text-ink max-w-2xl mb-8 leading-relaxed">
-            Kyros Clinic connects you with specialist doctors for thyroid, PCOS, weight
-            management, skin and hair, hormones, and longevity. One doctor who stays with you.
-            One place where your health lives.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <Link
-              href="/book"
-              className="inline-flex items-center justify-center px-7 py-3 rounded-button
-                         bg-forest text-ivory font-body font-medium text-body-lg
-                         hover:bg-jade transition-colors duration-micro"
-            >
-              Talk to a doctor
-            </Link>
-            <Link
-              href="/how-it-works"
-              className="inline-flex items-center justify-center px-7 py-3 rounded-button
-                         border-2 border-forest text-forest font-body font-medium text-body-lg
-                         hover:bg-forest/8 transition-colors duration-micro"
-            >
-              How it works
-            </Link>
+      <section className="bg-ivory py-14 md:py-20 px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-10 md:gap-14 items-center">
+          <div>
+            <p className="font-body text-caption text-stone uppercase tracking-widest mb-4">
+              India-first · Doctor-first · Telemedicine
+            </p>
+            <h1 className="font-display text-h1 md:text-display font-medium text-forest leading-tight mb-6 max-w-[620px]">
+              Whatever&apos;s been bothering you, start with a doctor.
+            </h1>
+            <p className="font-body text-body-lg text-ink max-w-[480px] mb-6 leading-relaxed">
+              NMC-registered specialists for thyroid, weight, hormonal health, skin, and
+              longevity care — from home, in your language, without the waiting room.
+            </p>
+            <div className="border-l-2 border-forest/30 pl-4 mb-8">
+              <p className="font-display italic text-body-lg text-ink leading-relaxed">
+                &ldquo;In Indian healthcare, you see a different specialist every visit. No one
+                keeps your story.&rdquo;
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <Link
+                href="/book"
+                className="inline-flex items-center justify-center px-7 py-3 rounded-button
+                           bg-forest text-ivory font-body font-medium text-body-lg
+                           hover:bg-jade transition-colors duration-micro"
+              >
+                Talk to a doctor
+              </Link>
+              <Link
+                href="/how-it-works"
+                className="inline-flex items-center justify-center px-7 py-3 rounded-button
+                           border-2 border-forest text-forest font-body font-medium text-body-lg
+                           hover:bg-forest/8 transition-colors duration-micro"
+              >
+                How it works
+              </Link>
+            </div>
+          </div>
+          <div className="relative w-full h-[300px] lg:h-[400px]">
+            <Image
+              src="/treatments/HeroDashboard.png"
+              alt="Personalised doctor consultation on Kyros telehealth platform"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover rounded-card"
+              priority
+            />
           </div>
         </div>
       </section>
@@ -139,33 +153,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. Conditions */}
-      <section className="bg-white py-16 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-10">
-            <h2 className="font-display text-h2 font-medium text-forest mb-3">
-              Seven conditions. One clinical home.
-            </h2>
-            <p className="font-body text-body text-stone max-w-2xl">
-              Kyros doctors specialise in chronic hormonal conditions that are common,
-              underdiagnosed, and undertreated in India. Each vertical has a specialist panel.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {CONDITIONS.map((c) => (
-              <ConditionCard
-                key={c.slug}
-                slug={c.slug}
-                name={c.name}
-                shortDescription={c.shortDescription}
-                icon={CONDITION_ICONS[c.slug] ?? '🩺'}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 4. Conditions — filterable by audience */}
+      <FilterableConditions />
 
-      {/* 5. Process steps */}
+      {/* 5. Dashboard with 3D body model */}
+      <DashboardSection />
+
+      {/* 7. Process steps */}
       <section className="bg-sage/10 py-16 px-6">
         <div className="max-w-4xl mx-auto">
           <h2 className="font-display text-h2 font-medium text-forest mb-10 text-center">
@@ -218,7 +212,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 6. Stats */}
+      {/* 8. Stats */}
       <StatBlock
         stats={[
           { numeral: '₹400', caption: 'starting consultation fee', color: 'forest' },

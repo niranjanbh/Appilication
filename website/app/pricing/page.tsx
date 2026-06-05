@@ -3,13 +3,19 @@ import { JsonLD } from '../../components/schema/JsonLD';
 import { CTASection } from '../../components/marketing/CTASection';
 
 export const metadata: Metadata = {
-  title: 'Pricing',
+  title: 'Consultation Fees & Pricing',
   description:
     'Kyros Clinic consultations start at ₹400. No hidden fees. Transparent pricing for initial and follow-up consultations across all seven conditions.',
   alternates: { canonical: 'https://kyrosclinic.com/pricing' },
   openGraph: {
-    title: 'Pricing — Kyros Clinic',
+    title: 'Consultation Fees & Pricing — Kyros Clinic',
+    description: 'Initial consultations ₹600. Follow-ups ₹400–₹500. No platform fees or hidden charges.',
     url: 'https://kyrosclinic.com/pricing',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'Kyros Clinic pricing' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
   },
 };
 

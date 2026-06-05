@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getArticlesByVertical, getVerticals } from "../../../lib/mdx";
 import { getDoctor } from "../../../lib/doctors";
+import { getCondition } from "../../../lib/conditions";
 import { CONDITION_DISPLAY_NAMES } from "../../../lib/conditionDisplay";
 import { JsonLD } from "../../../components/schema/JsonLD";
 
@@ -17,13 +18,20 @@ export function generateStaticParams() {
 export function generateMetadata({ params }: Params): Metadata {
   const label = CONDITION_DISPLAY_NAMES[params.vertical];
   if (!label) return {};
+  const ogImage = getCondition(params.vertical)?.image ?? '/treatments/HeroDashboard.png';
   return {
     title: `${label} — Clinical Articles`,
     description: `Doctor-reviewed clinical articles on ${label.toLowerCase()} from NMC-registered specialists at Kyros Clinic.`,
     alternates: { canonical: `https://kyrosclinic.com/learn/${params.vertical}` },
     openGraph: {
       title: `${label} Articles — Kyros Clinic`,
+      description: `Doctor-reviewed articles on ${label.toLowerCase()} — sourced, specialist-reviewed, written for Indian patients.`,
       url: `https://kyrosclinic.com/learn/${params.vertical}`,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: `${label} health guides` }],
+    },
+    twitter: {
+      card: 'summary_large_image' as const,
+      images: [ogImage],
     },
   };
 }

@@ -28,7 +28,7 @@ export function generateMetadata({ params }: Params): Metadata {
   const condition = getCondition(params.slug);
   if (!condition) return {};
   return {
-    title: condition.name,
+    title: `${condition.name} Specialist Consultation`,
     description: condition.heroSubline,
     alternates: {
       canonical: `https://kyrosclinic.com/conditions/${condition.slug}`,
@@ -37,6 +37,11 @@ export function generateMetadata({ params }: Params): Metadata {
       title: `${condition.name} — Kyros Clinic`,
       description: condition.heroSubline,
       url: `https://kyrosclinic.com/conditions/${condition.slug}`,
+      images: [{ url: condition.image, width: 1200, height: 630, alt: condition.name }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      images: [condition.image],
     },
   };
 }
@@ -73,6 +78,9 @@ export default function ConditionPage({ params }: Params) {
         name: condition.schemaName,
         description: condition.schemaDescription,
         url: `https://kyrosclinic.com/conditions/${condition.slug}`,
+        epidemiology: condition.stats[0]
+          ? `${condition.stats[0].numeral} ${condition.stats[0].caption}`
+          : undefined,
         possibleTreatment: condition.whatWeOffer.map((offer) => ({
           '@type': 'MedicalTherapy',
           name: offer,

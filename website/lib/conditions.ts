@@ -3,10 +3,14 @@ export interface ConditionFaq {
   answer: string;
 }
 
+export type ConditionAudience = 'all' | 'women' | 'men';
+
 export interface ConditionData {
   slug: string;
   name: string;
   shortDescription: string;
+  image: string;
+  audience: ConditionAudience;
   hook: string;
   reflectiveClose: string;
   heroSubline: string;
@@ -23,6 +27,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "thyroid",
     name: "Thyroid",
+    image: "/treatments/Thyroid.png",
+    audience: "all",
     shortDescription: "Hypothyroidism, Hashimoto's, and thyroid hormone balance.",
     hook: "She thought she was just tired. For three years.",
     reflectiveClose: "Three years is a long time to feel like a stranger to yourself.",
@@ -80,6 +86,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "weight-management",
     name: "Weight Management",
+    image: "/treatments/WeightManagement.png",
+    audience: "all",
     shortDescription: "Doctor-supervised weight management, including GLP-1 therapy where indicated.",
     hook: "You've tried five things. None of them worked. That isn't a character flaw.",
     reflectiveClose:
@@ -131,6 +139,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "pcos",
     name: "PCOS",
+    image: "/treatments/PCOS.png",
+    audience: "women",
     shortDescription: "Polycystic ovary syndrome — hormonal, metabolic, and reproductive care.",
     hook: "Your cycle has been a question mark for years. It doesn't have to stay one.",
     reflectiveClose: "Some answers are quiet. They're still answers.",
@@ -184,6 +194,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "skin-and-hair",
     name: "Skin & Hair",
+    image: "/treatments/Skin&Hair.png",
+    audience: "all",
     shortDescription: "AGA, adult acne, melasma, and other dermatological conditions.",
     hook: "The mirror has been telling you something for a while.",
     reflectiveClose: "Skin keeps a record. A doctor reads it.",
@@ -234,6 +246,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "mens-intimate-health",
     name: "Men's Intimate Health",
+    image: "/treatments/Wellness.png",
+    audience: "men",
     shortDescription: "ED, premature ejaculation, and related sexual health evaluation.",
     hook: "Most Indian men carry this in silence for years. The silence is the worst part.",
     reflectiveClose: "There's no version of waiting that helps.",
@@ -284,6 +298,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "hormones-trt",
     name: "Hormones & TRT",
+    image: "/treatments/TRT.png",
+    audience: "men",
     shortDescription: "Low testosterone, hormonal imbalance, and supervised TRT.",
     hook: "You don't recognise the man in the photographs anymore.",
     reflectiveClose: "Slowing down is universal. Disappearing isn't.",
@@ -335,6 +351,8 @@ export const CONDITIONS: ConditionData[] = [
   {
     slug: "longevity",
     name: "Longevity",
+    image: "/treatments/Longevity.png",
+    audience: "all",
     shortDescription: "Cardiometabolic panels, biomarker monitoring, and preventive care.",
     hook: "Your body has been keeping score. You can read it.",
     reflectiveClose: "The best time to read the chart is before it tells a story.",

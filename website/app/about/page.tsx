@@ -13,6 +13,11 @@ export const metadata: Metadata = {
     description:
       "Kyros Clinic is a doctor-first telemedicine clinic built for India's hormonal health gap. Founded by Niranjan Bhimanadham.",
     url: 'https://kyrosclinic.com/about',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'About Kyros Clinic' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
   },
 };
 

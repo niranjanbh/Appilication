@@ -173,6 +173,7 @@ export function BookingFlow() {
 
     return (
       <div>
+        <div className="flex flex-row justify-between">
         <button
           type="button"
           onClick={() => { setSkippedIntake(false); setStep('condition'); }}
@@ -180,6 +181,16 @@ export function BookingFlow() {
         >
           ← Back
         </button>
+        <button
+            type="button"
+            onClick={handleSkipIntake}
+            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2
+                       rounded-button border bg-forest  border-forest/30 hover:text-forest text-white font-body font-medium text-body
+                       hover:border-forest hover:bg-forest/5 transition-colors duration-micro"
+          >
+            Skip and Talk
+          </button>
+          </div>
         <h2 className="font-display text-h2 font-medium text-forest mb-2">
           A little about your situation
         </h2>
@@ -227,15 +238,7 @@ export function BookingFlow() {
           >
             Continue
           </button>
-          <button
-            type="button"
-            onClick={handleSkipIntake}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3
-                       rounded-button border border-forest/30 text-forest font-body font-medium text-body
-                       hover:border-forest hover:bg-forest/5 transition-colors duration-micro"
-          >
-            Skip — speak to a coordinator directly
-          </button>
+          
         </div>
 
         <p className="font-body text-caption text-stone mt-4">

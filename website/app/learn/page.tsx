@@ -14,6 +14,11 @@ export const metadata: Metadata = {
     title: "Learn — Kyros Clinic",
     description: "Clinical articles reviewed by NMC-registered specialist doctors.",
     url: "https://kyrosclinic.com/learn",
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'Kyros Clinic health guides' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
   },
 };
 

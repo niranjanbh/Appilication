@@ -11,6 +11,11 @@ export const metadata: Metadata = {
     title: 'Contact — Kyros Clinic',
     description: 'Reach our care team for consultation enquiries, support, doctor applications, and press.',
     url: 'https://kyrosclinic.com/contact',
+    images: [{ url: '/treatments/HeroDashboard.png', width: 1200, height: 630, alt: 'Contact Kyros Clinic' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/treatments/HeroDashboard.png'],
   },
 };
 

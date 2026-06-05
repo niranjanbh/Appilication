@@ -26,6 +26,13 @@ export const metadata: Metadata = {
     default: 'Kyros Clinic — Doctor-first hormonal health',
     template: '%s — Kyros Clinic',
   },
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   description:
     'India-first telemedicine clinic for hormonal health, PCOS, thyroid, weight management, skin & hair, and longevity. Consult real doctors, track your labs, follow a plan that fits you.',
   metadataBase: new URL('https://kyrosclinic.com'),
@@ -33,12 +40,12 @@ export const metadata: Metadata = {
     siteName: 'Kyros Clinic',
     type: 'website',
     locale: 'en_IN',
-    images: [{ url: '/og-default.png', width: 1200, height: 630, alt: 'Kyros Clinic' }],
+    images: [{ url: '/opengraph-image.png', width: 1200, height: 630, alt: 'Kyros Clinic — Doctor-first hormonal health' }],
   },
   twitter: {
     card: 'summary_large_image',
     site: '@kyrosclinic',
-    images: ['/og-default.png'],
+    images: ['/opengraph-image.png'],
   },
   robots: { index: true, follow: true },
   verification: {

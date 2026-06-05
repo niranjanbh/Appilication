@@ -15,15 +15,6 @@ export const metadata: Metadata = {
   },
 };
 
-const ICONS: Record<string, string> = {
-  thyroid: '🩺',
-  'weight-management': '⚖️',
-  pcos: '🌿',
-  'skin-and-hair': '✨',
-  'mens-intimate-health': '🔒',
-  'hormones-trt': '📊',
-  longevity: '📈',
-};
 
 const schema = {
   '@context': 'https://schema.org',
@@ -62,7 +53,7 @@ export default function ConditionsPage() {
                 slug={c.slug}
                 name={c.name}
                 shortDescription={c.shortDescription}
-                icon={ICONS[c.slug] ?? '🩺'}
+                image={c.image}
               />
             ))}
           </div>
