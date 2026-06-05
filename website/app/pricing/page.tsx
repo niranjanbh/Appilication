@@ -13,14 +13,6 @@ export const metadata: Metadata = {
   },
 };
 
-const schema = {
-  '@context': 'https://schema.org',
-  '@type': 'MedicalWebPage',
-  name: 'Kyros Clinic Pricing',
-  url: 'https://kyrosclinic.com/pricing',
-  description: 'Transparent consultation pricing at Kyros Clinic. Initial and follow-up consultations for hormonal health conditions.',
-};
-
 const FAQS = [
   {
     q: 'Is there a platform fee on top of the consultation fee?',
@@ -43,6 +35,28 @@ const FAQS = [
     a: 'Follow-up consultations with the same doctor are priced between ₹400–₹500. The exact fee is shown at the time of booking.',
   },
 ];
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'MedicalWebPage',
+      '@id': 'https://kyrosclinic.com/pricing',
+      name: 'Kyros Clinic Pricing',
+      url: 'https://kyrosclinic.com/pricing',
+      description: 'Transparent consultation pricing at Kyros Clinic. Initial and follow-up consultations for hormonal health conditions.',
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://kyrosclinic.com/pricing#faq',
+      mainEntity: FAQS.map((faq) => ({
+        '@type': 'Question',
+        name: faq.q,
+        acceptedAnswer: { '@type': 'Answer', text: faq.a },
+      })),
+    },
+  ],
+};
 
 export default function PricingPage() {
   return (

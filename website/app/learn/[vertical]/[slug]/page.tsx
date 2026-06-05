@@ -61,47 +61,79 @@ export default async function ArticlePage({ params }: Params) {
     options: { parseFrontmatter: false },
   });
 
+  const reviewedAt = new Date(article.doctor_reviewed_at).toISOString();
+
   const schema = {
     "@context": "https://schema.org",
-    "@type": "Article",
-    "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
-    headline: article.title,
-    description: article.deck,
-    url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
-    dateModified: new Date(article.doctor_reviewed_at).toISOString(),
-    publisher: {
-      "@type": "Organization",
-      name: "Kyros Clinic",
-      url: "https://kyrosclinic.com",
-    },
-    ...(doctor
-      ? {
-          author: {
-            "@type": "Person",
-            name: doctor.name,
-            jobTitle: doctor.specialty,
-            identifier: `NMC Reg. ${doctor.nmcRegistration}`,
-          },
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://kyrosclinic.com" },
+          { "@type": "ListItem", position: 2, name: "Learn", item: "https://kyrosclinic.com/learn" },
+          { "@type": "ListItem", position: 3, name: verticalLabel, item: `https://kyrosclinic.com/learn/${params.vertical}` },
+          { "@type": "ListItem", position: 4, name: article.title, item: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}` },
+        ],
+      },
+      {
+        "@type": "MedicalWebPage",
+        "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}#page`,
+        url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
+        name: article.title,
+        description: article.deck,
+        specialty: verticalLabel,
+        inLanguage: "en-IN",
+        isPartOf: { "@type": "WebSite", name: "Kyros Clinic", url: "https://kyrosclinic.com" },
+        ...(doctor ? {
           reviewedBy: {
             "@type": "Person",
             name: doctor.name,
             jobTitle: doctor.specialty,
             identifier: `NMC Reg. ${doctor.nmcRegistration}`,
           },
-        }
-      : {}),
-    about: {
-      "@type": "MedicalCondition",
-      name: verticalLabel,
-      url: `https://kyrosclinic.com/conditions/${params.vertical}`,
-    },
-    medicalAudience: { "@type": "Patient" },
-    inLanguage: "en-IN",
-    isPartOf: {
-      "@type": "WebSite",
-      name: "Kyros Clinic",
-      url: "https://kyrosclinic.com",
-    },
+        } : {}),
+      },
+      {
+        "@type": "Article",
+        "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
+        headline: article.title,
+        description: article.deck,
+        url: `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}`,
+        datePublished: reviewedAt,
+        dateModified: reviewedAt,
+        publisher: {
+          "@type": "Organization",
+          name: "Kyros Clinic",
+          url: "https://kyrosclinic.com",
+        },
+        ...(doctor
+          ? {
+              author: {
+                "@type": "Person",
+                name: doctor.name,
+                jobTitle: doctor.specialty,
+                identifier: `NMC Reg. ${doctor.nmcRegistration}`,
+              },
+              reviewedBy: {
+                "@type": "Person",
+                name: doctor.name,
+                jobTitle: doctor.specialty,
+                identifier: `NMC Reg. ${doctor.nmcRegistration}`,
+              },
+            }
+          : {}),
+        about: {
+          "@type": "MedicalCondition",
+          name: verticalLabel,
+          url: `https://kyrosclinic.com/conditions/${params.vertical}`,
+        },
+        medicalAudience: { "@type": "Patient" },
+        inLanguage: "en-IN",
+        isPartOf: {
+          "@id": `https://kyrosclinic.com/learn/${params.vertical}/${params.slug}#page`,
+        },
+      },
+    ],
   };
 
   return (

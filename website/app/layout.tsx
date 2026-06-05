@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import { Navigation } from '../components/layout/Navigation';
 import { Footer } from '../components/layout/Footer';
+import { JsonLD } from '../components/schema/JsonLD';
 import './globals.css';
 
 const cormorant = Cormorant_Garamond({
@@ -31,12 +33,30 @@ export const metadata: Metadata = {
     siteName: 'Kyros Clinic',
     type: 'website',
     locale: 'en_IN',
+    images: [{ url: '/og-default.png', width: 1200, height: 630, alt: 'Kyros Clinic' }],
   },
   twitter: {
     card: 'summary_large_image',
     site: '@kyrosclinic',
+    images: ['/og-default.png'],
   },
   robots: { index: true, follow: true },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GSC_VERIFICATION || undefined,
+    other: process.env.NEXT_PUBLIC_BING_VERIFICATION
+      ? { 'msvalidate.01': process.env.NEXT_PUBLIC_BING_VERIFICATION }
+      : undefined,
+  },
+};
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': 'https://kyrosclinic.com/#website',
+  name: 'Kyros Clinic',
+  url: 'https://kyrosclinic.com',
+  inLanguage: 'en-IN',
+  publisher: { '@id': 'https://kyrosclinic.com/#organization' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -55,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-ivory font-body text-ink flex flex-col min-h-screen">
+        <JsonLD data={websiteSchema} />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4
@@ -67,6 +88,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <Footer />
+
+        {/* Cloudflare Web Analytics — cookieless, no consent banner required */}
+        {process.env.NEXT_PUBLIC_CF_ANALYTICS_TOKEN && (
+          <Script
+            defer
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={`{"token":"${process.env.NEXT_PUBLIC_CF_ANALYTICS_TOKEN}"}`}
+            strategy="afterInteractive"
+          />
+        )}
+
+        {/* GA4 — optional, for organic-sourced-consultation attribution */}
+        {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-config" strategy="afterInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}')`}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   );

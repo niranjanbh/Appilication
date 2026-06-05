@@ -1,12 +1,36 @@
 
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Backend
 backend/.env
+backend/.env.*
+!backend/.env.example
 backend/.venv
 
-/node_modules
+# Node modules
+**/node_modules/
 
-website/node_modules
+# Next.js
 website/.next
+website/out
 
-mobile/node_modules
+# Expo / React Native
+mobile/.expo
+mobile/dist
+
+# Environment files
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+
+# Build outputs
+**/dist/
+**/.turbo/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.log

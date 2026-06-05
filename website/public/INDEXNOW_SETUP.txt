@@ -1,0 +1,11 @@
+IndexNow key file setup:
+
+1. Generate a random key (8-128 chars, e.g. a UUID without dashes)
+2. Rename this file to {your-key}.txt  (e.g. abc123def456.txt)
+3. Make the file contents exactly the key value (nothing else)
+4. Set NEXT_PUBLIC_INDEXNOW_KEY={your-key} in .env.local
+5. Submit to Bing via:
+   POST https://www.bing.com/indexnow
+   Body: { "host": "kyrosclinic.com", "key": "{your-key}", "keyLocation": "https://kyrosclinic.com/{your-key}.txt", "urlList": ["https://kyrosclinic.com/", ...] }
+
+The file must be accessible at https://kyrosclinic.com/{your-key}.txt

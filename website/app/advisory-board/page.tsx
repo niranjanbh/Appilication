@@ -1,17 +1,41 @@
 import type { Metadata } from 'next';
 import { HonestPlaceholder } from '../../components/marketing/HonestPlaceholder';
 import { CTASection } from '../../components/marketing/CTASection';
+import { JsonLD } from '../../components/schema/JsonLD';
 
 export const metadata: Metadata = {
   title: 'Advisory Board',
   description:
     'Kyros Clinic advisory board — being formed carefully. We list advisors only after they have publicly confirmed their role in writing.',
   alternates: { canonical: 'https://kyrosclinic.com/advisory-board' },
+  openGraph: {
+    title: 'Advisory Board — Kyros Clinic',
+    description:
+      'Kyros Clinic advisory board — being formed carefully. Clinical, regulatory, and operational expertise. Listed only after written confirmation.',
+    url: 'https://kyrosclinic.com/advisory-board',
+  },
+};
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  '@id': 'https://kyrosclinic.com/advisory-board',
+  name: 'Advisory Board — Kyros Clinic',
+  url: 'https://kyrosclinic.com/advisory-board',
+  description: 'Kyros Clinic advisory board — clinical, regulatory, and operational expertise.',
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+      { '@type': 'ListItem', position: 2, name: 'Advisory Board', item: 'https://kyrosclinic.com/advisory-board' },
+    ],
+  },
 };
 
 export default function AdvisoryBoardPage() {
   return (
     <>
+      <JsonLD data={schema} />
       {/* Hero */}
       <section className="bg-ivory py-20 px-6">
         <div className="max-w-4xl mx-auto">

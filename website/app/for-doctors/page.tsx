@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { CTASection } from '../../components/marketing/CTASection';
+import { JsonLD } from '../../components/schema/JsonLD';
 
 export const metadata: Metadata = {
   title: 'For Doctors',
@@ -8,13 +9,33 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://kyrosclinic.com/for-doctors' },
   openGraph: {
     title: 'For Doctors — Join Kyros Clinic',
+    description:
+      'Join the Kyros Clinic specialist panel. Build longitudinal patient relationships in telemedicine. NMC-registered specialists only.',
     url: 'https://kyrosclinic.com/for-doctors',
+  },
+};
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  '@id': 'https://kyrosclinic.com/for-doctors',
+  name: 'For Doctors — Join Kyros Clinic',
+  url: 'https://kyrosclinic.com/for-doctors',
+  description:
+    'Join the Kyros Clinic specialist panel. NMC-registered endocrinologists, dermatologists, and urologists building longitudinal patient relationships in telemedicine.',
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+      { '@type': 'ListItem', position: 2, name: 'For Doctors', item: 'https://kyrosclinic.com/for-doctors' },
+    ],
   },
 };
 
 export default function ForDoctorsPage() {
   return (
     <>
+      <JsonLD data={schema} />
       {/* Hero */}
       <section className="bg-forest py-20 px-6">
         <div className="max-w-4xl mx-auto">

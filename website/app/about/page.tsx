@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://kyrosclinic.com/about' },
   openGraph: {
     title: 'About Kyros Clinic',
+    description:
+      "Kyros Clinic is a doctor-first telemedicine clinic built for India's hormonal health gap. Founded by Niranjan Bhimanadham.",
     url: 'https://kyrosclinic.com/about',
   },
 };

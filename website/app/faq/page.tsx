@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import FaqClient from './FaqClient';
 import { FAQ_DATA } from '../../lib/faq-data';
+import { JsonLD } from '../../components/schema/JsonLD';
 
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions | Kyros Clinic',
@@ -34,15 +35,9 @@ const schema = {
 
 export default function FAQPage() {
   return (
-      <>
-        <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify(schema),
-            }}
-        />
-
-        <FaqClient />
-      </>
+    <>
+      <JsonLD data={schema} />
+      <FaqClient />
+    </>
   );
 }

@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/api/', '/book'],
+      disallow: ['/api/', '/design', '/book'],
     },
     sitemap: 'https://kyrosclinic.com/sitemap.xml',
   };

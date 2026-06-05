@@ -1,59 +1,45 @@
-# DISABLED — Cloudflare Git integration handles website deploys directly.
-# Cloudflare triggers on push to main and runs:
-#   pnpm install --frozen-lockfile && pnpm --filter website build
-# using wrangler.toml at the repo root. Re-enable this workflow only if
-# switching away from Cloudflare's built-in CI.
-
-name: Deploy Website
+name: Deploy Website to Cloudflare Workers
 
 on:
-  workflow_dispatch:   # manual trigger only; automatic deploys are via Cloudflare CI
+  push:
+    branches:
+      - main
+    paths:
+      - "website/**"
+  workflow_dispatch:
 
 concurrency:
   group: deploy-website
-  cancel-in-progress: true   # new website push supersedes an in-flight one
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    name: Build → Deploy to Cloudflare Pages
+  deploy:
+    name: Build → Deploy to Cloudflare Workers
     runs-on: ubuntu-latest
     environment: production
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          version: 9
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: cd website && npm i
 
       - name: Type check
-        run: pnpm --filter website typecheck
+        run: cd website && npm run typecheck
 
       - name: Build
-        run: pnpm --filter website build
+        run: cd website && npm run build
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}
 
-      - name: Run next-on-pages adapter
-        working-directory: website
-        run: npx @cloudflare/next-on-pages
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: kyros-website
-          directory: website/.vercel/output/static
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          workingDirectory: website

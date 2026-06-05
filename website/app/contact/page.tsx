@@ -1,16 +1,56 @@
 import type { Metadata } from 'next';
 import { ContactForm } from './ContactForm';
+import { JsonLD } from '../../components/schema/JsonLD';
 
 export const metadata: Metadata = {
   title: 'Contact',
   description:
     'Contact Kyros Clinic. Reach our care team for consultation enquiries, support, doctor applications, and press.',
   alternates: { canonical: 'https://kyrosclinic.com/contact' },
+  openGraph: {
+    title: 'Contact — Kyros Clinic',
+    description: 'Reach our care team for consultation enquiries, support, doctor applications, and press.',
+    url: 'https://kyrosclinic.com/contact',
+  },
+};
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  '@id': 'https://kyrosclinic.com/contact',
+  name: 'Contact — Kyros Clinic',
+  url: 'https://kyrosclinic.com/contact',
+  description: 'Contact Kyros Clinic for consultation enquiries, support, doctor applications, and press.',
+  mainEntity: {
+    '@type': 'Organization',
+    name: 'Kyros Clinic',
+    url: 'https://kyrosclinic.com',
+    contactPoint: [
+      {
+        '@type': 'ContactPoint',
+        email: 'hello@kyrosclinic.com',
+        contactType: 'customer support',
+        availableLanguage: ['English', 'Hindi'],
+        hoursAvailable: { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '09:00', closes: '21:00' },
+      },
+      {
+        '@type': 'ContactPoint',
+        email: 'doctors@kyrosclinic.com',
+        contactType: 'recruiting',
+      },
+      {
+        '@type': 'ContactPoint',
+        email: 'press@kyrosclinic.com',
+        contactType: 'press',
+      },
+    ],
+  },
 };
 
 export default function ContactPage() {
   return (
     <>
+      <JsonLD data={schema} />
       {/* Hero */}
       <section className="bg-ivory py-20 px-6">
         <div className="max-w-4xl mx-auto">

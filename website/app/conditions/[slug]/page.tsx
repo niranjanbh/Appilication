@@ -6,6 +6,16 @@ import { PullQuote } from '../../../components/ui/PullQuote';
 import { CTASection } from '../../../components/marketing/CTASection';
 import { StatBlock } from '../../../components/marketing/StatBlock';
 
+const CONDITION_SPECIALTY: Record<string, string> = {
+  thyroid: 'Endocrinology',
+  pcos: 'Endocrinology',
+  'weight-management': 'Internal Medicine',
+  'skin-and-hair': 'Dermatology',
+  'mens-intimate-health': 'Urology',
+  'hormones-trt': 'Endocrinology',
+  longevity: 'Preventive Medicine',
+};
+
 interface Params {
   params: { slug: string };
 }
@@ -39,12 +49,20 @@ export default function ConditionPage({ params }: Params) {
     '@context': 'https://schema.org',
     '@graph': [
       {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+          { '@type': 'ListItem', position: 2, name: 'Conditions', item: 'https://kyrosclinic.com/conditions' },
+          { '@type': 'ListItem', position: 3, name: condition.name, item: `https://kyrosclinic.com/conditions/${condition.slug}` },
+        ],
+      },
+      {
         '@type': 'MedicalWebPage',
         '@id': `https://kyrosclinic.com/conditions/${condition.slug}`,
         name: `${condition.name} — Kyros Clinic`,
         url: `https://kyrosclinic.com/conditions/${condition.slug}`,
         description: condition.heroSubline,
-        specialty: 'Endocrinology',
+        specialty: CONDITION_SPECIALTY[condition.slug] ?? 'Endocrinology',
         mainEntity: {
           '@id': `https://kyrosclinic.com/conditions/${condition.slug}#condition`,
         },

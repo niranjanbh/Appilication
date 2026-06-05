@@ -37,10 +37,23 @@ export default function VerticalLearnPage({ params }: Params) {
 
   const schema = {
     "@context": "https://schema.org",
-    "@type": "CollectionPage",
-    name: `${label} — Kyros Clinic Learn`,
-    url: `https://kyrosclinic.com/learn/${params.vertical}`,
-    description: `Doctor-reviewed clinical articles on ${label.toLowerCase()}.`,
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://kyrosclinic.com" },
+          { "@type": "ListItem", position: 2, name: "Learn", item: "https://kyrosclinic.com/learn" },
+          { "@type": "ListItem", position: 3, name: label, item: `https://kyrosclinic.com/learn/${params.vertical}` },
+        ],
+      },
+      {
+        "@type": "CollectionPage",
+        "@id": `https://kyrosclinic.com/learn/${params.vertical}`,
+        name: `${label} — Kyros Clinic Learn`,
+        url: `https://kyrosclinic.com/learn/${params.vertical}`,
+        description: `Doctor-reviewed clinical articles on ${label.toLowerCase()}.`,
+      },
+    ],
   };
 
   return (
