@@ -50,7 +50,8 @@ jobs:
 
       - name: Publish OTA update
         working-directory: mobile
-        run: eas update --auto --branch production --message "deploy: ${{ github.sha }}"
+        run: |
+          eas update --auto --branch production --message "deploy: ${{ github.sha }}"
         env:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
