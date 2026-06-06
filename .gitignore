@@ -34,3 +34,10 @@ mobile/dist
 Thumbs.db
 .vscode/settings.json
 *.log
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
