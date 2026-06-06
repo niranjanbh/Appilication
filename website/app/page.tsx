@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { CONDITIONS } from '../lib/conditions';
 import { JsonLD } from '../components/schema/JsonLD';
 import { PullQuote } from '../components/ui/PullQuote';
+import { FadeIn } from '../components/ui/FadeIn';
 import { FilterableConditions } from '../components/marketing/FilterableConditions';
 import { PillarBlock } from '../components/marketing/PillarBlock';
 import { StatBlock } from '../components/marketing/StatBlock';
@@ -123,6 +124,7 @@ export default function HomePage() {
       </section>
 
       {/* 2. Three Pillars */}
+      <FadeIn>
       <PillarBlock
         pillars={[
           {
@@ -142,8 +144,10 @@ export default function HomePage() {
           },
         ]}
       />
+      </FadeIn>
 
       {/* 3. Pull quote */}
+      <FadeIn>
       <section className="bg-ivory py-12 px-6">
         <div className="max-w-3xl mx-auto">
           <PullQuote accent="terracotta">
@@ -152,6 +156,7 @@ export default function HomePage() {
           </PullQuote>
         </div>
       </section>
+      </FadeIn>
 
       {/* 4. Conditions — filterable by audience */}
       <FilterableConditions />
@@ -160,6 +165,7 @@ export default function HomePage() {
       <DashboardSection />
 
       {/* 7. Process steps */}
+      <FadeIn>
       <section className="bg-sage/10 py-16 px-6">
         <div className="max-w-4xl mx-auto">
           <h2 className="font-display text-h2 font-medium text-forest mb-10 text-center">
@@ -211,8 +217,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      </FadeIn>
 
       {/* 8. Stats */}
+      <FadeIn>
       <StatBlock
         stats={[
           { numeral: '₹400', caption: 'starting consultation fee', color: 'forest' },
@@ -220,8 +228,10 @@ export default function HomePage() {
           { numeral: '1', caption: 'doctor who stays with you', color: 'saffron' },
         ]}
       />
+      </FadeIn>
 
       {/* 7. Trust signals */}
+      <FadeIn>
       <section className="bg-white py-16 px-6">
         <div className="max-w-7xl mx-auto">
           <h2 className="font-display text-h2 font-medium text-forest mb-8 text-center">
@@ -256,8 +266,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      </FadeIn>
 
       {/* 8. Reflective close */}
+      <FadeIn>
       <section className="bg-ivory py-12 px-6 border-t-2 border-terracotta">
         <div className="max-w-3xl mx-auto">
           <p className="font-display text-h2 italic font-medium text-forest text-center">
@@ -265,6 +277,7 @@ export default function HomePage() {
           </p>
         </div>
       </section>
+      </FadeIn>
 
       {/* 9-10. CTA */}
       <CTASection
