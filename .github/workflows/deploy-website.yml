@@ -25,14 +25,18 @@ jobs:
         with:
           node-version: "20"
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Install dependencies
-        run: cd website && npm i
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        run: cd website && npm run typecheck
+        run: pnpm --filter @kyros/website run typecheck
 
       - name: Build
-        run: cd website && npm run build
+        run: pnpm --filter @kyros/website run build
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}
