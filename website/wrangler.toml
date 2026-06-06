@@ -4,8 +4,8 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 routes = [
-  { pattern = "kyrosclinic.com/*", custom_domain = true },
-  { pattern = "www.kyrosclinic.com/*", custom_domain = true },
+  { pattern = "kyrosclinic.com", custom_domain = true },
+  { pattern = "www.kyrosclinic.com", custom_domain = true },
 ]
 
 [assets]

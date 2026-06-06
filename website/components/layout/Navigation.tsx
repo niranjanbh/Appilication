@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { MobileMenu } from './MobileMenu';
 
 const NAV_LINKS = [
