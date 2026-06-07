@@ -32,10 +32,6 @@ function formatSlotTime(iso: string) {
   });
 }
 
-function toISOLocal(dateStr: string, timeStr: string): string {
-  return new Date(`${dateStr}T${timeStr}:00`).toISOString();
-}
-
 export function Schedule() {
   const queryClient = useQueryClient();
 
