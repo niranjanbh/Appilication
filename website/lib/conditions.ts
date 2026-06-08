@@ -399,6 +399,66 @@ export const CONDITIONS: ConditionData[] = [
       "Comprehensive preventive health evaluation using advanced cardiometabolic, hormonal, and metabolic biomarkers to identify and address risk factors before they become clinical conditions.",
     sensitiveCategory: false,
   },
+  {
+    slug: "diabetes",
+    name: "Diabetes",
+    image: "/treatments/Diabetes.png",
+    audience: "all",
+    shortDescription: "Prediabetes, type 2 diabetes, and ongoing blood sugar management.",
+    hook: "A borderline reading. A doctor who said 'keep an eye on it.' Nobody followed up.",
+    reflectiveClose: "Watching a number isn't a plan. Reading it with someone who stays is.",
+    heroSubline:
+      "Fasting glucose, post-meal spikes, HbA1c — a single number rarely tells the full story, and 'keep an eye on it' isn't a plan. A Kyros doctor reads your metabolic picture in full and stays with you as it changes.",
+    symptoms: [
+      "Increased thirst and frequent urination",
+      "Persistent fatigue or low energy",
+      "Unexplained weight changes",
+      "Blurred vision",
+      "Slow-healing cuts, wounds, or frequent infections",
+      "Tingling, numbness, or a burning sensation in the hands or feet",
+      "Increased hunger alongside weight loss",
+      "A borderline or elevated reading on a routine blood test",
+    ],
+    whatWeOffer: [
+      "Complete metabolic workup: fasting glucose, post-meal glucose, HbA1c, fasting insulin, and lipid panel",
+      "Evaluation and staging of prediabetes and type 2 diabetes against standard diagnostic criteria",
+      "Doctor-supervised glucose-lowering therapy, including metformin where indicated, reviewed and adjusted at every consultation",
+      "Personalised nutrition and activity guidance alongside medical management",
+      "Coordination with related metabolic evaluation — weight, thyroid, and cardiometabolic risk — where indicated",
+      "Longitudinal blood sugar and biomarker tracking with doctor commentary across every consultation",
+    ],
+    stats: [
+      { numeral: "101M+", caption: "Indians estimated to be living with diabetes (Anjana et al., ICMR-INDIAB, 2023)" },
+      { numeral: "136M+", caption: "Indians estimated to have prediabetes (Anjana et al., ICMR-INDIAB, 2023)" },
+      { numeral: "1 doctor", caption: "who reads your glucose trend over time, not just one report" },
+    ],
+    faqs: [
+      {
+        question: "What is the difference between prediabetes and type 2 diabetes?",
+        answer:
+          "Prediabetes means blood sugar levels are higher than the typical reference range but not yet at the threshold used to diagnose diabetes. It is a meaningful window — many people at this stage benefit from early medical guidance and structured lifestyle changes. Type 2 diabetes is identified using specific fasting glucose, post-meal glucose, or HbA1c thresholds. Your Kyros doctor will determine where you stand and what it means for your care plan.",
+      },
+      {
+        question: "Can lifestyle changes alone manage blood sugar?",
+        answer:
+          "For some people with prediabetes or early type 2 diabetes, structured nutrition and activity changes — guided by a doctor and tracked against lab values — can meaningfully support blood sugar management. For others, medical therapy alongside lifestyle change is necessary. Which applies to you depends on your specific labs, history, and your doctor's evaluation, not a one-size-fits-all answer.",
+      },
+      {
+        question: "Is metformin the only medication used for blood sugar management?",
+        answer:
+          "No. Metformin is one of several glucose-lowering options a doctor may consider, depending on your overall profile, other health conditions, and how your body responds over time. Your Kyros doctor reviews your complete picture before recommending any therapy and adjusts the plan based on your follow-up labs.",
+      },
+      {
+        question: "Can I consult a Kyros doctor if I'm already on medication for diabetes?",
+        answer:
+          "Yes. Many patients come to Kyros already on glucose-lowering medication without a recent comprehensive review. We assess your current plan, order updated labs, and work with you on adjustments where indicated — with the same doctor following your trend over time.",
+      },
+    ],
+    schemaName: "Type 2 Diabetes Mellitus",
+    schemaDescription:
+      "A chronic metabolic condition in which the body is unable to regulate blood glucose effectively, requiring ongoing monitoring, lifestyle management, and medical supervision to reduce long-term health risks.",
+    sensitiveCategory: false,
+  },
 ];
 
 export function getCondition(slug: string): ConditionData | undefined {

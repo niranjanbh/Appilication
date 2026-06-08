@@ -6,4 +6,5 @@ export const CONDITION_DISPLAY_NAMES: Record<string, string> = {
   "mens-intimate-health": "Men's Intimate Health",
   "hormones-trt": "Hormones & TRT",
   longevity: "Longevity",
+  diabetes: "Diabetes",
 };

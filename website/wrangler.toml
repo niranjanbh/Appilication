@@ -11,3 +11,14 @@ routes = [
 [assets]
 directory = "./out"
 binding = "ASSETS"
+
+[vars]
+# Public FastAPI backend base URL the Worker proxies /api/contact and /api/book to.
+# REPLACE with the real production backend origin before deploying — there was no
+# confirmed production backend domain in the repo to infer this from.
+BACKEND_URL = "https://REPLACE-WITH-PRODUCTION-BACKEND-ORIGIN"
+
+# TURNSTILE_SECRET_KEY is a secret, not a var — set it with:
+#   wrangler secret put TURNSTILE_SECRET_KEY
+# Never commit it here. If it is unset, the Worker skips verification (fails open)
+# so form submissions are not blocked before Turnstile is configured.

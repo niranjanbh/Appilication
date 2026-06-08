@@ -14,7 +14,7 @@ import { DashboardSection } from '../components/dashboard/DashboardSection';
 export const metadata: Metadata = {
   title: 'Kyros Clinic — Doctor-first hormonal health',
   description:
-    'Consult specialist doctors for thyroid, PCOS, weight management, skin & hair, hormones, and longevity. Track labs, follow a plan, stay with one doctor.',
+    'Consult specialist doctors for thyroid, PCOS, weight management, skin & hair, hormones, diabetes, and longevity. Track labs, follow a plan, stay with one doctor.',
   alternates: { canonical: 'https://kyrosclinic.com' },
   openGraph: {
     title: 'Kyros Clinic — Doctor-first hormonal health',
@@ -38,7 +38,7 @@ const schema = {
       areaServed: { '@type': 'Country', name: 'India' },
       priceRange: '₹400–₹1,500',
       description:
-        'India-first doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid, weight management, skin and hair, men\'s intimate health, TRT, and longevity.',
+        'India-first doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid, weight management, skin and hair, men\'s intimate health, TRT, diabetes, and longevity.',
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'customer support',

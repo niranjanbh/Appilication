@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { TurnstileWidget } from '../ui/TurnstileWidget';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ const CONDITIONS = [
   { slug: 'mens-intimate-health', name: "Men's Intimate Health", sub: 'ED, premature ejaculation, low libido' },
   { slug: 'hormones-trt', name: 'Hormones & TRT', sub: 'Low testosterone, hormonal imbalance' },
   { slug: 'longevity', name: 'Longevity', sub: 'Preventive care, advanced biomarkers' },
+  { slug: 'diabetes', name: 'Diabetes', sub: 'Blood sugar management, prediabetes, type 2 diabetes' },
 ] as const;
 
 type ConditionSlug = (typeof CONDITIONS)[number]['slug'];
@@ -58,6 +60,12 @@ const INTAKE_QUESTIONS: Record<ConditionSlug, Array<{ id: string; label: string;
     { id: 'recent_labs', label: 'When did you last have a comprehensive blood panel?', options: ['Never', 'More than 2 years ago', 'Within the last 2 years', 'Within the last 6 months'] },
     { id: 'apo_b_tested', label: 'Have you had ApoB or Lp(a) tested?', options: ['Yes, both', 'ApoB only', 'Neither', "I don't know what these are"] },
   ],
+  diabetes: [
+    { id: 'previous_diagnosis', label: 'Have you been diagnosed with prediabetes or diabetes before?', options: ['Yes, type 2 diabetes', 'Yes, prediabetes', 'No, but a recent reading was borderline', 'No diagnosis or reading yet'] },
+    { id: 'current_medication', label: 'Are you currently on any blood sugar medication?', options: ['No', 'Yes, metformin', 'Yes, other medication', 'Previously, not currently'] },
+    { id: 'recent_labs', label: 'When did you last have your blood sugar or HbA1c tested?', options: ['Never', 'More than 1 year ago', 'Within the last year', 'Within the last 3 months'] },
+    { id: 'comorbidities', label: 'Do you have any of the following?', options: ['None', 'High blood pressure or lipids', 'PCOS', 'Thyroid condition', 'Family history of diabetes'] },
+  ],
 };
 
 const COUNTRY_CODES = [
@@ -97,6 +105,7 @@ export function BookingFlow() {
   const [countryCode, setCountryCode] = useState('+91');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const {
     register,
@@ -251,6 +260,10 @@ export function BookingFlow() {
   if (step === 'contact') {
     const onSubmit = async (data: ContactFormData) => {
       if (!selectedCondition) return;
+      if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !turnstileToken) {
+        setSubmitError('Please complete the verification challenge before continuing.');
+        return;
+      }
       setIsSubmitting(true);
       setSubmitError(null);
       const phone = `${countryCode}${data.phoneNumber}`;
@@ -266,6 +279,7 @@ export function BookingFlow() {
             condition_category: selectedCondition,
             intake_responses: skippedIntake ? {} : intakeAnswers,
             skipped_intake: skippedIntake,
+            turnstileToken,
           }),
         });
         if (!resp.ok) {
@@ -405,6 +419,8 @@ export function BookingFlow() {
               <p className="font-body text-caption text-alert mt-1">{errors.email.message}</p>
             )}
           </div>
+
+          <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
 
           {submitError && (
             <p className="font-body text-body text-alert bg-alert/8 rounded-card px-4 py-3">

@@ -30,7 +30,7 @@ export function FilterableConditions() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
             <h2 className="font-display text-h2 font-medium text-forest mb-3">
-              Seven conditions. One clinical home.
+              Eight conditions. One clinical home.
             </h2>
             <p className="font-body text-body text-stone max-w-2xl">
               Kyros doctors specialise in chronic hormonal conditions that are common,

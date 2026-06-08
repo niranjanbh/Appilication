@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     apple: '/icon.svg',
   },
   description:
-    'India-first telemedicine clinic for hormonal health, PCOS, thyroid, weight management, skin & hair, and longevity. Consult real doctors, track your labs, follow a plan that fits you.',
+    'India-first telemedicine clinic for hormonal health, PCOS, thyroid, weight management, skin & hair, diabetes, and longevity. Consult real doctors, track your labs, follow a plan that fits you.',
   metadataBase: new URL('https://kyrosclinic.com'),
   openGraph: {
     siteName: 'Kyros Clinic',

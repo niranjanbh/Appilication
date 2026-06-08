@@ -70,7 +70,7 @@ const STEPS = [
   {
     n: 1,
     title: 'Choose your condition.',
-    body: 'Select the clinical vertical closest to your symptoms — thyroid, PCOS, weight management, skin and hair, men\'s intimate health, hormones and TRT, or longevity. If you are unsure, our care team will guide you.',
+    body: 'Select the clinical vertical closest to your symptoms — thyroid, PCOS, weight management, skin and hair, men\'s intimate health, hormones and TRT, diabetes, or longevity. If you are unsure, our care team will guide you.',
   },
   {
     n: 2,

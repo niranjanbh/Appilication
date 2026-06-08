@@ -8,7 +8,7 @@ import { JsonLD } from "../../components/schema/JsonLD";
 export const metadata: Metadata = {
   title: "Learn — Hormonal Health Guides",
   description:
-    "Doctor-reviewed articles on thyroid, PCOS, weight management, skin and hair, men's intimate health, hormones, and longevity — written by NMC-registered specialists.",
+    "Doctor-reviewed articles on thyroid, PCOS, weight management, skin and hair, men's intimate health, hormones, diabetes, and longevity — written by NMC-registered specialists.",
   alternates: { canonical: "https://kyrosclinic.com/learn" },
   openGraph: {
     title: "Learn — Kyros Clinic",

@@ -5,7 +5,7 @@ import { CTASection } from '../../components/marketing/CTASection';
 export const metadata: Metadata = {
   title: 'Consultation Fees & Pricing',
   description:
-    'Kyros Clinic consultations start at ₹400. No hidden fees. Transparent pricing for initial and follow-up consultations across all seven conditions.',
+    'Kyros Clinic consultations start at ₹400. No hidden fees. Transparent pricing for initial and follow-up consultations across all eight conditions.',
   alternates: { canonical: 'https://kyrosclinic.com/pricing' },
   openGraph: {
     title: 'Consultation Fees & Pricing — Kyros Clinic',

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { TurnstileWidget } from '../../components/ui/TurnstileWidget';
 
 const contactSchema = z.object({
   name: z.string().min(2, 'Please enter your name'),
@@ -17,6 +18,7 @@ type ContactFormData = z.infer<typeof contactSchema>;
 export function ContactForm() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const {
     register,
@@ -26,13 +28,20 @@ export function ContactForm() {
 
   const onSubmit = async (data: ContactFormData) => {
     setSubmitError(null);
+    if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !turnstileToken) {
+      setSubmitError('Please complete the verification challenge before sending.');
+      return;
+    }
     try {
       const resp = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, turnstileToken }),
       });
-      if (!resp.ok) throw new Error('Submission failed. Please try again.');
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error((err as { detail?: string }).detail ?? 'Submission failed. Please try again.');
+      }
       setSubmitted(true);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -130,6 +139,8 @@ export function ContactForm() {
           <p className="font-body text-caption text-alert mt-1">{errors.message.message}</p>
         )}
       </div>
+
+      <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
 
       {submitError && (
         <p className="font-body text-body text-alert bg-alert/8 rounded-card px-4 py-3">

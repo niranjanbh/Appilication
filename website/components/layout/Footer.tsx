@@ -8,6 +8,7 @@ const VERTICALS = [
   { href: '/conditions/mens-intimate-health', label: "Men's Intimate Health" },
   { href: '/conditions/hormones-trt', label: 'Hormones & TRT' },
   { href: '/conditions/longevity', label: 'Longevity' },
+  { href: '/conditions/diabetes', label: 'Diabetes' },
 ];
 
 const COMPANY = [

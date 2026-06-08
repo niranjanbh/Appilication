@@ -161,7 +161,7 @@ export const FAQ_DATA: FAQSection[] = [
         items: [
             {
                 q: "What conditions can Kyros actually treat?",
-                a: "We focus on chronic and complex conditions that require ongoing care: thyroid health, weight management, PCOS, skin and hair, intimate health, hormones, and longevity and preventive care.",
+                a: "We focus on chronic and complex conditions that require ongoing care: thyroid health, weight management, PCOS, skin and hair, intimate health, hormones, diabetes, and longevity and preventive care.",
             },
             {
                 q: "What conditions does Kyros not treat?",

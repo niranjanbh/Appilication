@@ -7,7 +7,7 @@ import { CTASection } from '../../components/marketing/CTASection';
 export const metadata: Metadata = {
   title: 'Conditions We Treat',
   description:
-    'Kyros Clinic covers seven chronic hormonal conditions: thyroid, PCOS, weight management, skin & hair, men\'s intimate health, hormones & TRT, and longevity.',
+    'Kyros Clinic covers eight chronic hormonal and metabolic conditions: thyroid, PCOS, weight management, skin & hair, men\'s intimate health, hormones & TRT, diabetes, and longevity.',
   alternates: { canonical: 'https://kyrosclinic.com/conditions' },
   openGraph: {
     title: 'Conditions We Treat — Kyros Clinic',
@@ -23,7 +23,7 @@ const schema = {
   name: 'Conditions We Treat — Kyros Clinic',
   url: 'https://kyrosclinic.com/conditions',
   description:
-    'Overview of the seven clinical verticals treated at Kyros Clinic: thyroid, PCOS, weight management, skin & hair, men\'s intimate health, hormones & TRT, and longevity.',
+    'Overview of the eight clinical verticals at Kyros Clinic: thyroid, PCOS, weight management, skin & hair, men\'s intimate health, hormones & TRT, diabetes, and longevity.',
   specialty: 'Endocrinology',
 };
 

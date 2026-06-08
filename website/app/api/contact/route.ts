@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyTurnstileToken } from '../../../lib/turnstileVerify';
 
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: unknown = await request.json();
+    const { turnstileToken, ...body } = (await request.json()) as Record<string, unknown>;
+
+    const verified = await verifyTurnstileToken(turnstileToken, request.headers.get('cf-connecting-ip'));
+    if (!verified) {
+      return NextResponse.json({ detail: 'We could not verify your request. Please try again.' }, { status: 403 });
+    }
+
     const resp = await fetch(`${BACKEND_URL}/v1/public/lead`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
