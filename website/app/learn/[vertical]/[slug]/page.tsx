@@ -30,7 +30,7 @@ export function generateMetadata({ params }: Params): Metadata {
   const doctor = getDoctor(article.doctor_author_id);
   const verticalLabel = CONDITION_DISPLAY_NAMES[params.vertical] ?? params.vertical;
   const reviewedAt = new Date(article.doctor_reviewed_at).toISOString();
-  const ogImage = getCondition(params.vertical)?.image ?? '/treatments/HeroDashboard.png';
+  const ogImage = getCondition(params.vertical)?.ogImage ?? '/treatments/HeroDashboard.png';
 
   return {
     title: article.title,

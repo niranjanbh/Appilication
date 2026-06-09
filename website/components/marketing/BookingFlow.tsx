@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,14 +9,14 @@ import { TurnstileWidget } from '../ui/TurnstileWidget';
 // ── Data ──────────────────────────────────────────────────────────────────────
 
 const CONDITIONS = [
+  { slug: 'weight-management', name: 'Weight Management', sub: 'Metabolic, GLP-1, insulin resistance' },
+  { slug: 'diabetes', name: 'Diabetes', sub: 'Blood sugar management, prediabetes, type 2 diabetes' },
   { slug: 'thyroid', name: 'Thyroid', sub: 'Fatigue, weight changes, hair loss, brain fog' },
   { slug: 'pcos', name: 'PCOS', sub: 'Irregular cycles, acne, hair loss, weight' },
-  { slug: 'weight-management', name: 'Weight Management', sub: 'Metabolic, GLP-1, insulin resistance' },
   { slug: 'skin-and-hair', name: 'Skin & Hair', sub: 'AGA, adult acne, melasma' },
   { slug: 'mens-intimate-health', name: "Men's Intimate Health", sub: 'ED, premature ejaculation, low libido' },
   { slug: 'hormones-trt', name: 'Hormones & TRT', sub: 'Low testosterone, hormonal imbalance' },
   { slug: 'longevity', name: 'Longevity', sub: 'Preventive care, advanced biomarkers' },
-  { slug: 'diabetes', name: 'Diabetes', sub: 'Blood sugar management, prediabetes, type 2 diabetes' },
 ] as const;
 
 type ConditionSlug = (typeof CONDITIONS)[number]['slug'];
@@ -93,6 +93,34 @@ const contactSchema = z.object({
 
 type ContactFormData = z.infer<typeof contactSchema>;
 
+// ── Session persistence ───────────────────────────────────────────────────────
+
+const SESSION_KEY = 'kyros_booking_v1';
+
+type BookingSession = {
+  step: Step;
+  selectedCondition: ConditionSlug | null;
+  intakeAnswers: Record<string, string>;
+  skippedIntake: boolean;
+  countryCode: string;
+  name: string;
+  gender: string;
+  phoneNumber: string;
+  email: string;
+};
+
+function saveToSession(data: Partial<BookingSession>) {
+  try {
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    const current: Partial<BookingSession> = existing ? JSON.parse(existing) : {};
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, ...data }));
+  } catch {}
+}
+
+function clearSession() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 type Step = 'condition' | 'intake' | 'contact' | 'success';
@@ -112,10 +140,46 @@ export function BookingFlow() {
     handleSubmit,
     setValue,
     watch,
+    reset,
     formState: { errors },
   } = useForm<ContactFormData>({ resolver: zodResolver(contactSchema) });
 
   const selectedGender = watch('gender');
+  const watchedName = watch('name');
+  const watchedPhone = watch('phoneNumber');
+  const watchedEmail = watch('email');
+
+  // Restore from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as Partial<BookingSession>;
+      if (s.step) setStep(s.step);
+      if (s.selectedCondition) setSelectedCondition(s.selectedCondition);
+      if (s.intakeAnswers) setIntakeAnswers(s.intakeAnswers);
+      if (s.skippedIntake !== undefined) setSkippedIntake(s.skippedIntake);
+      if (s.countryCode) setCountryCode(s.countryCode);
+      reset({
+        name: s.name ?? '',
+        gender: (s.gender as ContactFormData['gender']) ?? undefined,
+        phoneNumber: s.phoneNumber ?? '',
+        email: s.email ?? '',
+      });
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist state changes
+  useEffect(() => { saveToSession({ step }); }, [step]);
+  useEffect(() => { saveToSession({ selectedCondition }); }, [selectedCondition]);
+  useEffect(() => { saveToSession({ intakeAnswers }); }, [intakeAnswers]);
+  useEffect(() => { saveToSession({ skippedIntake }); }, [skippedIntake]);
+  useEffect(() => { saveToSession({ countryCode }); }, [countryCode]);
+  useEffect(() => { saveToSession({ name: watchedName ?? '' }); }, [watchedName]);
+  useEffect(() => { saveToSession({ gender: selectedGender }); }, [selectedGender]);
+  useEffect(() => { saveToSession({ phoneNumber: watchedPhone ?? '' }); }, [watchedPhone]);
+  useEffect(() => { saveToSession({ email: watchedEmail ?? '' }); }, [watchedEmail]);
 
   const handleSkipIntake = () => {
     setSkippedIntake(true);
@@ -133,21 +197,21 @@ export function BookingFlow() {
         <p className="font-body text-body text-stone mb-8">
           Choose the condition closest to your concern. You can discuss anything with your doctor.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+        <div className="grid md:grid-cols-2 gap-3 mb-8">
           {CONDITIONS.map((c) => (
             <button
               key={c.slug}
               type="button"
               onClick={() => setSelectedCondition(c.slug)}
               className={[
-                'text-left p-5 rounded-card border-2 transition-all duration-micro',
+                'text-left p-2 pl-3 rounded-card border-2 transition-all duration-micro',
                 selectedCondition === c.slug
                   ? 'border-forest bg-forest/5'
                   : 'border-forest/15 bg-white hover:border-forest/40',
               ].join(' ')}
             >
-              <p className="font-display text-h3 font-medium text-forest">{c.name}</p>
-              <p className="font-body text-caption text-stone mt-1">{c.sub}</p>
+              <p className="font-display md:text-h3 font-medium text-forest">{c.name}</p>
+              <p className="font-body text-[10px] md:text-caption text-stone mt-1">{c.sub}</p>
             </button>
           ))}
         </div>
@@ -192,7 +256,7 @@ export function BookingFlow() {
         <button
             type="button"
             onClick={handleSkipIntake}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2
+            className="md:w-auto sm:w-[50%] inline-flex items-center justify-center px-4 py-2
                        rounded-button border bg-forest  border-forest/30 hover:text-forest text-white font-body font-medium text-body
                        hover:border-forest hover:bg-forest/5 transition-colors duration-micro"
           >
@@ -288,6 +352,7 @@ export function BookingFlow() {
             (err as { detail?: string }).detail ?? 'Submission failed. Please try again.'
           );
         }
+        clearSession();
         setStep('success');
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');

@@ -4,7 +4,6 @@ import { MobileMenu } from './MobileMenu';
 const NAV_LINKS = [
   { href: '/conditions', label: 'Conditions' },
   { href: '/how-it-works', label: 'How it works' },
-  { href: '/pricing', label: 'Pricing' },
   { href: '/our-doctors', label: 'Our doctors' },
   { href: '/faq', label: 'FAQ' },
 ];
@@ -18,7 +17,7 @@ export function Navigation() {
       >
         {/* Logo */}
         <Link href="/" aria-label="Kyros Clinic — home" className="flex font-serif flex-col items-center hover:opacity-90 transition-opacity duration-micro">
-          {/* <Image src="/kyros-logo.png" alt="Kyros Clinic" width={120} height={36} priority /> */}
+          {/* <Image src="/kyros-logo.webp" alt="Kyros Clinic" width={120} height={36} priority /> */}
           <p>Kyros Clinic</p>
           
         </Link>

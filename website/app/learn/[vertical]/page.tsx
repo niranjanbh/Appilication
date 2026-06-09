@@ -18,7 +18,7 @@ export function generateStaticParams() {
 export function generateMetadata({ params }: Params): Metadata {
   const label = CONDITION_DISPLAY_NAMES[params.vertical];
   if (!label) return {};
-  const ogImage = getCondition(params.vertical)?.image ?? '/treatments/HeroDashboard.png';
+  const ogImage = getCondition(params.vertical)?.ogImage ?? '/treatments/HeroDashboard.png';
   return {
     title: `${label} — Clinical Articles`,
     description: `Doctor-reviewed clinical articles on ${label.toLowerCase()} from NMC-registered specialists at Kyros Clinic.`,

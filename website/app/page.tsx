@@ -10,6 +10,7 @@ import { PillarBlock } from '../components/marketing/PillarBlock';
 import { StatBlock } from '../components/marketing/StatBlock';
 import { CTASection } from '../components/marketing/CTASection';
 import { DashboardSection } from '../components/dashboard/DashboardSection';
+import { HomeFAQ } from '../components/marketing/HomeFAQ';
 
 export const metadata: Metadata = {
   title: 'Kyros Clinic — Doctor-first hormonal health',
@@ -78,7 +79,7 @@ export default function HomePage() {
             <p className="font-body text-caption text-stone uppercase tracking-widest mb-4">
               India-first · Doctor-first · Telemedicine
             </p>
-            <h1 className="font-display text-h1 md:text-display font-medium text-forest leading-tight mb-6 max-w-[620px]">
+            <h1 className="font-display text-h1 md:text-[86px]] font-medium text-forest leading-tight mb-6 max-w-[620px]">
               Whatever&apos;s been bothering you, start with a doctor.
             </h1>
             <p className="font-body text-body-lg text-ink max-w-[480px] mb-6 leading-relaxed">
@@ -112,7 +113,7 @@ export default function HomePage() {
           </div>
           <div className="relative w-full h-[300px] lg:h-[400px]">
             <Image
-              src="/treatments/HeroDashboard.png"
+              src="/treatments/HeroDashboard.webp"
               alt="Personalised doctor consultation on Kyros telehealth platform"
               fill
               sizes="(max-width: 768px) 100vw, 50vw"
@@ -266,6 +267,11 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      </FadeIn>
+
+      {/* FAQ */}
+      <FadeIn>
+        <HomeFAQ />
       </FadeIn>
 
       {/* 8. Reflective close */}

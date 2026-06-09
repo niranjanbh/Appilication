@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getCondition, CONDITION_SLUGS } from '../../../lib/conditions';
+import Image from 'next/image';
+import Link from 'next/link';
+import { CONDITIONS, getCondition, CONDITION_SLUGS } from '../../../lib/conditions';
 import { JsonLD } from '../../../components/schema/JsonLD';
 import { PullQuote } from '../../../components/ui/PullQuote';
 import { CTASection } from '../../../components/marketing/CTASection';
@@ -116,33 +118,64 @@ export default function ConditionPage({ params }: Params) {
 
       {/* 1. Hero */}
       <section className={`${heroBg} py-20 px-6`}>
-        <div className="max-w-4xl mx-auto">
-          <p className="font-body text-caption text-stone uppercase tracking-widest mb-4">
-            Kyros Clinic · {condition.name}
-          </p>
-          <h1 className="font-display text-h1 font-medium text-forest leading-tight mb-4">
-            {condition.hook}
-          </h1>
-          <p className="font-body text-body-lg text-ink max-w-2xl mb-8 leading-relaxed">
-            {condition.heroSubline}
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <a
-              href="/book"
-              className="inline-flex items-center justify-center px-7 py-3 rounded-button
-                         bg-forest text-ivory font-body font-medium text-body-lg
-                         hover:bg-jade transition-colors duration-micro"
-            >
-              Talk to a doctor
-            </a>
-            <a
-              href="/how-it-works"
-              className="inline-flex items-center justify-center px-7 py-3 rounded-button
-                         border-2 border-forest text-forest font-body font-medium text-body-lg
-                         hover:bg-forest/8 transition-colors duration-micro"
-            >
-              How it works
-            </a>
+        {/* Condition navigation pills */}
+        <div className="max-w-7xl mx-auto mb-10 overflow-x-auto">
+          <div className="flex gap-2 pb-1 min-w-max">
+            {CONDITIONS.map((c) => (
+              <Link
+                key={c.slug}
+                href={`/conditions/${c.slug}`}
+                className={`px-4 py-1.5 rounded-full font-body text-caption font-medium whitespace-nowrap transition-colors duration-micro
+                  ${c.slug === condition.slug
+                    ? 'bg-forest text-ivory'
+                    : 'border border-forest/30 text-forest hover:bg-forest/8'
+                  }`}
+              >
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+          <div>
+            <p className="font-body text-caption text-stone uppercase tracking-widest mb-4">
+              Kyros Clinic · {condition.name}
+            </p>
+            <h1 className="font-display text-h1 font-medium text-forest leading-tight mb-4">
+              {condition.hook}
+            </h1>
+            <p className="font-body text-body-lg text-ink max-w-2xl mb-8 leading-relaxed">
+              {condition.heroSubline}
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <a
+                href="/book"
+                className="inline-flex items-center justify-center px-7 py-3 rounded-button
+                           bg-forest text-ivory font-body font-medium text-body-lg
+                           hover:bg-jade transition-colors duration-micro"
+              >
+                Talk to a doctor
+              </a>
+              <a
+                href="/how-it-works"
+                className="inline-flex items-center justify-center px-7 py-3 rounded-button
+                           border-2 border-forest text-forest font-body font-medium text-body-lg
+                           hover:bg-forest/8 transition-colors duration-micro"
+              >
+                How it works
+              </a>
+            </div>
+          </div>
+          <div className="relative h-72 md:h-96 w-full">
+            <Image
+              src={condition.image}
+              alt={condition.name}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-contain"
+              priority
+            />
           </div>
         </div>
       </section>

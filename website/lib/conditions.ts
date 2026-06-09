@@ -7,9 +7,11 @@ export type ConditionAudience = 'all' | 'women' | 'men';
 
 export interface ConditionData {
   slug: string;
+  sort: number;
   name: string;
   shortDescription: string;
   image: string;
+  ogImage: string;
   audience: ConditionAudience;
   hook: string;
   reflectiveClose: string;
@@ -26,8 +28,10 @@ export interface ConditionData {
 export const CONDITIONS: ConditionData[] = [
   {
     slug: "thyroid",
+    sort:3,
     name: "Thyroid",
-    image: "/treatments/Thyroid.png",
+    image: "/treatments/Thyroid.webp",
+    ogImage: "/treatments/Thyroid.png",
     audience: "all",
     shortDescription: "Hypothyroidism, Hashimoto's, and thyroid hormone balance.",
     hook: "She thought she was just tired. For three years.",
@@ -85,8 +89,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "weight-management",
+    sort:1,
     name: "Weight Management",
-    image: "/treatments/WeightManagement.png",
+    image: "/treatments/WeightManagement.webp",
+    ogImage: "/treatments/WeightManagement.png",
     audience: "all",
     shortDescription: "Doctor-supervised weight management, including GLP-1 therapy where indicated.",
     hook: "You've tried five things. None of them worked. That isn't a character flaw.",
@@ -138,8 +144,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "pcos",
+    sort:4,
     name: "PCOS",
-    image: "/treatments/PCOS.png",
+    image: "/treatments/PCOS.webp",
+    ogImage: "/treatments/PCOS.png",
     audience: "women",
     shortDescription: "Polycystic ovary syndrome — hormonal, metabolic, and reproductive care.",
     hook: "Your cycle has been a question mark for years. It doesn't have to stay one.",
@@ -193,8 +201,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "skin-and-hair",
+    sort:5,
     name: "Skin & Hair",
-    image: "/treatments/Skin&Hair.png",
+    image: "/treatments/Skin&Hair.webp",
+    ogImage: "/treatments/Skin&Hair.png",
     audience: "all",
     shortDescription: "AGA, adult acne, melasma, and other dermatological conditions.",
     hook: "The mirror has been telling you something for a while.",
@@ -245,8 +255,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "mens-intimate-health",
+    sort:6,
     name: "Men's Intimate Health",
-    image: "/treatments/Wellness.png",
+    image: "/treatments/Wellness.webp",
+    ogImage: "/treatments/Wellness.png",
     audience: "men",
     shortDescription: "ED, premature ejaculation, and related sexual health evaluation.",
     hook: "Most Indian men carry this in silence for years. The silence is the worst part.",
@@ -297,8 +309,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "hormones-trt",
+    sort:7,
     name: "Hormones & TRT",
-    image: "/treatments/TRT.png",
+    image: "/treatments/TRT.webp",
+    ogImage: "/treatments/TRT.png",
     audience: "men",
     shortDescription: "Low testosterone, hormonal imbalance, and supervised TRT.",
     hook: "You don't recognise the man in the photographs anymore.",
@@ -350,8 +364,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "longevity",
+    sort:8,
     name: "Longevity",
-    image: "/treatments/Longevity.png",
+    image: "/treatments/Longevity.webp",
+    ogImage: "/treatments/Longevity.png",
     audience: "all",
     shortDescription: "Cardiometabolic panels, biomarker monitoring, and preventive care.",
     hook: "Your body has been keeping score. You can read it.",
@@ -401,8 +417,10 @@ export const CONDITIONS: ConditionData[] = [
   },
   {
     slug: "diabetes",
+    sort:1,
     name: "Diabetes",
-    image: "/treatments/Diabetes.png",
+    image: "/treatments/Diabetes.webp",
+    ogImage: "/treatments/Diabetes.png",
     audience: "all",
     shortDescription: "Prediabetes, type 2 diabetes, and ongoing blood sugar management.",
     hook: "A borderline reading. A doctor who said 'keep an eye on it.' Nobody followed up.",
@@ -460,7 +478,7 @@ export const CONDITIONS: ConditionData[] = [
     sensitiveCategory: false,
   },
 ];
-
+CONDITIONS.sort((a, b) => a.sort - b.sort);
 export function getCondition(slug: string): ConditionData | undefined {
   return CONDITIONS.find((c) => c.slug === slug);
 }
