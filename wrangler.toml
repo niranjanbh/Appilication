@@ -1,0 +1,8 @@
+name = "kyrosclinic-website"
+compatibility_date = "2024-09-23"
+
+# Static assets served from the Next.js static export output directory.
+# Build command (runs from repo root): pnpm install --frozen-lockfile && pnpm --filter website build
+# Triggered automatically by Cloudflare Git integration on push to main.
+[assets]
+directory = "./website/out"

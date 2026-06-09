@@ -1,31 +1,98 @@
-# Phase 1 production Docker Compose — runs on EC2 t3.small (ap-south-1)
+# Phase 1 production Docker Compose — runs on EC2 t2.micro (1 vCPU, 1 GB RAM, ap-south-1)
+# Postgres and Redis run in-container (no RDS, no ElastiCache — free tier).
 # Managed by systemd unit kyros-backend.service.
 # Secrets are pre-written to /etc/kyros/backend.env by kyros-prepare-env.sh.
+# Requires 2 GB swap enabled on the host (setup step, not done here).
 #
 # Deploy: pull new image tag, then `docker compose -f /etc/kyros/docker-compose.yml up -d`
+#
+# Memory budget (~950 MB of 1 GB used; swap handles the rest):
+#   postgres 200M | redis 64M | api 320M | worker 256M | beat 128M
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kyros
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: kyros
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /etc/kyros/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyros -d kyros"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 80M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cap at 48 MB so it doesn't grow unbounded on a 1 GB host
+    command: >
+      redis-server
+      --maxmemory 48mb
+      --maxmemory-policy allkeys-lru
+      --appendonly no
+      --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 24M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   backend-api:
     image: ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: /etc/kyros/backend.env
     ports:
       - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 320M
         reservations:
-          memory: 256M
+          memory: 150M
+    # 1 worker only — t2.micro (1 GB RAM) cannot support 2
     command: >
       gunicorn app.main:app
-      --workers 2
+      --workers 1
       --worker-class uvicorn.workers.UvicornWorker
       --bind 0.0.0.0:8000
       --timeout 120
@@ -42,18 +109,24 @@ services:
     image: ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: /etc/kyros/backend.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 768M
-        reservations:
           memory: 256M
+        reservations:
+          memory: 100M
+    # concurrency=2 to stay within memory budget
     command: >
       celery -A app.worker.celery_app worker
       --loglevel=INFO
       --queues=ocr,notifications,reports,payments,maintenance,default
-      --concurrency=8
-      --max-tasks-per-child=200
+      --concurrency=2
+      --max-tasks-per-child=50
     logging:
       driver: "json-file"
       options:
@@ -66,12 +139,17 @@ services:
     env_file: /etc/kyros/backend.env
     volumes:
       - /var/lib/kyros/beat:/app/beat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
         reservations:
-          memory: 64M
+          memory: 48M
     command: >
       celery -A app.worker.celery_app beat
       --loglevel=INFO
@@ -81,3 +159,7 @@ services:
       options:
         max-size: "20m"
         max-file: "3"
+
+volumes:
+  postgres_data:
+    name: kyros_postgres_data

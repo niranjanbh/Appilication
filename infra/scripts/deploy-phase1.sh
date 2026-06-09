@@ -2,9 +2,9 @@
 # Phase 1 EC2 deployment script — run from CI after image push.
 #
 # Prerequisites:
-#   - CI runner has SSH access to EC2 via bastion (SSH_PRIVATE_KEY, EC2_HOST, BASTION_HOST set)
+#   - CI runner has SSH access to EC2 (SSH_PRIVATE_KEY, EC2_HOST set)
 #   - ECR image already pushed: ECR_REGISTRY/kyros-backend:IMAGE_TAG
-#   - RDS is accessible from the EC2 host
+#   - Postgres runs in-container (no RDS); no snapshot step needed
 #
 # Usage: ./deploy-phase1.sh <image_tag>
 
@@ -24,11 +24,7 @@ DEPLOY_USER="ec2-user"
 
 log() { echo "[deploy-phase1] $(date -u +%H:%M:%S) $*"; }
 
-# ── Step 1: RDS snapshot before migration ───────────────────────────────────
-log "Creating pre-deploy RDS snapshot..."
-bash "$(dirname "$0")/snapshot-before-deploy.sh" "${IMAGE_TAG}"
-
-# ── Step 2: Run Alembic migration on EC2 ────────────────────────────────────
+# ── Step 1: Run Alembic migration on EC2 ────────────────────────────────────
 log "Running migration: alembic upgrade head (image=${IMAGE_TAG})"
 
 SSH_CMD="ssh"
@@ -40,11 +36,10 @@ $SSH_CMD "${DEPLOY_USER}@${EC2_HOST}" bash <<REMOTE
   set -euo pipefail
   aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
   docker pull ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG}
-  # Run migration using same secrets as production
-  source /etc/kyros/backend.env
+  # Run migration against in-container Postgres via the compose network
   docker run --rm \
     --env-file /etc/kyros/backend.env \
-    --network host \
+    --network kyros_freetier_network \
     ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG} \
     alembic upgrade head
 REMOTE
