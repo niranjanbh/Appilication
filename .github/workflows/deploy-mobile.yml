@@ -53,7 +53,7 @@ jobs:
         run: |
           eas update --auto --branch production --message "deploy: ${{ github.sha }}"
         env:
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
 
   # ── Full native build + store submit on version tag ─────────────────────────
@@ -90,7 +90,7 @@ jobs:
         working-directory: mobile
         run: eas build --platform all --non-interactive --auto-submit
         env:
-          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
           EXPO_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.EXPO_PUBLIC_RAZORPAY_KEY_ID }}
           # Android keystore + iOS certs are managed by EAS credentials — no manual setup needed
           # Run `eas credentials` locally once to configure signing.
