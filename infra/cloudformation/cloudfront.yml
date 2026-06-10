@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Kyros CloudFront distribution for public website (kyros.clinic)"
+Description: "Kyros CloudFront distribution for public website (kyrosclinic.com)"
 
 Parameters:
   Environment:
@@ -17,7 +17,7 @@ Parameters:
     Description: "ACM certificate ARN in us-east-1 (required for CloudFront)"
   HostedZoneName:
     Type: String
-    Default: "kyros.clinic"
+    Default: "kyrosclinic.com"
 
 Resources:
 
@@ -42,8 +42,8 @@ Resources:
         DefaultRootObject: index.html
 
         Aliases:
-          - !If [IsProd, "kyros.clinic", !Sub "staging.kyros.clinic"]
-          - !If [IsProd, "www.kyros.clinic", !Ref AWS::NoValue]
+          - !If [IsProd, "kyrosclinic.com", !Sub "staging.kyrosclinic.com"]
+          - !If [IsProd, "www.kyrosclinic.com", !Ref AWS::NoValue]
 
         ViewerCertificate:
           AcmCertificateArn: !Ref AcmCertificateArn

@@ -9,6 +9,7 @@ No PHI in log messages — only recipient hash and subject.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -63,3 +64,22 @@ def send_email(
     except Exception:
         logger.exception("email.exception", email_hash=_email_hash(to_email))
         return False
+
+
+async def send_email_async(
+    *,
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str | None = None,
+) -> bool:
+    """Async wrapper for send_email — runs the blocking smtplib call in a
+    worker thread so request handlers can await it without stalling the loop.
+    """
+    return await asyncio.to_thread(
+        send_email,
+        to_email=to_email,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+    )

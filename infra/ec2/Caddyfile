@@ -6,9 +6,9 @@
 # Cert/key are placed at /etc/kyros/caddy-certs/cert.pem and key.pem.
 # Set Cloudflare SSL/TLS mode to "Full (strict)" once this is live.
 #
-# Replace api.kyros.clinic with the real API hostname before deploying.
+# Replace api.kyrosclinic.com with the real API hostname before deploying.
 
-api.kyros.clinic {
+api.kyrosclinic.com {
 	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
 
 	encode gzip
@@ -20,6 +20,6 @@ api.kyros.clinic {
 	}
 }
 
-http://api.kyros.clinic {
+http://api.kyrosclinic.com {
 	redir https://{host}{uri} permanent
 }

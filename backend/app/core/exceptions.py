@@ -59,3 +59,8 @@ class OtpCooldownError(KyrosDomainError):
 class OtpMaxAttemptsError(KyrosDomainError):
     status_code = 429
     detail = "otp_max_attempts"
+
+
+class RateLimitedError(KyrosDomainError):
+    status_code = 429
+    detail = "rate_limited"

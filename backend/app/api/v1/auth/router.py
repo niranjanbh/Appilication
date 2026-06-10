@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import DbSession, Redis
 from app.api.v1.auth.schemas import (
@@ -14,12 +14,18 @@ from app.api.v1.auth.schemas import (
     VerifyOtpRequest,
 )
 from app.core.config import settings
+from app.core.ratelimit import rate_limit
 from app.services import auth as auth_service
 
 router = APIRouter(tags=["auth"])
 
 
-@router.post("/signup", response_model=SignupResponse, status_code=201)
+@router.post(
+    "/signup",
+    response_model=SignupResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("auth_signup", limit=10))],
+)
 async def signup(
     body: SignupRequest,
     request: Request,
@@ -33,6 +39,7 @@ async def signup(
         email=body.email,
         name=body.name,
         password=body.password,
+        channel=body.channel,
         ip_address=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent", ""),
         request_id=getattr(request.state, "request_id", ""),
@@ -47,7 +54,11 @@ async def signup(
     )
 
 
-@router.post("/send-otp", response_model=SendOtpResponse)
+@router.post(
+    "/send-otp",
+    response_model=SendOtpResponse,
+    dependencies=[Depends(rate_limit("auth_send_otp", limit=5))],
+)
 async def send_otp(
     body: SendOtpRequest,
     request: Request,
@@ -58,6 +69,7 @@ async def send_otp(
         db,
         redis,
         phone=body.phone,
+        channel=body.channel,
         ip_address=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent", ""),
         request_id=getattr(request.state, "request_id", ""),
@@ -65,7 +77,11 @@ async def send_otp(
     return SendOtpResponse(message="OTP sent.")
 
 
-@router.post("/verify-otp", response_model=TokenResponse)
+@router.post(
+    "/verify-otp",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("auth_verify_otp", limit=10))],
+)
 async def verify_otp(
     body: VerifyOtpRequest,
     request: Request,
@@ -88,7 +104,11 @@ async def verify_otp(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("auth_login", limit=10))],
+)
 async def login(
     body: LoginRequest,
     request: Request,
@@ -111,7 +131,11 @@ async def login(
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("auth_refresh", limit=30))],
+)
 async def refresh(
     body: RefreshRequest,
     request: Request,

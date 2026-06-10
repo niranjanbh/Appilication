@@ -19,7 +19,7 @@ celery_app.conf.update(
     task_track_started=True,
     beat_schedule={
         "generate-pre-consult-reports-tomorrow": {
-            "task": "kyros.clinical.generate_pre_consult_reports_for_tomorrow",
+            "task": "kyrosclinic.comal.generate_pre_consult_reports_for_tomorrow",
             "schedule": crontab(hour=4, minute=0),  # 4 AM UTC ≈ 9:30 AM IST
         },
         "rollup-daily-metrics": {

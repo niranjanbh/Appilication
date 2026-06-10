@@ -67,7 +67,7 @@ SEO/AISO is the deepest Tier-1 lever and the foundational sub-₹300 CAC engine.
 
 What this skill needs to hold about this channel:
 
-- **Architecture in brief:** condition-hub site (`/conditions/{vertical}/`, `/learn/{vertical}/{query-slug}/`, plus `/{city}/{vertical}-specialist-online/` city pages), all authority into kyros.clinic, three intent layers (Learn → Decide → Act), mandatory internal-linking rule (every article links to its pillar + 2 related + 1 conversion page).
+- **Architecture in brief:** condition-hub site (`/conditions/{vertical}/`, `/learn/{vertical}/{query-slug}/`, plus `/{city}/{vertical}-specialist-online/` city pages), all authority into kyrosclinic.com, three intent layers (Learn → Decide → Act), mandatory internal-linking rule (every article links to its pillar + 2 related + 1 conversion page).
 - **Velocity:** 20 articles by M3, 50 by M6, ~200 by M12, then 8–12/month — *only* with genuine doctor-added value per page (thin/scaled content now drags whole-domain authority).
 - **E-E-A-T:** doctor byline + visible NMC reg #, specialty match, "medically reviewed [date]", Indian primary-source references, schema (`MedicalCondition`, `MedicalWebPage`, `Physician`), no AI body copy without doctor attestation.
 - **AISO reality:** AI Overviews appear on ~48.75% of healthcare queries (Conductor 2026); ~90% of brands have zero AI mentions; AI-referred visitors convert ~14.2% vs ~2.8% organic. Citation is earned via cross-platform presence (4+ platforms ≈ 2.8× citation odds) — and **YouTube is the single strongest correlate with health AI-Overview visibility**, which is why the YouTube channel below (Tier 2.5) is also a primary SEO asset, not just amplification.
@@ -154,7 +154,7 @@ Each city gets a dedicated GBP listing once doctor coverage is real (do not list
 
 **Target publications:** Indian Express health vertical, The Hindu Wellness, Mint Lounge, Femina Health, YourStory's HealthBytes, The Ken (HealthCheck newsletter).
 
-**Pitch frame:** doctor-bylined explainers with kyros.clinic backlink. Topics that travel: PCOS productivity loss research, thyroid prevalence in Indian women, the GLP-1 landscape post-generic launch, men's hormonal health beyond the gym-bro stereotype.
+**Pitch frame:** doctor-bylined explainers with kyrosclinic.com backlink. Topics that travel: PCOS productivity loss research, thyroid prevalence in Indian women, the GLP-1 landscape post-generic launch, men's hormonal health beyond the gym-bro stereotype.
 
 **Cadence:** 1 syndicated essay/month sustained.
  
@@ -175,7 +175,7 @@ Each city gets a dedicated GBP listing once doctor coverage is real (do not list
   **Engagement pattern (Allara's playbook, India translation):**
 - Founder/doctor participation: earnest, no solicitation
 - Never DM patients
-- Never link without value (don't drop kyros.clinic in every comment)
+- Never link without value (don't drop kyrosclinic.com in every comment)
 - Doctor AMAs with NMC reg # disclosed
 - Patience: 6-month curve before community recognizes Kyros as credible
   **Telegram:** smaller, more closed. Monitor but don't initiate. PCOS, thyroid, and Mounjaro Telegram groups exist; engagement requires invitation.

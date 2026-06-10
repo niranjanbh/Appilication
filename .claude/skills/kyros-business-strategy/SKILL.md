@@ -206,7 +206,7 @@ The pay-per-consult model exists to acquire patients. The annual program is wher
 
 ### Phase A — Pure Telehealth (Year 1, public site visible)
 
-What patients see on kyros.clinic: doctor consultations, lab orders, prescriptions, dashboards, education content, wellness reminders. This is the only phase that gets surfaced on the public website.
+What patients see on kyrosclinic.com: doctor consultations, lab orders, prescriptions, dashboards, education content, wellness reminders. This is the only phase that gets surfaced on the public website.
 
 Operational scope:
 - Launch flagship vertical: **thyroid** (most legal headroom under Schedule J — only "goitre" is enumerated)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     otp_ttl_seconds: int = 300
     otp_resend_cooldown_seconds: int = 60
     otp_max_attempts: int = 5
+    # Deliver the OTP to the user's registered email when WhatsApp fails
+    # (delivery chain: WhatsApp → email → SMS)
+    otp_email_fallback_enabled: bool = True
+
+    # Abuse protection — per-IP fixed-window limits on auth endpoints
+    rate_limit_enabled: bool = True
+
+    # Startup safety — refuse to serve traffic against an outdated schema
+    startup_schema_check: bool = True
 
     # authkey.io — OTP (WhatsApp + SMS) and WhatsApp utility templates
     authkey_api_key: str = ""
@@ -82,8 +91,8 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_user: str = ""
     smtp_password: str = ""
-    email_from: str = "noreply@kyros.clinic"
-    admin_alert_email: str = "admin@kyros.clinic"
+    email_from: str = "contact@kyrosclinic.com"
+    admin_alert_email: str = "admin@kyrosclinic.com"
 
     # ABDM / ABHA sandbox
     abha_client_id: str = ""
@@ -130,6 +139,29 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("Secret must be at least 32 characters")
         return v
+
+    @model_validator(mode="after")
+    def _refuse_unsafe_production_config(self) -> Settings:
+        """Security rule 8: production refuses to start with placeholder values."""
+        if self.app_env != "production":
+            return self
+        problems: list[str] = []
+        if self.jwt_secret.startswith("CHANGEME"):
+            problems.append("KYROS_JWT_SECRET is still the placeholder value")
+        if self.otp_secret.startswith("CHANGEME"):
+            problems.append("KYROS_OTP_SECRET is still the placeholder value")
+        if self.debug:
+            problems.append("KYROS_DEBUG must be false in production")
+        origins = self.cors_allowed_origins
+        if isinstance(origins, list) and any(
+            "localhost" in o or "127.0.0.1" in o for o in origins
+        ):
+            problems.append("KYROS_CORS_ALLOWED_ORIGINS contains localhost origins")
+        if problems:
+            raise ValueError(
+                "Refusing to start in production: " + "; ".join(problems)
+            )
+        return self
 
 
 settings = Settings()

@@ -1,6 +1,6 @@
 """OCR Celery tasks — lab report parsing via Google Document AI.
 
-Task name:  kyros.clinical.parse_lab_report  (routes to the 'ocr' queue)
+Task name:  kyrosclinic.comal.parse_lab_report  (routes to the 'ocr' queue)
 Idempotency: exits early if parsed_json is already populated.
 Retries:    up to 5 times with exponential backoff (max 10 min between retries).
 """
@@ -24,7 +24,7 @@ class DocumentAITransientError(Exception):
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="kyros.clinical.parse_lab_report",
+    name="kyrosclinic.comal.parse_lab_report",
     bind=True,
     autoretry_for=(ConnectionError, TimeoutError, DocumentAITransientError),
     retry_backoff=True,
@@ -159,7 +159,7 @@ def _maybe_transient(exc: Exception) -> Exception:
     return exc
 
 
-@celery_app.task(name="kyros.clinical.reconcile_pending_lab_ocr")  # type: ignore[untyped-decorator]
+@celery_app.task(name="kyrosclinic.comal.reconcile_pending_lab_ocr")  # type: ignore[untyped-decorator]
 def reconcile_pending_lab_ocr() -> dict[str, Any]:
     """Beat task (every 30 min): re-dispatch OCR for reports stuck in ocr_pending."""
     return asyncio.run(_reconcile_async())

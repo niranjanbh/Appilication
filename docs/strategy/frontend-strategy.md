@@ -1262,7 +1262,7 @@ The clinical document surface. Designed to feel like a real prescription, not a 
 6. **Medications.** Each medication as a structured row (see below).
 7. **Instructions block.** Doctor's free-text instructions in DM Sans 15px Ink. ("Take levothyroxine on empty stomach, 30 minutes before breakfast. Avoid taking with calcium or iron supplements.")
 8. **Refill / duration info.** DM Sans 14px Forest "Valid for 30 days" + Forest text link "Request refill".
-9. **Footer.** "Original digital prescription. Verify at kyros.clinic/verify/[ID]" (DM Sans 12px Stone). This is the public verification surface for pharmacists.
+9. **Footer.** "Original digital prescription. Verify at kyrosclinic.com/verify/[ID]" (DM Sans 12px Stone). This is the public verification surface for pharmacists.
 
 ### 8.3 Medication row anatomy
 

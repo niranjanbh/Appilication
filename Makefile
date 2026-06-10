@@ -222,7 +222,7 @@ build-frontend: ## Build all three frontends
 build-web: ## Export the patient web portal (RNW) as a static site to mobile/dist/
 	$(SAY) "Building patient web portal (React Native Web)…"
 	cd mobile && pnpm build:web
-	$(OK) "Static site written to mobile/dist/ — deploy to app.kyros.clinic via S3+CloudFront"
+	$(OK) "Static site written to mobile/dist/ — deploy to app.kyrosclinic.com via S3+CloudFront"
 	@echo "  Deployment: aws s3 sync mobile/dist/ s3://kyros-web-portal --delete"
 	@echo "  Then invalidate the CloudFront distribution cache."
 
@@ -231,6 +231,11 @@ openapi: ## Regenerate openapi.json from the running backend
 	$(BACKEND_RUN) python scripts/generate_openapi.py
 	@echo "→ openapi.json written to backend/openapi.json"
 	@echo "→ Next: make generate-clients (to regenerate TS types for frontends)"
+
+.PHONY: postman
+postman: ## Regenerate the Postman collection from openapi.json
+	@if [ ! -f backend/openapi.json ]; then echo "Run 'make openapi' first."; exit 1; fi
+	cd backend && python3 scripts/openapi_to_postman.py
 
 .PHONY: generate-clients
 generate-clients: ## Regenerate TS API clients for frontends from openapi.json

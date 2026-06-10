@@ -171,7 +171,7 @@ def render_prescription_html(
   <div class="header">
     <div>
       <div class="clinic-name">Kyros Clinic</div>
-      <div class="clinic-sub">Digital Health Clinic · kyros.clinic</div>
+      <div class="clinic-sub">Digital Health Clinic · kyrosclinic.com</div>
     </div>
     <div class="header-right">
       <div>Prescription No: <span class="rx-id">RX-{str(prescription.id).upper()[:8]}</span></div>
@@ -199,7 +199,7 @@ def render_prescription_html(
   {general_section}
 
   <div class="footer">
-    Original digital prescription. Verify at kyros.clinic/verify/{prescription.id}<br>
+    Original digital prescription. Verify at kyrosclinic.com/verify/{prescription.id}<br>
     This prescription is valid for the dispensing of the listed medications only. Not valid for Schedule X / narcotic substances.
   </div>
 </div>

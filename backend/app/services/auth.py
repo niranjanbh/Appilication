@@ -63,8 +63,73 @@ def _otp_debug_key(phone: str) -> str:
     return f"otp:phone:{phone}:debug"
 
 
-async def _issue_otp(redis: RedisClient, phone: str) -> str:
-    """Generate OTP, store HMAC hash in Redis, deliver via WhatsApp (SMS fallback)."""
+async def _send_otp_email(email: str, code: str) -> bool:
+    """Deliver the OTP to the user's registered email. Non-raising.
+
+    Sends directly (not via the Celery email task) — OTP is time-sensitive and
+    the task's dedup key would swallow legitimate resends. The subject carries
+    no code; the OTP appears only in the body.
+    """
+    from app.integrations.email import send_email_async
+    from app.services.notifications import render_email
+
+    return await send_email_async(
+        to_email=email,
+        subject="Your Kyros verification code",
+        html_body=render_email(
+            "otp_code", otp=code, ttl_minutes=str(settings.otp_ttl_seconds // 60)
+        ),
+    )
+
+
+_OTP_CHANNEL_ORDER = ("whatsapp", "email", "sms")
+
+
+async def _deliver_otp(
+    phone: str, code: str, *, email: str | None, preferred: str | None
+) -> str | None:
+    """Try delivery channels in order, preferred one first. Returns the channel
+    that delivered, or None if every channel failed.
+    """
+    order = list(_OTP_CHANNEL_ORDER)
+    if preferred in order:
+        order.remove(preferred)
+        order.insert(0, preferred)
+
+    for channel in order:
+        if channel == "whatsapp":
+            delivered = await authkey.send_otp_whatsapp(phone, code)
+        elif channel == "email":
+            if not email or not settings.otp_email_fallback_enabled:
+                continue
+            delivered = await _send_otp_email(email, code)
+        else:
+            delivered = await authkey.send_otp_sms(phone, code)
+        if delivered:
+            return channel
+    return None
+
+
+async def _issue_otp(
+    redis: RedisClient,
+    phone: str,
+    *,
+    email: str | None = None,
+    preferred_channel: str | None = None,
+) -> str:
+    """Generate OTP, store HMAC hash in Redis, and deliver it.
+
+    Default delivery chain: WhatsApp → email (if registered) → SMS. A preferred
+    channel moves to the front; the rest remain as fallback. All channels carry
+    the same code, so verification is identical regardless of how it arrived.
+    """
+    if preferred_channel == "email" and (
+        not email or not settings.otp_email_fallback_enabled
+    ):
+        from app.core.exceptions import BusinessRuleError
+
+        raise BusinessRuleError("email_channel_unavailable")
+
     if await redis.exists(_otp_cooldown_key(phone)):
         raise OtpCooldownError()
 
@@ -79,10 +144,11 @@ async def _issue_otp(redis: RedisClient, phone: str) -> str:
             pipe.set(_otp_debug_key(phone), code, ex=settings.otp_ttl_seconds)
         await pipe.execute()
 
-    # Try WhatsApp first; fall back to SMS if delivery fails
-    delivered = await authkey.send_otp_whatsapp(phone, code)
-    if not delivered:
-        await authkey.send_otp_sms(phone, code)
+    channel = await _deliver_otp(phone, code, email=email, preferred=preferred_channel)
+    if channel is not None:
+        logger.info("otp_delivered", channel=channel)
+    else:
+        logger.warning("otp_delivery_failed_all_channels")
 
     return code
 
@@ -154,6 +220,7 @@ async def signup(
     ip_address: str,
     user_agent: str,
     request_id: str,
+    channel: str | None = None,
 ) -> SignupResult:
     from app.core.security import hash_password
 
@@ -195,7 +262,7 @@ async def signup(
     await write_audit(db, ctx, action="signup", resource_type="user", resource_id=user.id, allowed=True)
 
     try:
-        await _issue_otp(redis, phone)
+        await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
     except OtpCooldownError:
         pass  # OTP already in flight from a prior attempt; user can use the previously sent code
     return SignupResult(user_id=user.id, phone=phone)
@@ -209,6 +276,7 @@ async def send_otp(
     ip_address: str,
     user_agent: str,
     request_id: str,
+    channel: str | None = None,
 ) -> None:
     user = await users_repo.get_by_phone(db, phone)
     if user is None:
@@ -224,7 +292,7 @@ async def send_otp(
         request_id=request_id,
     )
     await write_audit(db, ctx, action="send_otp", resource_type="user", resource_id=user.id, allowed=True)
-    await _issue_otp(redis, phone)
+    await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
 
 
 async def verify_otp(
@@ -298,7 +366,7 @@ async def login(
 
     if not user.phone_verified:
         try:
-            await _issue_otp(redis, user.phone or "")
+            await _issue_otp(redis, user.phone or "", email=user.email)
         except OtpCooldownError:
             pass  # OTP already in flight; caller still needs to verify, not re-request
         await write_audit(

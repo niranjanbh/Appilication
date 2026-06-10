@@ -553,7 +553,7 @@ _BASE_CLOSE = """
                          font-size:11px;color:#6B6560;text-align:center;line-height:1.6;">
                 Kyros Clinic · Telemedicine Platform<br>
                 This is an automated message. Please do not reply directly to this email.<br>
-                <a href="https://kyros.health/unsubscribe" style="color:#2D7A5F;">
+                <a href="https://kyrosclinic.com/unsubscribe" style="color:#2D7A5F;">
                   Manage notification preferences
                 </a>
               </p>
@@ -574,7 +574,7 @@ def _body_p(text: str) -> str:
     )
 
 
-def _cta_button(label: str, url: str = "https://kyros.health/app") -> str:
+def _cta_button(label: str, url: str = "https://app.kyrosclinic.com") -> str:
     return (
         f'<p style="text-align:center;margin:24px 0 8px 0;">'
         f'<a href="{url}" style="display:inline-block;background:#E8A430;color:#0F3D2E;'
@@ -695,10 +695,33 @@ def _tpl_medication_reminder(*, first_name: str) -> str:
     )
 
 
+def _tpl_otp_code(*, otp: str, ttl_minutes: str) -> str:
+    return _render(
+        title="Your Kyros verification code",
+        heading="Verification Code",
+        body_html=(
+            _body_p("Use this code to verify your Kyros account:")
+            + (
+                f'<p style="text-align:center;margin:24px 0;font-family:Arial,Helvetica,'
+                f"sans-serif;font-size:32px;font-weight:700;letter-spacing:8px;"
+                f'color:#0F3D2E;">{otp}</p>'
+            )
+            + _body_p(
+                f"The code is valid for {ttl_minutes} minutes. "
+                "Never share it with anyone — Kyros staff will never ask for it."
+            )
+            + _body_p(
+                "If you didn&#39;t request this code, you can safely ignore this email."
+            )
+        ),
+    )
+
+
 _EMAIL_TEMPLATES: dict[str, Callable[..., str]] = {
     "appointment_confirmation": _tpl_appointment_confirmation,
     "appointment_reminder": _tpl_appointment_reminder,
     "lab_result_ready": _tpl_lab_result_ready,
     "pre_consult_report_ready": _tpl_pre_consult_report_ready,
     "medication_reminder": _tpl_medication_reminder,
+    "otp_code": _tpl_otp_code,
 }

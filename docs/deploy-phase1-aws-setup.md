@@ -40,7 +40,7 @@ If you want to shave this further, t3.micro (1 GB RAM, ~$7.5/month) also works w
 2. Use **AWS CloudShell** for every command below (Console → search "CloudShell" → open).
    It's free, pre-authenticated, runs bash, and avoids all the Windows/PowerShell
    quoting headaches with JSON. All commands in this guide are bash.
-3. Your domain (`kyros.clinic`) is already on Cloudflare.
+3. Your domain (`kyrosclinic.com`) is already on Cloudflare.
 4. Region is **ap-south-1 (Mumbai)** everywhere — this is a hard data-residency
    requirement (`.claude/rules/security.md` #14).
 
@@ -323,7 +323,7 @@ cat > /tmp/backend-secrets.json <<EOF
   "KYROS_OTP_MAX_ATTEMPTS": "5",
   "KYROS_OTP_RESEND_COOLDOWN_SECONDS": "60",
 
-  "KYROS_CORS_ALLOWED_ORIGINS": "https://kyros.clinic,https://www.kyros.clinic,https://portal.kyros.clinic",
+  "KYROS_CORS_ALLOWED_ORIGINS": "https://kyrosclinic.com,https://www.kyrosclinic.com,https://portal.kyrosclinic.com",
 
   "KYROS_AWS_REGION": "${AWS_REGION}",
   "KYROS_S3_BUCKET_PHI": "kyros-phi-production",
@@ -354,7 +354,7 @@ cat > /tmp/backend-secrets.json <<EOF
   "KYROS_SMTP_PORT": "587",
   "KYROS_SMTP_USER": "",
   "KYROS_SMTP_PASSWORD": "",
-  "KYROS_EMAIL_FROM": "noreply@kyros.clinic",
+  "KYROS_EMAIL_FROM": "noreply@kyrosclinic.com",
 
   "KYROS_SENTRY_DSN": "",
   "KYROS_SENTRY_ENVIRONMENT": "production",
@@ -524,7 +524,7 @@ write_remote_file /tmp/repo/infra/ec2/kyros-backend.service /etc/systemd/system/
 write_remote_file /tmp/repo/infra/docker/postgres/init.sql /etc/kyros/postgres-init.sql 644
 ```
 
-(Edit `infra/ec2/Caddyfile` to use your real API hostname — e.g. `api.kyros.clinic` —
+(Edit `infra/ec2/Caddyfile` to use your real API hostname — e.g. `api.kyrosclinic.com` —
 and the cert paths from Phase 7 before copying it.)
 
 Then on the EC2 (back in the SSM session), seed the image tag and start the stack:
@@ -555,7 +555,7 @@ sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs
 
 2. **Origin CA certificate**: Cloudflare dashboard → your domain → **SSL/TLS → Origin
    Server → Create Certificate**. Accept defaults (RSA, 15-year validity, hostnames
-   `*.kyros.clinic` + `kyros.clinic`). Cloudflare shows you a certificate and private
+   `*.kyrosclinic.com` + `kyrosclinic.com`). Cloudflare shows you a certificate and private
    key — copy both.
 
 3. Write them to the EC2 (in the SSM session):
@@ -568,7 +568,7 @@ sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs
    ```
 
 4. Make sure `/etc/kyros/Caddyfile` (copied in Phase 6) has the right hostname
-   (`api.kyros.clinic`), then restart:
+   (`api.kyrosclinic.com`), then restart:
 
    ```bash
    sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d
@@ -581,8 +581,8 @@ sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs
 6. Verify:
 
    ```bash
-   curl -sf https://api.kyros.clinic/healthz && echo OK
-   curl -sf https://api.kyros.clinic/readyz
+   curl -sf https://api.kyrosclinic.com/healthz && echo OK
+   curl -sf https://api.kyrosclinic.com/readyz
    ```
 
 ---
@@ -619,8 +619,8 @@ Trigger the first deploy by pushing to `main` (or re-running the workflow). It w
 ## Verification checklist
 
 - [ ] `aws budgets describe-budgets --account-id $ACCOUNT_ID` shows `kyros-monthly`.
-- [ ] `curl https://api.kyros.clinic/healthz` → `200`.
-- [ ] `curl https://api.kyros.clinic/readyz` → `{"db": true, "redis": true}`.
+- [ ] `curl https://api.kyrosclinic.com/healthz` → `200`.
+- [ ] `curl https://api.kyrosclinic.com/readyz` → `{"db": true, "redis": true}`.
 - [ ] `aws ssm start-session --target $INSTANCE_ID` works without any inbound SG rule
       for port 22.
 - [ ] `sudo docker compose -f /etc/kyros/docker-compose.yml ps` shows postgres, redis,

@@ -1,8 +1,8 @@
 """Pre-consultation report Celery tasks.
 
 Tasks:
-  kyros.clinical.generate_pre_consultation_report    — per-consultation, on-demand or scheduled
-  kyros.clinical.generate_pre_consult_reports_for_tomorrow — daily cron fan-out
+  kyrosclinic.comal.generate_pre_consultation_report    — per-consultation, on-demand or scheduled
+  kyrosclinic.comal.generate_pre_consult_reports_for_tomorrow — daily cron fan-out
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ logger = structlog.get_logger(__name__)
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="kyros.clinical.generate_pre_consultation_report",
+    name="kyrosclinic.comal.generate_pre_consultation_report",
     bind=True,
     autoretry_for=(ConnectionError, TimeoutError, OSError),
     retry_backoff=True,
@@ -58,7 +58,7 @@ def generate_pre_consultation_report(self: Any, consultation_id: str) -> dict[st
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="kyros.clinical.generate_pre_consult_reports_for_tomorrow",
+    name="kyrosclinic.comal.generate_pre_consult_reports_for_tomorrow",
     bind=True,
     acks_late=True,
 )

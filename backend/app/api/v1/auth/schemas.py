@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
 _E164_RE = re.compile(r"^\+[1-9]\d{7,14}$")
+
+# Preferred OTP delivery channel. None → automatic (WhatsApp → email → SMS).
+# The other channels remain as fallback if the preferred one fails to deliver.
+OtpChannel = Literal["whatsapp", "email", "sms"]
 
 
 def _validate_e164(phone: str) -> str:
@@ -18,6 +23,7 @@ class SignupRequest(BaseModel):
     phone: str
     email: str
     password: str
+    channel: OtpChannel | None = None
 
     @field_validator("phone")
     @classmethod
@@ -40,6 +46,7 @@ class SignupResponse(BaseModel):
 
 class SendOtpRequest(BaseModel):
     phone: str
+    channel: OtpChannel | None = None
 
     @field_validator("phone")
     @classmethod

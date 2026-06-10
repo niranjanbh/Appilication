@@ -373,7 +373,7 @@ backend/
 - **Pydantic schemas:** `XxxCreate` for inbound create, `XxxUpdate` for inbound update, `XxxRead` for outbound, `XxxAdminRead` for outbound with extra fields visible only to admins. Per-role variants live in the same file when small, in role-specific subdirectories when they grow.
 - **Repository functions:** verb + noun + scope. `get_consultation_for_patient(consult_id, patient_user_id)`, `list_consultations_for_doctor_panel(doctor_id, ...)`, `list_consultations_for_coordinator(coordinator_id, assigned_patient_ids, ...)`. Scope is a parameter, not an implicit context.
 - **Service functions:** verb + noun, no scope suffix. The service trusts the router to have applied auth; the service's job is orchestration, not auth.
-- **Celery task names:** `kyros.<domain>.<verb_noun>` for routing clarity. `kyros.clinical.parse_lab_report`, `kyros.clinical.generate_pre_consult_report`, `kyros.notification.send_push`, `kyros.payment.reconcile`.
+- **Celery task names:** `kyros.<domain>.<verb_noun>` for routing clarity. `kyrosclinic.comal.parse_lab_report`, `kyrosclinic.comal.generate_pre_consult_report`, `kyros.notification.send_push`, `kyros.payment.reconcile`.
 
 ### Why repositories, given FastAPI examples usually skip them
 
@@ -524,7 +524,7 @@ In order (outermost first):
 1. `RequestIDMiddleware`: reads `X-Request-ID` header or generates a UUID4; attaches to `structlog` context and `request.state.request_id`. Sets response header.
 2. `AccessLogMiddleware`: logs `{method, path, status, duration_ms, request_id}` at INFO. Skips paths matching `/healthz`, `/readyz`. Never logs request or response bodies.
 3. `CORSMiddleware`: configured per environment. Production allows only the production website + mobile API domain.
-4. `TrustedHostMiddleware` (production only): enforces Host header matches `api.kyros.clinic`.
+4. `TrustedHostMiddleware` (production only): enforces Host header matches `api.kyrosclinic.com`.
 
 We deliberately do not put auth in middleware. Auth is per-route via dependencies because routes have different role/scope requirements and some (public, webhooks, healthchecks) skip it entirely. Middleware-based auth would require allowlists that drift.
 
@@ -1138,7 +1138,7 @@ KYROS_SMTP_HOST=mailhog
 KYROS_SMTP_PORT=1025
 KYROS_SMTP_USER=
 KYROS_SMTP_PASSWORD=
-KYROS_EMAIL_FROM=noreply@kyros.clinic
+KYROS_EMAIL_FROM=noreply@kyrosclinic.com
 
 # Sentry
 KYROS_SENTRY_DSN=
@@ -1859,8 +1859,8 @@ celery_app.conf.result_expires = 86400
 
 # Task routing by name prefix
 celery_app.conf.task_routes = {
-    "kyros.clinical.parse_lab_report":         {"queue": "ocr"},
-    "kyros.clinical.generate_pre_consult_*":   {"queue": "reports"},
+    "kyrosclinic.comal.parse_lab_report":         {"queue": "ocr"},
+    "kyrosclinic.comal.generate_pre_consult_*":   {"queue": "reports"},
     "kyros.notification.*":                    {"queue": "notifications"},
     "kyros.payment.*":                         {"queue": "payments"},
     "kyros.video.*":                           {"queue": "default"},
@@ -1898,7 +1898,7 @@ Every task that contacts an external service uses exponential backoff with jitte
 
 ```python
 @celery_app.task(
-    name="kyros.clinical.parse_lab_report",
+    name="kyrosclinic.comal.parse_lab_report",
     bind=True,
     autoretry_for=(ConnectionError, TimeoutError, DocumentAITransientError),
     retry_backoff=True,            # exponential
@@ -1955,7 +1955,7 @@ beat_schedule = {
     },
     # Generate pre-consultation reports for tomorrow's appointments
     "generate-pre-consult-reports-tomorrow": {
-        "task": "kyros.clinical.generate_pre_consult_reports_for_tomorrow",
+        "task": "kyrosclinic.comal.generate_pre_consult_reports_for_tomorrow",
         "schedule": crontab(hour=4, minute=0),  # 4 AM IST daily
     },
     # Dispatch reminders (water, supplements, medications)
@@ -2007,7 +2007,7 @@ def run_async(coro):
     return asyncio.run(coro)
 
 # tasks/ocr_tasks.py
-@celery_app.task(name="kyros.clinical.parse_lab_report", bind=True, ...)
+@celery_app.task(name="kyrosclinic.comal.parse_lab_report", bind=True, ...)
 def parse_lab_report(self, lab_report_id: str) -> dict:
     return run_async(_parse_lab_report_async(lab_report_id))
 
@@ -2046,7 +2046,7 @@ Example:
 import structlog
 logger = structlog.get_logger()
 
-@celery_app.task(name="kyros.clinical.parse_lab_report", bind=True, ...)
+@celery_app.task(name="kyrosclinic.comal.parse_lab_report", bind=True, ...)
 def parse_lab_report(self, lab_report_id: str):
     log = logger.bind(
         task_name="parse_lab_report",
@@ -2099,10 +2099,10 @@ The OCR pipeline and notification dispatch are flagged "must-not-lose" workloads
 
 | Task name | Trigger | Queue | Notes |
 |---|---|---|---|
-| `kyros.clinical.parse_lab_report` | On lab report upload | `ocr` | Idempotent via parsed_json check |
-| `kyros.clinical.reconcile_pending_lab_ocr` | Beat every 30 min | `ocr` | Retries failed OCR jobs |
-| `kyros.clinical.generate_pre_consult_report` | On demand by doctor + T-24h cron | `reports` | WeasyPrint PDF |
-| `kyros.clinical.generate_pre_consult_reports_for_tomorrow` | Beat daily 04:00 | `reports` | Bulk job |
+| `kyrosclinic.comal.parse_lab_report` | On lab report upload | `ocr` | Idempotent via parsed_json check |
+| `kyrosclinic.comal.reconcile_pending_lab_ocr` | Beat every 30 min | `ocr` | Retries failed OCR jobs |
+| `kyrosclinic.comal.generate_pre_consult_report` | On demand by doctor + T-24h cron | `reports` | WeasyPrint PDF |
+| `kyrosclinic.comal.generate_pre_consult_reports_for_tomorrow` | Beat daily 04:00 | `reports` | Bulk job |
 | `kyros.video.provision_upcoming_rooms` | Beat every minute | `default` | T-15min before scheduled_start |
 | `kyros.video.provision_video_room` | Direct call | `default` | Single room creation |
 | `kyros.notification.send_push` | On event | `notifications` | Expo Push |
@@ -2216,7 +2216,7 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_user: str = ""
     smtp_password: str = ""
-    email_from: str = "noreply@kyros.clinic"
+    email_from: str = "noreply@kyrosclinic.com"
 
     # ----- Sentry -----
     sentry_dsn: str | None = None
@@ -3959,7 +3959,7 @@ services:
       - /var/lib/kyros/beat:/app/beat
 ```
 
-The ALB forwards `*.kyros.clinic` to the EC2's 8000 port. The EC2 is in a public subnet with security group allowing 80/443 from ALB and 22 from a bastion only.
+The ALB forwards `*.kyrosclinic.com` to the EC2's 8000 port. The EC2 is in a public subnet with security group allowing 80/443 from ALB and 22 from a bastion only.
 
 RDS is in a private subnet, security group allows 5432 only from the EC2 SG. Same for ElastiCache.
 

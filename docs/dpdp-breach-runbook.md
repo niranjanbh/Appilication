@@ -2,8 +2,8 @@
 
 **Regulation:** Digital Personal Data Protection Act, 2023 (India)  
 **Last reviewed:** 2026-06-04  
-**DPO:** [Name], dpo@kyros.clinic  
-**Legal counsel:** [Name], legal@kyros.clinic  
+**DPO:** [Name], dpo@kyrosclinic.com  
+**Legal counsel:** [Name], legal@kyrosclinic.com  
 
 > **72-hour clock starts when Kyros becomes aware of the breach**, not when the breach occurred.
 
@@ -122,7 +122,7 @@ Complete within **4 hours of awareness:**
 NOTIFICATION OF PERSONAL DATA BREACH
 Data Fiduciary: Kyros Health Technologies Private Limited
 CIN: [CIN]
-DPO: [Name], dpo@kyros.clinic, +91 XXXXXXXXXX
+DPO: [Name], dpo@kyrosclinic.com, +91 XXXXXXXXXX
 
 1. Date and time of breach discovery: YYYY-MM-DD HH:MM IST
 
@@ -144,7 +144,7 @@ DPO: [Name], dpo@kyros.clinic, +91 XXXXXXXXXX
 
 7. Contact for further information:
    DPO: [Name]
-   Email: dpo@kyros.clinic
+   Email: dpo@kyrosclinic.com
    Phone: +91 XXXXXXXXXX
 ```
 
@@ -189,7 +189,7 @@ What you should do:
 • Be cautious of calls or messages claiming to be from Kyros asking for OTPs or passwords
 • Contact us if you notice unusual activity
 
-Contact: privacy@kyros.clinic | 1800-XXX-XXXX (toll-free)
+Contact: privacy@kyrosclinic.com | 1800-XXX-XXXX (toll-free)
 
 We sincerely apologize for this incident and are committed to protecting your data.
 

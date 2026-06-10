@@ -1,7 +1,7 @@
 # Kyros Production Runbook
 
 **Last reviewed:** 2026-06-04  
-**DPO contact:** dpo@kyros.clinic  
+**DPO contact:** dpo@kyrosclinic.com  
 **On-call:** See on-call schedule in PagerDuty / Slack #on-call  
 **Incident channel:** Slack #incidents  
 
@@ -309,7 +309,7 @@ This means the SHA-256 hash of a past day's `ad_audit_log` records no longer mat
 **Immediate actions:**
 1. Do NOT make any changes to the `ad_audit_log` table until investigation is complete.
 2. Page the security on-call if outside business hours.
-3. Notify DPO at dpo@kyros.clinic within 1 hour.
+3. Notify DPO at dpo@kyrosclinic.com within 1 hour.
 
 **Investigation:**
 ```bash

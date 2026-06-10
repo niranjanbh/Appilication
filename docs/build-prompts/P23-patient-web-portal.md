@@ -27,7 +27,7 @@ In `mobile/`:
 - Verify ~85% component reuse across mobile + web
 - Web-specific: sidebar navigation (desktop), hover tooltips on charts, drag-and-drop file upload, print views
 
-Deploy patient web portal to `app.kyros.clinic` subdomain.
+Deploy patient web portal to `app.kyrosclinic.com` subdomain.
 
 **Acceptance:**
 - Identical features available on mobile + web

@@ -169,7 +169,7 @@ export default function PrescriptionDetailScreen() {
       <View style={[styles.letterhead, { borderBottomColor: isDark ? colors.electricBlue + '40' : colors.navyDeep }]}>
         <View>
           <Text style={[styles.clinicName, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>Kyros Clinic</Text>
-          <Text style={[styles.clinicSub, { color: textSub }]}>Digital Health Clinic · kyros.clinic</Text>
+          <Text style={[styles.clinicSub, { color: textSub }]}>Digital Health Clinic · kyrosclinic.com</Text>
         </View>
         <View style={styles.clinicRight}>
           <Text style={[styles.clinicMeta, { color: textSub }]}>Issued {formatDate(prescription.signed_at)}</Text>
@@ -224,7 +224,7 @@ export default function PrescriptionDetailScreen() {
       {/* Footer */}
       <View style={[styles.footer, { borderTopColor: divider }]}>
         <Text style={[styles.footerText, { color: textSub }]}>
-          Original digital prescription. Verify at kyros.clinic/verify/{prescription.id}
+          Original digital prescription. Verify at kyrosclinic.com/verify/{prescription.id}
         </Text>
       </View>
 

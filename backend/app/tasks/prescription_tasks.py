@@ -1,6 +1,6 @@
 """Prescription Celery tasks.
 
-Task:  kyros.clinical.generate_prescription_pdf  (routes to 'reports' queue)
+Task:  kyrosclinic.comal.generate_prescription_pdf  (routes to 'reports' queue)
 Idempotency: re-uploads if pdf_url is already set (safe duplicate).
 """
 
@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="kyros.clinical.generate_prescription_pdf",
+    name="kyrosclinic.comal.generate_prescription_pdf",
     bind=True,
     autoretry_for=(ConnectionError, TimeoutError, OSError),
     retry_backoff=True,

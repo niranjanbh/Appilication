@@ -10,10 +10,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
-from app.core.rbac import get_patient_user
 from app.core.audit import AuditContext, write_audit
 from app.core.pagination import PaginationParams
-from app.core.rbac import cross_user_404
+from app.core.rbac import cross_user_404, get_patient_user
 from app.db.enums import ActorRole
 
 router = APIRouter(tags=["notifications"])

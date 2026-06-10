@@ -1075,7 +1075,7 @@ Single Expo codebase serves mobile + responsive web with ~85% component reuse. S
 - File upload via drag-and-drop on desktop
 - Print view for lab reports and prescriptions
 
-The public website (kyros.clinic) remains a separate Next.js app (SEO-critical, static-generated). The authenticated patient portal uses RNW.
+The public website (kyrosclinic.com) remains a separate Next.js app (SEO-critical, static-generated). The authenticated patient portal uses RNW.
 
 ---
 
@@ -1385,7 +1385,7 @@ A Data Protection Impact Assessment is mandatory before launch. Document at `doc
 
 ### DPO
 
-Designated DPO with public-facing email (`dpo@kyros.clinic`). For pre-launch and early Phase 1, the founder doubles as DPO with documented role description.
+Designated DPO with public-facing email (`dpo@kyrosclinic.com`). For pre-launch and early Phase 1, the founder doubles as DPO with documented role description.
 
 ---
 
@@ -1849,7 +1849,7 @@ In `mobile/`:
 - Verify ~85% component reuse across mobile + web
 - Web-specific: sidebar navigation (desktop), hover tooltips on charts, drag-and-drop file upload, print views
 
-Deploy patient web portal to `app.kyros.clinic` subdomain.
+Deploy patient web portal to `app.kyrosclinic.com` subdomain.
 
 **Acceptance:**
 - Identical features available on mobile + web

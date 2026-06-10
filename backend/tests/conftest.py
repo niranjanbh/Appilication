@@ -16,6 +16,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("KYROS_REDIS_URL", "redis://localhost:56379/0")
 os.environ.setdefault("KYROS_DEBUG", "true")
+# The suite drives auth endpoints from a single test-client IP; per-IP limits
+# would trip across unrelated tests. Dedicated rate-limit tests re-enable it.
+os.environ.setdefault("KYROS_RATE_LIMIT_ENABLED", "false")
 
 import uuid
 from collections.abc import AsyncGenerator

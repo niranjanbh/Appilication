@@ -31,9 +31,9 @@
 | **Data Fiduciary (Controller)** | Kyros Health Technologies Private Limited |
 | **CIN** | [Insert CIN] |
 | **Registered address** | [Insert address], India |
-| **Contact** | privacy@kyros.clinic |
+| **Contact** | privacy@kyrosclinic.com |
 | **Data Protection Officer (DPO)** | [Name] |
-| **DPO email** | dpo@kyros.clinic |
+| **DPO email** | dpo@kyrosclinic.com |
 | **DPO phone** | +91 XXXXXXXXXX |
 | **DPO appointment date** | 2026-06-04 |
 
