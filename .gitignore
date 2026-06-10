@@ -1,44 +1,59 @@
-
 CLAUDE.local.md
 .claude/settings.local.json
 
-# Backend
+# ── Python (backend) ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+**/.venv/
+
+# ── Environment / secrets ────────────────────────────────────
 backend/.env
 backend/.env.*
 !backend/.env.example
-backend/.venv
-
-# Node modules
-**/node_modules/
-
-# Next.js
-website/.next
-website/out
-
-# Expo / React Native
-mobile/.expo
-mobile/dist
-
-# Environment files
 **/.env.local
 **/.env.development.local
 **/.env.test.local
 **/.env.production.local
+.env*
+!**/.env*.example
+!.env.example
 
-# Build outputs
-**/dist/
+# ── Node ─────────────────────────────────────────────────────
+**/node_modules/
 **/.turbo/
 **/*.tsbuildinfo
+*.log
 
-# OS & editor
+# ── Next.js (website) ────────────────────────────────────────
+website/.next
+website/out
+
+# ── Expo / React Native (mobile) ─────────────────────────────
+mobile/.expo
+mobile/dist
+mobile/ios/Pods/
+mobile/android/.gradle/
+mobile/android/app/build/
+**/.xcode.env.local
+
+# ── Build outputs ────────────────────────────────────────────
+**/dist/
+**/build/
+!mobile/ios/**/build.xcconfig
+
+# ── OS & editor ──────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 .vscode/settings.json
-*.log
+.idea/
 
-# wrangler files
+# ── wrangler (Cloudflare) ────────────────────────────────────
 .wrangler
 .dev.vars*
 !.dev.vars.example
-.env*
-!.env.example
