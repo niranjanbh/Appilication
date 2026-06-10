@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 
 interface ConditionCardProps {
   slug: string;
@@ -10,7 +9,7 @@ interface ConditionCardProps {
   image: string;
 }
 
-export function ConditionCard({ slug, name, shortDescription, image }: ConditionCardProps) {
+export function ConditionCard({ slug, name, shortDescription }: ConditionCardProps) {
   return (
     <Link
       href={`/conditions/${slug}`}
