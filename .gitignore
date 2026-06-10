@@ -28,6 +28,7 @@ mobile/dist
 # Build outputs
 **/dist/
 **/.turbo/
+**/*.tsbuildinfo
 
 # OS & editor
 .DS_Store

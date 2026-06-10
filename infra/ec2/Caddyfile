@@ -1,0 +1,25 @@
+# Caddy reverse proxy config for Phase 1 EC2.
+# Copied to /etc/kyros/Caddyfile by the bootstrap step.
+#
+# TLS uses a Cloudflare Origin CA cert/key (15-year validity, free, generated
+# in the Cloudflare dashboard: SSL/TLS -> Origin Server -> Create Certificate).
+# Cert/key are placed at /etc/kyros/caddy-certs/cert.pem and key.pem.
+# Set Cloudflare SSL/TLS mode to "Full (strict)" once this is live.
+#
+# Replace api.kyros.clinic with the real API hostname before deploying.
+
+api.kyros.clinic {
+	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
+
+	encode gzip
+
+	reverse_proxy backend-api:8000 {
+		header_up X-Real-IP {http.request.remote.host}
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up X-Forwarded-Proto {http.request.scheme}
+	}
+}
+
+http://api.kyros.clinic {
+	redir https://{host}{uri} permanent
+}

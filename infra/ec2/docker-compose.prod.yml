@@ -1,13 +1,15 @@
-# Phase 1 production Docker Compose — runs on EC2 t2.micro (1 vCPU, 1 GB RAM, ap-south-1)
-# Postgres and Redis run in-container (no RDS, no ElastiCache — free tier).
+# Phase 1 production Docker Compose — runs on a single EC2 instance (ap-south-1),
+# recommended t3.small (2 vCPU, 2 GB RAM). Also fits t2/t3.micro (1 GB) with the
+# 2 GB swap configured below, but t3.small gives headroom for Caddy + bursts.
+# Postgres and Redis run in-container (no RDS, no ElastiCache — keeps cost minimal).
 # Managed by systemd unit kyros-backend.service.
 # Secrets are pre-written to /etc/kyros/backend.env by kyros-prepare-env.sh.
 # Requires 2 GB swap enabled on the host (setup step, not done here).
 #
 # Deploy: pull new image tag, then `docker compose -f /etc/kyros/docker-compose.yml up -d`
 #
-# Memory budget (~950 MB of 1 GB used; swap handles the rest):
-#   postgres 200M | redis 64M | api 320M | worker 256M | beat 128M
+# Memory budget (~1 GB of 2 GB on t3.small; ~1 GB of 1 GB + swap on micro):
+#   postgres 200M | redis 64M | api 320M | worker 256M | beat 128M | caddy 48M
 
 services:
   postgres:
@@ -160,6 +162,36 @@ services:
         max-size: "20m"
         max-file: "3"
 
+  # Terminates TLS for Cloudflare "Full (strict)" using a Cloudflare Origin CA
+  # cert/key placed at /etc/kyros/caddy-certs by the bootstrap step. Proxies
+  # everything to backend-api over the compose network.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - /etc/kyros/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /etc/kyros/caddy-certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+        reservations:
+          memory: 16M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
 volumes:
   postgres_data:
     name: kyros_postgres_data
+  caddy_data:
+    name: kyros_caddy_data

@@ -22,7 +22,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,7 +37,7 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -66,23 +66,20 @@ jobs:
           cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache
           cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache,mode=max
 
+      - name: Install SSM Session Manager plugin
+        run: |
+          curl -sSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+
       - name: Deploy to EC2
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          BASTION_HOST: ${{ secrets.BASTION_HOST }}
-          RDS_INSTANCE_ID: ${{ secrets.RDS_INSTANCE_ID }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          # Write SSH key
+          # Write SSH key (used over an SSM Session Manager tunnel — EC2_HOST is
+          # the instance ID; no public IP or open port 22 required)
           install -m 0600 /dev/null /tmp/deploy_key
           echo "$SSH_PRIVATE_KEY" > /tmp/deploy_key
-
-          # Add known hosts to avoid interactive prompt
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          if [ -n "$BASTION_HOST" ]; then
-            ssh-keyscan -H "$BASTION_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          fi
 
           bash infra/scripts/deploy-phase1.sh "${{ github.sha }}"
