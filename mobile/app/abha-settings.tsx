@@ -18,7 +18,7 @@ import {
   linkAbhaNumber,
   type AbhaStatus,
 } from '../lib/api/abha';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../lib/design-tokens';
 
 type Tab        = 'link' | 'create';
 type CreateStep = 'aadhaar' | 'otp';
@@ -142,7 +142,7 @@ export default function AbhaSettingsScreen() {
             {(['link', 'create'] as Tab[]).map(t => (
               <Pressable
                 key={t}
-                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, shadowColor: isDark ? '#000' : colors.navyDeep }]]}
+                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, boxShadow: `0 2px 8px ${withAlpha(isDark ? colors.midnight : colors.navyDeep, 0.08)}` }]]}
                 onPress={() => { setTab(t); setError(null); if (t === 'create') setCreateStep('aadhaar'); }}
                 accessibilityLabel={t === 'link' ? 'Link existing ABHA' : 'Create new ABHA'}
               >
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
 
   tabBar:   { flexDirection: 'row', borderRadius: borderRadius.xl, padding: 4 },
   tabItem:  { flex: 1, paddingVertical: spacing[3], alignItems: 'center', borderRadius: borderRadius.lg },
-  tabActive: { shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  tabActive: { },
   tabText:  { fontFamily: fontFamily.body, fontSize: fontSize.body },
 
   form:       { gap: spacing[3] },
@@ -313,11 +313,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '600' },

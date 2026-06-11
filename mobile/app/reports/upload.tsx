@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { finalizeUpload, initiateUpload, uploadToS3 } from '../../lib/api/lab-reports';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 import { DragDropUpload } from '../../components/web/DragDropUpload';
 import { useBreakpoint } from '../../lib/hooks/useBreakpoint';
 
@@ -227,11 +227,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[5],
     alignItems: 'center',
     gap: spacing[2],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
   },
   pickIcon:  { fontSize: 26 },
   pickLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', textAlign: 'center' },
@@ -243,11 +239,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
   },
   previewIconWrap: {
     width: 48,
@@ -286,11 +278,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.30,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
   disabled:       { opacity: 0.45 },
   uploadBtnText:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },

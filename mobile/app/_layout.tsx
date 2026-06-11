@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { ActivityIndicator, useColorScheme, View } from 'react-native';
 import { AuthProvider } from '../lib/auth/context';
 import { OpenInAppBanner } from '../components/web/OpenInAppBanner';
+import { PrivacyShield } from '../components/ui/PrivacyShield';
 import { colors, fontFamily, fontSize } from '../lib/design-tokens';
 // Side-effect: registers the background sync task definition before the React tree mounts.
 import '../lib/native/background-sync';
@@ -56,6 +57,8 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: isDark ? colors.midnight : colors.skyMist },
           }}
         />
+        {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
+        <PrivacyShield />
       </AuthProvider>
     </QueryClientProvider>
   );

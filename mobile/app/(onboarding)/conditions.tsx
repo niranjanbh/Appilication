@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 const CONDITIONS = [
   { slug: 'thyroid',             label: 'Thyroid',              icon: '🦋' },
@@ -169,11 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
   },
   chipIcon: { fontSize: 16 },
   chipText: {
@@ -189,11 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {

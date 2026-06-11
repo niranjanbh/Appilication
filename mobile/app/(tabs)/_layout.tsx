@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { useColorScheme, View } from 'react-native';
-import { colors, fontFamily, fontSize } from '../../lib/design-tokens';
+import { Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { borderRadius, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { useTheme } from '../../lib/theme';
 import { useBreakpoint } from '../../lib/hooks/useBreakpoint';
 import { WebSidebar } from '../../components/web/WebSidebar';
+import { GlassTabBackground, HapticTabButton } from '../../components/ui/GlassTabBar';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -26,28 +29,32 @@ const TABS: TabDef[] = [
 
 export default function TabsLayout() {
   const { isDesktop } = useBreakpoint();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
+  const t = useTheme();
 
-  const navBg      = isDark ? colors.nightSurface : colors.white;
-  const headerBg   = isDark ? colors.midnight     : colors.skyMist;
-  const activeTint = isDark ? colors.electricBlue : colors.navyDeep;
-  const mutedTint  = isDark ? colors.slateText    : colors.coolGray;
-  const headerText = isDark ? colors.white        : colors.navyDeep;
+  const activeTint = t.primary;
+  const mutedTint  = t.textSub;
 
+  // Floating frosted dock. iOS/web get live blur via GlassTabBackground; Android
+  // carries the look with a translucent solid surface (live blur is too costly
+  // on low-end devices).
   const tabBarStyle = isDesktop
     ? { display: 'none' as const }
     : {
-        backgroundColor: navBg,
-        borderTopWidth: 0,
+        position: 'absolute' as const,
+        left: spacing[4],
+        right: spacing[4],
+        bottom: Math.max(insets.bottom, spacing[2]) + spacing[2],
         height: 64,
         paddingBottom: 8,
         paddingTop: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: isDark ? 0.28 : 0.07,
-        shadowRadius: 16,
-        elevation: 16,
+        borderRadius: borderRadius.xxl + 8,
+        borderTopWidth: 0,
+        borderWidth: 1,
+        borderColor: t.glass.border,
+        backgroundColor: Platform.OS === 'android' ? t.glass.surfaceStrong : t.glass.dock,
+        overflow: 'hidden' as const,
+        boxShadow: `0 12px 24px ${withAlpha(t.shadow, t.isDark ? 0.45 : 0.14)}`,
       };
 
   const tabs = (
@@ -56,17 +63,19 @@ export default function TabsLayout() {
         tabBarActiveTintColor: activeTint,
         tabBarInactiveTintColor: mutedTint,
         tabBarStyle,
+        tabBarBackground: () => <GlassTabBackground />,
+        tabBarButton: (props) => <HapticTabButton {...props} />,
         tabBarLabelStyle: {
           fontFamily: fontFamily.body,
           fontSize: fontSize.xs,
           fontWeight: '500' as const,
           marginTop: 2,
         },
-        headerStyle: { backgroundColor: headerBg },
+        headerStyle: { backgroundColor: t.background },
         headerTitleStyle: {
           fontFamily: fontFamily.body,
           fontSize: fontSize.bodyLg,
-          color: headerText,
+          color: t.text,
           fontWeight: '600' as const,
         },
         headerShown: !isDesktop,

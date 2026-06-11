@@ -12,7 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { getEducationContent, markAssignmentRead, type EducationContent } from '../../lib/api/education';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 // ── Minimal markdown renderer ──────────────────────────────────────────────────
 
@@ -229,11 +229,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     padding: spacing[5],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   noContent: { fontFamily: fontFamily.body, fontSize: fontSize.body },
 
@@ -256,12 +252,8 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 5,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
-  readBtnDone: { opacity: 0.70, shadowOpacity: 0 },
+  readBtnDone: { opacity: 0.70, boxShadow: '0 0 0 rgba(0,0,0,0)' },
   readBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
 });

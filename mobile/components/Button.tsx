@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, type PressableProps } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { borderRadius, colors, fontFamily, fontSize, fontWeight, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, fontWeight, spacing, withAlpha } from '../lib/design-tokens';
 
 type ButtonVariant = 'forest' | 'saffron' | 'outline' | 'ghost' | 'navy';
 
@@ -59,8 +59,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
   },
   muted: { opacity: 0.55 },
   label: {
@@ -72,9 +70,7 @@ const styles = StyleSheet.create({
   // Forest
   forest: {
     backgroundColor: colors.forest,
-    shadowColor: colors.forest,
-    shadowOpacity: 0.25,
-    elevation: 4,
+    boxShadow: `0 4px 12px ${withAlpha(colors.forest, 0.25)}`,
   },
   forestPressed: { backgroundColor: colors.jade },
   forestLabel:   { color: colors.ivory },
@@ -82,9 +78,7 @@ const styles = StyleSheet.create({
   // Navy (premium primary)
   navy: {
     backgroundColor: colors.navyDeep,
-    shadowColor: colors.navyDeep,
-    shadowOpacity: 0.30,
-    elevation: 6,
+    boxShadow: `0 4px 12px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
   navyPressed: { backgroundColor: colors.navyMid },
   navyLabel:   { color: colors.white },
@@ -92,9 +86,7 @@ const styles = StyleSheet.create({
   // Saffron
   saffron: {
     backgroundColor: colors.saffron,
-    shadowColor: colors.saffron,
-    shadowOpacity: 0.20,
-    elevation: 3,
+    boxShadow: `0 4px 12px ${withAlpha(colors.saffron, 0.20)}`,
   },
   saffronPressed: { backgroundColor: colors.saffron },
   saffronLabel:   { color: colors.forest },
@@ -104,8 +96,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1.5,
     borderColor: colors.navyDeep,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   outlinePressed: { backgroundColor: `${colors.navyDeep}0E` },
   outlineLabel:   { color: colors.navyDeep },
@@ -113,8 +103,6 @@ const styles = StyleSheet.create({
   // Ghost
   ghost: {
     backgroundColor: 'transparent',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   ghostPressed: { backgroundColor: `${colors.navyDeep}0E` },
   ghostLabel:   { color: colors.navyDeep },

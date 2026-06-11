@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { CaptureGuard } from '../../components/ui/CaptureGuard';
 import {
   correctLabReport,
   getDownloadUrl,
@@ -21,7 +22,7 @@ import {
   type LabReport,
   type ParsedLabReport,
 } from '../../lib/api/lab-reports';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 
 const POLL_INTERVAL_MS = 4000;
 const PROCESSING_STATUSES = new Set(['ocr_pending', 'ocr_processing']);
@@ -283,6 +284,8 @@ export default function ReportDetailScreen() {
 
   return (
     <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+      {/* Lab values are PHI — block screen capture while focused */}
+      <CaptureGuard />
       <MetaCard report={report} onDownload={() => void handleDownload()} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />
 
       {parsed ? (
@@ -362,11 +365,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
   metaLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, flex: 1 },
@@ -389,7 +388,7 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 56, backgroundColor: colors.navyDeep, borderRadius: borderRadius.xxl,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.navyDeep, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.30, shadowRadius: 16, elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
   disabled:    { opacity: 0.45 },
   saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },

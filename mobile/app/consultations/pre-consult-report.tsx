@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { getPreConsultReport, type BiomarkerSummary, type PreConsultReport } from '../../lib/api/pre-consult-reports';
 import { apiFetch } from '../../lib/api/client';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 function trendSymbol(t: BiomarkerSummary['trend']): string {
   if (t === 'up') return '↑';
@@ -43,11 +43,7 @@ const sec = StyleSheet.create({
     padding: spacing[5],
     borderWidth: 1,
     gap: spacing[3],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   title: {
     fontFamily: fontFamily.display,
@@ -322,11 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
   },
   dlBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
 

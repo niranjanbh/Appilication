@@ -208,11 +208,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[2],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   divider: { height: 1, marginLeft: 40 + spacing[3] },
 

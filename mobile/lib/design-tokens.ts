@@ -38,7 +38,27 @@ export const colors = {
   nightElev:    tokens.colors.nightElev,
   electricBlue: tokens.colors.electricBlue,
   slateText:    tokens.colors.slateText,
+  accentViolet: tokens.colors.accentViolet,
 } as const;
+
+/** Glassmorphism surface tokens — rgba strings keyed by scheme, plus blur intensities. */
+export const glass = {
+  light: tokens.glass.light,
+  dark:  tokens.glass.dark,
+  blur:  tokens.glass.blur,
+} as const;
+
+/** Soft pastel tint pairs for icon chips and quick actions. */
+export const tintSoft = tokens.tintSoft;
+export type TintName = keyof typeof tintSoft;
+
+/** Derive an rgba() string from a token hex color — keeps hex literals out of components. */
+export function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 export const fontFamily = {
   display: tokens.typography.fontFamily.display[0],

@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 const GENDER_OPTIONS           = [
   { value: 'male',   label: 'Male' },
@@ -94,11 +94,7 @@ const g = StyleSheet.create({
     borderRadius: borderRadius.xl,
     borderWidth: 1,
     marginBottom: spacing[2],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
   },
   radio: {
     width: 18,
@@ -248,11 +244,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[3],
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {

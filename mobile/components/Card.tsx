@@ -1,5 +1,5 @@
 import { StyleSheet, View, useColorScheme, type ViewProps } from 'react-native';
-import { borderRadius, colors, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, spacing , withAlpha } from '../lib/design-tokens';
 
 type CardVariant = 'clay' | 'dark' | 'glass' | 'flat' | 'white' | 'ivory';
 
@@ -47,11 +47,7 @@ const styles = StyleSheet.create({
   // Clay — soft background, large radius, layered shadow + inner border highlight
   clay: {
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
+    boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
   },
 
   // Dark — deep navy hero card with glass border
@@ -59,30 +55,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navyDeep,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.40,
-    shadowRadius: 24,
-    elevation: 10,
+    boxShadow: `0 14px 24px ${withAlpha(colors.navyDeep, 0.40)}`,
   },
 
   // Glass — translucent surface
   glass: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
   },
 
   // Flat — minimal, just surface color
   flat: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
   },
 });

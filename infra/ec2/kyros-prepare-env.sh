@@ -16,7 +16,6 @@ set -euo pipefail
 ENV="${KYROS_ENV:-production}"
 REGION="ap-south-1"
 ENV_FILE="/etc/kyros/backend.env"
-POSTGRES_ENV_FILE="/etc/kyros/postgres.env"
 PARAM_NAME="/kyros/${ENV}/backend"
 
 log() { echo "[kyros-prepare-env] $*" >&2; }
@@ -42,16 +41,8 @@ install -m 0600 -o root -g root /dev/null "${ENV_FILE}"
 echo "${SECRET_JSON}" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "${ENV_FILE}"
 chmod 0600 "${ENV_FILE}"
 
-# Write postgres.env — compose interpolates POSTGRES_PASSWORD at startup
-# Extract the DB password from the same JSON so postgres container can use it
-POSTGRES_PASSWORD=$(echo "${SECRET_JSON}" | jq -r '.POSTGRES_PASSWORD')
-install -m 0600 -o root -g root /dev/null "${POSTGRES_ENV_FILE}"
-cat > "${POSTGRES_ENV_FILE}" <<EOF
-POSTGRES_USER=kyros
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=kyros
-EOF
-chmod 0600 "${POSTGRES_ENV_FILE}"
+# Postgres runs on RDS — KYROS_DATABASE_URL in the SSM JSON already points at the
+# RDS endpoint, so no local postgres.env is needed.
 
 # Also write image metadata for compose substitution
 ECR_REGISTRY=$(aws ecr describe-registry --region "${REGION}" --query registryId --output text).dkr.ecr.${REGION}.amazonaws.com
@@ -60,11 +51,10 @@ IMAGE_TAG=$(cat /etc/kyros/image-tag 2>/dev/null || echo "latest")
 cat >> "${ENV_FILE}" <<EOF
 ECR_REGISTRY=${ECR_REGISTRY}
 IMAGE_TAG=${IMAGE_TAG}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 EOF
 
 # Authenticate Docker to ECR
 aws ecr get-login-password --region "${REGION}" \
     | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 
-log "Environment files written: ${ENV_FILE} ($(wc -l < "${ENV_FILE}") vars), ${POSTGRES_ENV_FILE}"
+log "Environment file written: ${ENV_FILE} ($(wc -l < "${ENV_FILE}") vars)"

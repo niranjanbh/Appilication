@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -13,8 +14,14 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { IconChip } from '../../components/ui/IconChip';
+import { SkeletonCards } from '../../components/ui/Skeleton';
 import {
   createReminderApi,
   deleteReminderApi,
@@ -28,28 +35,26 @@ import {
   requestNotificationPermissions,
   scheduleReminderNotification,
 } from '../../lib/native/notifications';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
 import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
 
-const REMINDER_TYPES: { value: ReminderType; label: string; icon: string }[] = [
-  { value: 'water',      label: 'Water',      icon: '💧' },
-  { value: 'supplement', label: 'Supplement', icon: '🌿' },
-  { value: 'medication', label: 'Medication', icon: '💊' },
-  { value: 'gym',        label: 'Gym',        icon: '🏋️' },
-  { value: 'custom',     label: 'Custom',     icon: '🔔' },
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TYPE_ICON: Record<ReminderType, { icon: IoniconName; tint: TintName }> = {
+  water:      { icon: 'water-outline',         tint: 'blue' },
+  supplement: { icon: 'leaf-outline',          tint: 'green' },
+  medication: { icon: 'medical-outline',       tint: 'violet' },
+  gym:        { icon: 'barbell-outline',       tint: 'amber' },
+  custom:     { icon: 'notifications-outline', tint: 'blue' },
+};
+
+const REMINDER_TYPES: { value: ReminderType; label: string }[] = [
+  { value: 'water',      label: 'Water' },
+  { value: 'supplement', label: 'Supplement' },
+  { value: 'medication', label: 'Medication' },
+  { value: 'gym',        label: 'Gym' },
+  { value: 'custom',     label: 'Custom' },
 ];
-
-const TYPE_EMOJI: Record<ReminderType, string> = {
-  water: '💧', supplement: '🌿', medication: '💊', gym: '🏋️', custom: '🔔',
-};
-
-const TYPE_COLOR: Record<ReminderType, string> = {
-  water:      '#EBF3FF',
-  supplement: '#EDFAF3',
-  medication: '#F3EFFF',
-  gym:        '#FFF4E5',
-  custom:     colors.nightElev,
-};
 
 // ── Reminder form modal ───────────────────────────────────────────────────────
 
@@ -144,7 +149,11 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
                   onPress={() => setForm(f => ({ ...f, type: t.value }))}
                   accessibilityLabel={`Reminder type ${t.label}`}
                 >
-                  <Text style={m.typeChipIcon}>{t.icon}</Text>
+                  <Ionicons
+                    name={TYPE_ICON[t.value].icon}
+                    size={14}
+                    color={active ? colors.white : textPri}
+                  />
                   <Text style={[m.typeChipText, { color: active ? colors.white : textPri }]}>{t.label}</Text>
                 </Pressable>
               );
@@ -257,7 +266,6 @@ const m = StyleSheet.create({
     borderRadius: borderRadius.full,
     borderWidth: 1,
   },
-  typeChipIcon: { fontSize: 14 },
   typeChipText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '500' },
   timeRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   timeInput: { flex: 1 },
@@ -341,16 +349,12 @@ interface ReminderCardProps {
 }
 
 function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps) {
-  const scale  = useSharedValue(1);
-  const anim   = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const pct    = Math.round(reminder.adherence_rate * 100);
   const pctColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const textPri = isDark ? colors.white     : colors.navyDeep;
   const textSub = isDark ? colors.slateText : colors.coolGray;
-  const iconBg  = isDark ? colors.nightElev : (TYPE_COLOR[reminder.type] ?? colors.iceBlue);
+  const type    = TYPE_ICON[reminder.type] ?? TYPE_ICON.custom;
 
   function confirmDelete() {
     Alert.alert('Delete reminder', `Remove "${reminder.label}"?`, [
@@ -360,40 +364,38 @@ function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps)
   }
 
   return (
-    <Animated.View style={anim}>
-      <Pressable
-        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
-        onPressIn={() => { scale.value = withSpring(0.98, { mass: 0.3, stiffness: 500 }); }}
-        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-        onLongPress={() => onEdit(reminder)}
-        accessibilityLabel={`Reminder: ${reminder.label}`}
-      >
-        <View style={[styles.reminderIcon, { backgroundColor: iconBg }]}>
-          <Text style={styles.reminderEmoji}>{TYPE_EMOJI[reminder.type]}</Text>
+    <HapticPressable
+      scaleTo={0.98}
+      onLongPress={() => onEdit(reminder)}
+      accessibilityLabel={`Reminder: ${reminder.label}`}
+    >
+      <GlassCard unpadded>
+        <View style={styles.card}>
+          <IconChip icon={type.icon} tint={type.tint} size={44} />
+          <View style={styles.reminderContent}>
+            <Text style={[styles.reminderLabel, { color: textPri }]}>{reminder.label}</Text>
+            <Text style={[styles.reminderSub, { color: textSub }]}>
+              {reminder.schedule_cron
+                ? `Daily at ${reminder.schedule_cron.split(' ')[1]}:${reminder.schedule_cron.split(' ')[0].padStart(2, '0')}`
+                : reminder.schedule_interval_minutes
+                ? `Every ${reminder.schedule_interval_minutes} min`
+                : 'No schedule'}
+            </Text>
+          </View>
+          <View style={[styles.adherenceBadge, { backgroundColor: pctColor + '18' }]}>
+            <Text style={[styles.adherencePct, { color: pctColor }]}>{pct}%</Text>
+          </View>
+          <View style={styles.actions}>
+            <Pressable onPress={() => onEdit(reminder)} style={styles.actionBtn} accessibilityLabel="Edit reminder" hitSlop={6}>
+              <Ionicons name="create-outline" size={18} color={textSub} />
+            </Pressable>
+            <Pressable onPress={confirmDelete} style={styles.actionBtn} accessibilityLabel="Delete reminder" hitSlop={6}>
+              <Ionicons name="trash-outline" size={18} color={colors.criticalRed} />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.reminderContent}>
-          <Text style={[styles.reminderLabel, { color: textPri }]}>{reminder.label}</Text>
-          <Text style={[styles.reminderSub, { color: textSub }]}>
-            {reminder.schedule_cron
-              ? `Daily at ${reminder.schedule_cron.split(' ')[1]}:${reminder.schedule_cron.split(' ')[0].padStart(2, '0')}`
-              : reminder.schedule_interval_minutes
-              ? `Every ${reminder.schedule_interval_minutes} min`
-              : 'No schedule'}
-          </Text>
-        </View>
-        <View style={[styles.adherenceBadge, { backgroundColor: pctColor + '18' }]}>
-          <Text style={[styles.adherencePct, { color: pctColor }]}>{pct}%</Text>
-        </View>
-        <View style={styles.actions}>
-          <Pressable onPress={() => onEdit(reminder)} style={styles.actionBtn} accessibilityLabel="Edit reminder">
-            <Text style={[styles.actionBtnText, { color: textSub }]}>✎</Text>
-          </Pressable>
-          <Pressable onPress={confirmDelete} style={styles.actionBtn} accessibilityLabel="Delete reminder">
-            <Text style={[styles.actionBtnText, { color: colors.criticalRed }]}>✕</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Animated.View>
+      </GlassCard>
+    </HapticPressable>
   );
 }
 
@@ -482,31 +484,31 @@ export default function RemindersScreen() {
   const bg = isDark ? colors.midnight : colors.skyMist;
 
   if (remindersQuery.isLoading) {
-    return <View style={[styles.centered, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return (
+      <View style={[styles.container, { backgroundColor: bg }]}>
+        <AmbientBackground />
+        <View style={styles.list}>
+          <SkeletonCards count={3} />
+        </View>
+      </View>
+    );
   }
 
   const reminders = remindersQuery.data?.reminders ?? [];
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
+      <AmbientBackground />
       {reminders.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
-            <Text style={styles.emptyIconEmoji}>⏰</Text>
-          </View>
-          <Text style={[styles.emptyTitle, { color: isDark ? colors.white : colors.navyDeep }]}>
-            No reminders yet
-          </Text>
-          <Text style={[styles.emptySub, { color: isDark ? colors.slateText : colors.coolGray }]}>
-            Set up water intake, medication, or supplement reminders and track your adherence.
-          </Text>
-          <Pressable
-            style={styles.createBtn}
-            onPress={openCreate}
-            accessibilityLabel="Create your first reminder"
-          >
-            <Text style={styles.createBtnText}>Create reminder</Text>
-          </Pressable>
+          <EmptyState
+            icon="alarm-outline"
+            tint="amber"
+            title="No reminders yet"
+            body="Set up water intake, medication, or supplement reminders and track your adherence."
+            ctaLabel="Create reminder"
+            onCtaPress={openCreate}
+          />
         </View>
       ) : (
         <>
@@ -524,9 +526,15 @@ export default function RemindersScreen() {
             contentContainerStyle={styles.list}
             ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
           />
-          <Pressable style={styles.fab} onPress={openCreate} accessibilityLabel="Add reminder">
-            <Text style={styles.fabText}>+</Text>
-          </Pressable>
+          <HapticPressable
+            haptic="medium"
+            containerStyle={styles.fab}
+            style={styles.fabBtn}
+            onPress={openCreate}
+            accessibilityLabel="Add reminder"
+          >
+            <Ionicons name="add" size={28} color={colors.white} />
+          </HapticPressable>
         </>
       )}
 
@@ -556,32 +564,19 @@ export default function RemindersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  list: { paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: 100 },
+  list: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: TAB_DOCK_CLEARANCE + 72,
+  },
 
   card: {
-    borderRadius: borderRadius.xl,
     padding: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
   },
-  reminderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  reminderEmoji: { fontSize: 22 },
   reminderContent: { flex: 1 },
   reminderLabel: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
   reminderSub:   { fontFamily: fontFamily.body, fontSize: fontSize.caption, marginTop: 2 },
@@ -599,51 +594,18 @@ const styles = StyleSheet.create({
 
   fab: {
     position: 'absolute',
-    bottom: spacing[8],
+    bottom: TAB_DOCK_CLEARANCE - spacing[6],
     right: spacing[6],
+  },
+  fabBtn: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.navyDeep,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.30,
-    shadowRadius: 16,
-    elevation: 8,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
-  fabText: { fontSize: 28, color: colors.white, lineHeight: 32 },
 
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8], gap: spacing[4] },
-  emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 4,
-  },
-  emptyIconEmoji: { fontSize: 36 },
-  emptyTitle: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', textAlign: 'center' },
-  emptySub:   { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
-  createBtn: {
-    height: 52,
-    paddingHorizontal: spacing[6],
-    backgroundColor: colors.navyDeep,
-    borderRadius: borderRadius.xxl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing[2],
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  createBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.white, fontWeight: '700' },
+  emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing[6] },
 });

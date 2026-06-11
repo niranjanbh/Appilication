@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { captureConsentApi } from '../../lib/api/consent';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 import type { ConsentType } from '../../types/auth';
 
 const DPDP_TEXT =
@@ -91,11 +91,7 @@ const c = StyleSheet.create({
     marginBottom: spacing[4],
     gap: spacing[3],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
   iconWrap: {
@@ -304,11 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing[2],
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {

@@ -1,5 +1,5 @@
 import { useColorScheme } from 'react-native';
-import { colors } from './design-tokens';
+import { colors, glass } from './design-tokens';
 
 export const lightPalette = {
   background:   colors.skyMist,
@@ -14,6 +14,8 @@ export const lightPalette = {
   success:      colors.successGreen,
   warning:      colors.warningAmber,
   critical:     colors.criticalRed,
+  glass:        glass.light,
+  skeletonBase: colors.borderLight,
   isDark:       false as const,
 } as const;
 
@@ -30,6 +32,8 @@ export const darkPalette = {
   success:      colors.successLight,
   warning:      colors.warningAmber,
   critical:     colors.criticalRed,
+  glass:        glass.dark,
+  skeletonBase: colors.nightElev,
   isDark:       true as const,
 } as const;
 

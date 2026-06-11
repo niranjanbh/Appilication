@@ -10,26 +10,34 @@ credits usable over 6 months, plus "Always Free" services — there is no specia
 
 ## Cost reality check
 
-The topology below (single EC2 instance, Postgres + Redis in containers, no RDS, no
-ElastiCache, no ALB) costs roughly:
+The topology below (single EC2 instance for app containers + Redis, **RDS Postgres**
+for the database, no ElastiCache, no ALB) costs roughly:
 
 | Item | Approx monthly cost (ap-south-1) |
 |---|---|
 | EC2 t3.small (2 vCPU, 2 GB) | ~$15 |
 | EBS 20 GB gp3 | ~$1.6 |
+| RDS db.t4g.small single-AZ (2 vCPU, 2 GB) | ~$25 |
+| RDS storage 20 GB gp3 + backups within retention | ~$2.5 |
 | Elastic IP (attached to running instance) | $0 |
 | ECR storage (a few images) | ~$0.10/GB-month, negligible |
 | SSM Parameter Store (standard tier) | $0 |
 | Data transfer out (low volume) | ~$1–3 |
-| **Total** | **~$18–22/month** |
+| **Total** | **~$42–47/month** |
 
-The $200 credit covers roughly 9–10 months at this rate, and credits also apply for the
-first 6 months regardless. After credits run out, you're at ~$20/month pay-as-you-go —
-which you've said is fine. Cost goes up mainly from data-transfer-out (patient app
-traffic) and EBS growth (Postgres data volume) as usage increases.
+The $200 credit covers roughly the first 4 months at this rate. The deliberate
+trade-offs at this stage:
 
-If you want to shave this further, t3.micro (1 GB RAM, ~$7.5/month) also works with the
-2 GB swap configured in `infra/ec2/docker-compose.prod.yml`, but leaves less headroom.
+- **Postgres on RDS** — this is the PHI store. RDS gives automated daily backups,
+  point-in-time recovery (any moment in the last 7 days), KMS storage encryption,
+  pre-migration snapshots, and push-button resizing. Worth paying for from day one.
+- **Redis stays in Docker on the EC2** — it holds only ephemeral state (OTPs, rate
+  limits, Celery queue; security rule #13 says Redis is never the source of truth),
+  so a managed ElastiCache node (~$11/month) buys little today. Move to ElastiCache
+  in Phase 2.
+- **Single-AZ RDS** — Multi-AZ doubles the RDS cost and only reduces downtime during
+  an AZ failure; backups already protect against data loss. Enable Multi-AZ
+  (`aws rds modify-db-instance --multi-az`) once there are paying users.
 
 ---
 
@@ -204,6 +212,21 @@ cat > /tmp/ci-policy.json <<EOF
       "Effect": "Allow",
       "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
       "Resource": "arn:aws:ssm:${AWS_REGION}:*:session/$${aws:username}-*"
+    },
+    {
+      "Sid": "RDSPreDeploySnapshot",
+      "Effect": "Allow",
+      "Action": [
+        "rds:CreateDBSnapshot",
+        "rds:DeleteDBSnapshot",
+        "rds:DescribeDBSnapshots",
+        "rds:DescribeDBInstances",
+        "rds:AddTagsToResource"
+      ],
+      "Resource": [
+        "arn:aws:rds:${AWS_REGION}:${ACCOUNT_ID}:db:kyros-prod",
+        "arn:aws:rds:${AWS_REGION}:${ACCOUNT_ID}:snapshot:kyros-pre-deploy-*"
+      ]
     }
   ]
 }
@@ -286,6 +309,87 @@ echo "Security group rules added."
 
 ---
 
+## Phase 3b — RDS Postgres (the PHI database)
+
+The database does **not** run in Docker. Provision a managed RDS Postgres 16 instance:
+encrypted at rest (KMS), automated backups with point-in-time recovery, not publicly
+accessible, reachable only from the EC2 security group.
+
+```bash
+# Security group for RDS: port 5432 only from the EC2 instances' SG
+RDS_SG_ID=$(aws ec2 create-security-group \
+  --group-name kyros-rds-sg \
+  --description "Kyros RDS - Postgres from backend EC2 only" \
+  --vpc-id $VPC_ID --query GroupId --output text)
+
+aws ec2 authorize-security-group-ingress --group-id $RDS_SG_ID \
+  --protocol tcp --port 5432 --source-group $SG_ID
+
+# DB subnet group across the default VPC's subnets (RDS requires >= 2 AZs)
+SUBNET_IDS=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID \
+  --query 'Subnets[].SubnetId' --output text)
+
+aws rds create-db-subnet-group \
+  --db-subnet-group-name kyros-db-subnets \
+  --db-subnet-group-description "Kyros default-VPC subnets" \
+  --subnet-ids $SUBNET_IDS
+
+# Master password — you'll embed this in KYROS_DATABASE_URL in Phase 4
+RDS_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+echo "RDS_PASSWORD=$RDS_PASSWORD"   # note it down securely; also goes into SSM in Phase 4
+
+# Latest Postgres 16.x available on RDS
+PG_VERSION=$(aws rds describe-db-engine-versions --engine postgres \
+  --query "DBEngineVersions[?starts_with(EngineVersion,'16.')].EngineVersion | [-1]" \
+  --output text)
+echo "Postgres version: $PG_VERSION"
+
+aws rds create-db-instance \
+  --db-instance-identifier kyros-prod \
+  --db-instance-class db.t4g.small \
+  --engine postgres \
+  --engine-version $PG_VERSION \
+  --db-name kyros \
+  --master-username kyros \
+  --master-user-password "$RDS_PASSWORD" \
+  --allocated-storage 20 \
+  --max-allocated-storage 100 \
+  --storage-type gp3 \
+  --storage-encrypted \
+  --backup-retention-period 7 \
+  --deletion-protection \
+  --no-publicly-accessible \
+  --no-multi-az \
+  --vpc-security-group-ids $RDS_SG_ID \
+  --db-subnet-group-name kyros-db-subnets \
+  --auto-minor-version-upgrade \
+  --tags Key=Name,Value=kyros-prod
+
+# Takes 5–10 minutes
+aws rds wait db-instance-available --db-instance-identifier kyros-prod
+
+RDS_ENDPOINT=$(aws rds describe-db-instances --db-instance-identifier kyros-prod \
+  --query 'DBInstances[0].Endpoint.Address' --output text)
+echo "RDS endpoint: $RDS_ENDPOINT"
+```
+
+> **As built (June 2026):** the live `kyros-prod` instance was created via the console
+> with master username **`postgres`** (console default), not `kyros`. The database name
+> is `kyros`. All connection strings below use `postgres` as the user.
+
+**Write down `$RDS_ENDPOINT` and `$RDS_PASSWORD`** — both go into the SSM parameter in
+Phase 4. The instance identifier `kyros-prod` becomes the `RDS_INSTANCE_ID` GitHub
+secret in Phase 8 (the deploy pipeline snapshots it before every migration).
+
+Storage autoscaling is capped at 100 GB (`--max-allocated-storage`) so a runaway
+writer can't generate an unbounded storage bill.
+
+> **Multi-AZ later:** when you have paying users, enable failover with
+> `aws rds modify-db-instance --db-instance-identifier kyros-prod --multi-az
+> --apply-immediately`. No data migration needed.
+
+---
+
 ## Phase 4 — SSM secrets parameter
 
 Generate the secrets the backend needs and store them as one SecureString JSON
@@ -294,17 +398,18 @@ parameter, exactly as `infra/ec2/kyros-prepare-env.sh` expects.
 ```bash
 JWT_SECRET=$(openssl rand -hex 32)
 OTP_SECRET=$(openssl rand -hex 32)
-POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+# $RDS_ENDPOINT and $RDS_PASSWORD come from Phase 3b
 
+# Key names below are verified against backend/app/core/config.py (pydantic-settings,
+# env_prefix "KYROS_" + field name). config.py is the source of truth — re-verify after
+# any Settings change.
 cat > /tmp/backend-secrets.json <<EOF
 {
-  "KYROS_ENV": "production",
-  "KYROS_APP_VERSION": "$(git -C /tmp rev-parse --short HEAD 2>/dev/null || echo latest)",
-  "KYROS_LOG_LEVEL": "INFO",
+  "KYROS_APP_ENV": "production",
+  "KYROS_APP_VERSION": "1.0.0",
+  "KYROS_DEBUG": "false",
 
-  "KYROS_DATABASE_URL": "postgresql+asyncpg://kyros:${POSTGRES_PASSWORD}@postgres:5432/kyros",
-  "KYROS_DATABASE_POOL_SIZE": "10",
-  "KYROS_DATABASE_MAX_OVERFLOW": "10",
+  "KYROS_DATABASE_URL": "postgresql+asyncpg://postgres:${RDS_PASSWORD}@${RDS_ENDPOINT}:5432/kyros?ssl=require",
 
   "KYROS_REDIS_URL": "redis://redis:6379/0",
   "KYROS_CELERY_BROKER_URL": "redis://redis:6379/1",
@@ -312,55 +417,55 @@ cat > /tmp/backend-secrets.json <<EOF
 
   "KYROS_JWT_SECRET": "${JWT_SECRET}",
   "KYROS_JWT_ALGORITHM": "HS256",
-  "KYROS_JWT_ACCESS_TOKEN_TTL_SECONDS": "3600",
-  "KYROS_JWT_REFRESH_TOKEN_TTL_SECONDS": "2592000",
-  "KYROS_ARGON2_TIME_COST": "3",
-  "KYROS_ARGON2_MEMORY_COST": "65536",
-  "KYROS_ARGON2_PARALLELISM": "4",
+  "KYROS_JWT_ACCESS_TOKEN_EXPIRE_MINUTES": "60",
+  "KYROS_JWT_REFRESH_TOKEN_EXPIRE_DAYS": "30",
 
   "KYROS_OTP_SECRET": "${OTP_SECRET}",
   "KYROS_OTP_TTL_SECONDS": "300",
   "KYROS_OTP_MAX_ATTEMPTS": "5",
   "KYROS_OTP_RESEND_COOLDOWN_SECONDS": "60",
+  "KYROS_OTP_EMAIL_FALLBACK_ENABLED": "true",
+
+  "KYROS_RATE_LIMIT_ENABLED": "true",
+  "KYROS_STARTUP_SCHEMA_CHECK": "true",
 
   "KYROS_CORS_ALLOWED_ORIGINS": "https://kyrosclinic.com,https://www.kyrosclinic.com,https://portal.kyrosclinic.com",
 
   "KYROS_AWS_REGION": "${AWS_REGION}",
-  "KYROS_S3_BUCKET_PHI": "kyros-phi-production",
+  "KYROS_S3_BUCKET": "kyros-phi-production",
   "KYROS_AWS_ACCESS_KEY_ID": "",
   "KYROS_AWS_SECRET_ACCESS_KEY": "",
-  "KYROS_S3_KMS_KEY_ID": "",
+
+  "KYROS_AUTHKEY_API_KEY": "",
+  "KYROS_AUTHKEY_OTP_TEMPLATE_NAME": "kyros_otp",
+  "KYROS_AUTHKEY_SENDER_ID": "KYROS",
+  "KYROS_AUTHKEY_SMS_TEMPLATE_ID": "",
 
   "KYROS_RAZORPAY_KEY_ID": "",
   "KYROS_RAZORPAY_KEY_SECRET": "",
   "KYROS_RAZORPAY_WEBHOOK_SECRET": "",
+  "KYROS_GST_NUMBER": "",
 
   "KYROS_HMS_ACCESS_KEY": "",
   "KYROS_HMS_SECRET": "",
   "KYROS_HMS_TEMPLATE_ID": "",
 
-  "KYROS_GCP_PROJECT_ID": "",
-  "KYROS_DOCUMENT_AI_PROCESSOR_ID": "",
-  "KYROS_DOCUMENT_AI_LOCATION": "asia-south1",
-  "KYROS_GCP_SERVICE_ACCOUNT_JSON": "",
-
-  "KYROS_MSG91_AUTH_KEY": "",
-  "KYROS_MSG91_TEMPLATE_ID": "",
-
-  "KYROS_AISENSY_API_KEY": "",
-  "KYROS_AISENSY_PROJECT_ID": "",
+  "KYROS_GOOGLE_DOCUMENT_AI_SECRET_NAME": "",
+  "KYROS_GOOGLE_DOCUMENT_AI_PROCESSOR_ID": "",
+  "KYROS_GOOGLE_DOCUMENT_AI_LOCATION": "asia-south1",
 
   "KYROS_SMTP_HOST": "",
   "KYROS_SMTP_PORT": "587",
   "KYROS_SMTP_USER": "",
   "KYROS_SMTP_PASSWORD": "",
-  "KYROS_EMAIL_FROM": "noreply@kyrosclinic.com",
+  "KYROS_EMAIL_FROM": "contact@kyrosclinic.com",
+  "KYROS_ADMIN_ALERT_EMAIL": "admin@kyrosclinic.com",
+
+  "KYROS_ABHA_CLIENT_ID": "",
+  "KYROS_ABHA_CLIENT_SECRET": "",
 
   "KYROS_SENTRY_DSN": "",
-  "KYROS_SENTRY_ENVIRONMENT": "production",
-  "KYROS_SENTRY_TRACES_SAMPLE_RATE": "0.1",
-
-  "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}"
+  "KYROS_CLOUDWATCH_NAMESPACE": "Kyros/Backend"
 }
 EOF
 
@@ -374,18 +479,20 @@ aws ssm put-parameter \
 shred -u /tmp/backend-secrets.json
 ```
 
-> **Cross-check** `KYROS_OTP_SECRET` and any other variables your `backend/app/core/config.py`
-> actually requires — this list is taken from `docs/strategy/backend-strategy.md` §4
-> `.env.example`, but config.py is the source of truth for what's *required* vs
-> optional at startup. If a required var is missing, the container will fail
-> healthchecks and you'll see why in `docker compose logs backend-api`.
+> **Startup gates** (config.py `_refuse_unsafe_production_config`): with
+> `KYROS_APP_ENV=production` the app refuses to start if `KYROS_JWT_SECRET` or
+> `KYROS_OTP_SECRET` is a `CHANGEME` placeholder or shorter than 32 chars, if
+> `KYROS_DEBUG` is true, or if `KYROS_CORS_ALLOWED_ORIGINS` contains a
+> localhost/127.0.0.1 origin. If the container restarts in a loop, check
+> `docker compose logs backend-api` for these messages first.
 >
-> Empty-string values for integrations you haven't set up yet (Razorpay, MSG91,
-> SendGrid, etc.) are fine for getting the API up — those features just won't work
-> until you fill them in (re-run `put-parameter` with `--overwrite` and restart the
-> stack to pick up changes).
+> Empty-string values for integrations you haven't set up yet (Razorpay, authkey.io,
+> SMTP, 100ms, Document AI, Sentry, ABHA) are fine for getting the API up —
+> pydantic-settings treats empty env vars as unset and falls back to field defaults;
+> those features just won't work until you fill them in (re-run `put-parameter` with
+> `--overwrite` and restart the stack to pick up changes).
 >
-> `KYROS_S3_BUCKET_PHI` references a bucket that doesn't exist yet. Creating the
+> `KYROS_S3_BUCKET` references a bucket that doesn't exist yet. Creating the
 > SSE-KMS-encrypted, public-access-blocked S3 bucket for lab reports/prescriptions is
 > a separate follow-up (security rule #6) — the API will still start without it;
 > file-upload endpoints just won't work until it exists.
@@ -489,7 +596,7 @@ clone the repo and `scp`/SSM-copy the four files:
 - `infra/ec2/kyros-prepare-env.sh` → `/usr/local/bin/kyros-prepare-env.sh`
 - `infra/ec2/kyros-backend.service` → `/etc/systemd/system/kyros-backend.service`
 - `infra/ec2/Caddyfile` → `/etc/kyros/Caddyfile` (after editing the hostname — see Phase 7)
-- `infra/docker/postgres/init.sql` → `/etc/kyros/postgres-init.sql`
+- `infra/docker/postgres/init.sql` → `/etc/kyros/rds-init.sql` (applied to RDS once, below — not mounted)
 
 The simplest way without configuring SCP-over-SSM: from CloudShell, since it doesn't
 have the repo, use `aws ssm send-command` with the file contents inlined, or
@@ -521,11 +628,30 @@ print(f'echo {b64} | base64 -d | sudo tee $DEST > /dev/null && sudo chmod $MODE 
 write_remote_file /tmp/repo/infra/ec2/docker-compose.prod.yml /etc/kyros/docker-compose.yml 644
 write_remote_file /tmp/repo/infra/ec2/kyros-prepare-env.sh /usr/local/bin/kyros-prepare-env.sh 755
 write_remote_file /tmp/repo/infra/ec2/kyros-backend.service /etc/systemd/system/kyros-backend.service 644
-write_remote_file /tmp/repo/infra/docker/postgres/init.sql /etc/kyros/postgres-init.sql 644
+write_remote_file /tmp/repo/infra/docker/postgres/init.sql /etc/kyros/rds-init.sql 644
 ```
 
 (Edit `infra/ec2/Caddyfile` to use your real API hostname — e.g. `api.kyrosclinic.com` —
 and the cert paths from Phase 7 before copying it.)
+
+### Initialize the RDS database (one-time)
+
+From the EC2 (in the SSM session), apply the extensions + readonly-role script against
+RDS. All three extensions (`pgcrypto`, `pg_trgm`, `btree_gin`) are RDS-supported, and
+the RDS master user has sufficient rights:
+
+```bash
+RDS_ENDPOINT=<from Phase 3b>
+
+sudo docker run --rm -i \
+  -e PGPASSWORD='<RDS_PASSWORD from Phase 3b>' \
+  postgres:16-alpine \
+  psql "host=${RDS_ENDPOINT} port=5432 user=postgres dbname=kyros sslmode=require" \
+  < /etc/kyros/rds-init.sql
+```
+
+You should see `CREATE EXTENSION` ×3 and the role grants. This runs once; re-running
+is harmless (everything is `IF NOT EXISTS`-guarded).
 
 Then on the EC2 (back in the SSM session), seed the image tag and start the stack:
 
@@ -598,9 +724,9 @@ uses `environment: production`), add:
 | `AWS_SECRET_ACCESS_KEY` | from Phase 1b |
 | `EC2_HOST` | `$INSTANCE_ID` (e.g. `i-0123456789abcdef0`) — **not** an IP, since deploys tunnel over SSM |
 | `SSH_PRIVATE_KEY` | contents of `/tmp/kyros-prod.pem` from Phase 5 |
+| `RDS_INSTANCE_ID` | `kyros-prod` (Phase 3b) — used for the pre-migration snapshot |
 
-Remove the now-unused `BASTION_HOST` and `RDS_INSTANCE_ID` secrets if present — this
-topology has neither.
+Remove the now-unused `BASTION_HOST` secret if present — this topology has no bastion.
 
 > The workflow and `infra/scripts/deploy-phase1.sh` were updated alongside this guide
 > to tunnel SSH over SSM (`aws ssm start-session` + `AWS-StartSSHSession`) instead of
@@ -610,9 +736,10 @@ topology has neither.
 Trigger the first deploy by pushing to `main` (or re-running the workflow). It will:
 1. Run tests.
 2. Build and push the image to ECR.
-3. Run `alembic upgrade head` against the in-container Postgres.
-4. `docker compose up -d` with the new image tag.
-5. Health-check `/healthz`.
+3. Snapshot RDS (`kyros-pre-deploy-<timestamp>-<sha>`, pruned after 14 days).
+4. Run `alembic upgrade head` against RDS.
+5. `docker compose up -d` with the new image tag.
+6. Health-check `/healthz`.
 
 ---
 
@@ -623,10 +750,15 @@ Trigger the first deploy by pushing to `main` (or re-running the workflow). It w
 - [ ] `curl https://api.kyrosclinic.com/readyz` → `{"db": true, "redis": true}`.
 - [ ] `aws ssm start-session --target $INSTANCE_ID` works without any inbound SG rule
       for port 22.
-- [ ] `sudo docker compose -f /etc/kyros/docker-compose.yml ps` shows postgres, redis,
-      backend-api, celery-worker, celery-beat, caddy all healthy/running.
+- [ ] `sudo docker compose -f /etc/kyros/docker-compose.yml ps` shows redis,
+      backend-api, celery-worker, celery-beat, caddy all healthy/running (Postgres is
+      on RDS, not in compose).
+- [ ] `aws rds describe-db-instances --db-instance-identifier kyros-prod` shows
+      `StorageEncrypted: true`, `PubliclyAccessible: false`,
+      `BackupRetentionPeriod: 7`, `DeletionProtection: true`.
 - [ ] Cloudflare SSL/TLS mode is **Full (strict)**.
-- [ ] GitHub Actions `Deploy Backend` workflow succeeds end-to-end on a push to `main`.
+- [ ] GitHub Actions `Deploy Backend` workflow succeeds end-to-end on a push to
+      `main`, including the `kyros-pre-deploy-*` RDS snapshot step.
 
 ## What's deliberately deferred
 
@@ -635,7 +767,9 @@ Trigger the first deploy by pushing to `main` (or re-running the workflow). It w
 - **Razorpay / 100ms / MSG91 / AiSensy / SendGrid / Sentry** credentials — fill into
   the SSM parameter (Phase 4) as you onboard each integration; `aws ssm put-parameter
   ... --overwrite` then restart the stack.
-- **RDS / ElastiCache / ALB / CloudFront / WAF** — Phase 2, triggered by MRR > ₹50K or
+- **RDS Multi-AZ** — enable once there are paying users
+  (`aws rds modify-db-instance --db-instance-identifier kyros-prod --multi-az`).
+- **ElastiCache / ALB / CloudFront / WAF** — Phase 2, triggered by MRR > ₹50K or
   >500 concurrent users (`docs/strategy/build-spec.md` §14). `docs/runbook-prod.md`
   currently documents the Phase 2 topology in places; it should be updated to reflect
   this Phase 1 reality once this is live.

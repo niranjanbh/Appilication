@@ -1,8 +1,16 @@
-import { Appearance, Pressable, ScrollView, StyleSheet, Switch, Text, useColorScheme, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Appearance, ScrollView, StyleSheet, Switch, Text, useColorScheme, View } from 'react-native';
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { IconChip } from '../../components/ui/IconChip';
 import { useAuth } from '../../lib/auth/context';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -19,8 +27,8 @@ function getInitials(fullName: string): string {
 // ─── MenuItem ─────────────────────────────────────────────────────────────────
 
 interface MenuItemProps {
-  icon: string;
-  iconBg: string;
+  icon: IoniconName;
+  tint: TintName;
   label: string;
   hint?: string;
   labelColor: string;
@@ -29,29 +37,22 @@ interface MenuItemProps {
   accessibilityLabel?: string;
 }
 
-function MenuItem({ icon, iconBg, label, hint, labelColor, hintColor, onPress, accessibilityLabel }: MenuItemProps) {
-  const scale = useSharedValue(1);
-  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
+function MenuItem({ icon, tint, label, hint, labelColor, hintColor, onPress, accessibilityLabel }: MenuItemProps) {
   return (
-    <Animated.View style={anim}>
-      <Pressable
-        style={styles.menuRow}
-        onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.98, { mass: 0.3, stiffness: 500 }); }}
-        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-        accessibilityLabel={accessibilityLabel ?? label}
-      >
-        <View style={[styles.menuIconWrap, { backgroundColor: iconBg }]}>
-          <Text style={styles.menuIcon}>{icon}</Text>
-        </View>
-        <Text style={[styles.menuLabel, { color: labelColor }]}>{label}</Text>
-        <View style={styles.menuRight}>
-          {hint ? <Text style={[styles.menuHint, { color: hintColor }]}>{hint}</Text> : null}
-          <Text style={[styles.chevron, { color: hintColor }]}>›</Text>
-        </View>
-      </Pressable>
-    </Animated.View>
+    <HapticPressable
+      haptic="selection"
+      scaleTo={0.98}
+      style={styles.menuRow}
+      onPress={onPress}
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      <IconChip icon={icon} tint={tint} size={36} />
+      <Text style={[styles.menuLabel, { color: labelColor }]}>{label}</Text>
+      <View style={styles.menuRight}>
+        {hint ? <Text style={[styles.menuHint, { color: hintColor }]}>{hint}</Text> : null}
+        <Ionicons name="chevron-forward" size={16} color={hintColor} />
+      </View>
+    </HapticPressable>
   );
 }
 
@@ -80,157 +81,154 @@ export default function ProfileScreen() {
     Appearance.setColorScheme(val ? 'dark' : 'light');
   }
 
-  const signScale = useSharedValue(1);
-  const signAnim  = useAnimatedStyle(() => ({ transform: [{ scale: signScale.value }] }));
-
-  const bg        = isDark ? colors.midnight     : colors.skyMist;
-  const textPri   = isDark ? colors.white        : colors.navyDeep;
-  const textSub   = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg    = isDark ? colors.nightSurface : colors.white;
-  const cardBdr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const iconBlue  = isDark ? '#0F1E38' : '#EBF3FF';
-  const iconAmb   = isDark ? '#2A1A05' : '#FFF4E5';
-  const iconGreen = isDark ? '#061E12' : '#EDFAF3';
-  const iconPurp  = isDark ? '#150F2B' : '#F3EFFF';
-  const iconRed   = isDark ? '#2A0505' : '#FFF0F0';
+  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const textPri = isDark ? colors.white        : colors.navyDeep;
+  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const cardBg  = isDark ? colors.nightSurface : colors.white;
 
   return (
-    <ScrollView
-      style={[styles.flex, { backgroundColor: bg }]}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.flex, { backgroundColor: bg }]}>
+      <AmbientBackground />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
 
-      {/* ── Identity card ─────────────────────────────────────────────────── */}
-      {user && (
-        <View style={[styles.identityCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-          <View style={styles.identityRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.navyDeep }]}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
-            <View style={styles.identityInfo}>
-              <Text style={[styles.userName, { color: textPri }]}>{user.name}</Text>
-              <Text style={[styles.userDetail, { color: textSub }]}>
-                {user.phone ?? user.email ?? 'Kyros patient'}
-              </Text>
-              <View style={[styles.planBadge, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-                <Text style={[styles.planBadgeText, { color: colors.electricBlue }]}>
-                  Free plan
+        {/* ── Identity card ───────────────────────────────────────────────── */}
+        {user && (
+          <GlassCard>
+            <View style={styles.identityRow}>
+              <LinearGradient colors={[colors.navyMid, colors.navyDeep]} style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </LinearGradient>
+              <View style={styles.identityInfo}>
+                <Text style={[styles.userName, { color: textPri }]}>{user.name}</Text>
+                <Text style={[styles.userDetail, { color: textSub }]}>
+                  {user.phone ?? user.email ?? 'Kyros patient'}
                 </Text>
+                <View style={[styles.planBadge, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+                  <Text style={[styles.planBadgeText, { color: colors.electricBlue }]}>
+                    Free plan
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-        </View>
-      )}
+          </GlassCard>
+        )}
 
-      {/* ── Care section ──────────────────────────────────────────────────── */}
-      <View style={styles.group}>
-        <Text style={[styles.groupLabel, { color: textSub }]}>Care</Text>
-        <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-          <MenuItem
-            icon="🏥"
-            iconBg={iconBlue}
-            label="Health Records (ABHA)"
-            hint="Linked"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => router.push('/abha-settings')}
-          />
-          <Separator isDark={isDark} />
-          <MenuItem
-            icon="📊"
-            iconBg={iconPurp}
-            label="Insights & trends"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => {}}
-          />
-          <Separator isDark={isDark} />
-          <MenuItem
-            icon="📅"
-            iconBg={iconGreen}
-            label="Appointments"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => router.push('/(tabs)/consultations' as never)}
-          />
-        </View>
-      </View>
-
-      {/* ── Preferences section ───────────────────────────────────────────── */}
-      <View style={styles.group}>
-        <Text style={[styles.groupLabel, { color: textSub }]}>Preferences</Text>
-        <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-
-          {/* Dark theme toggle (pure UI — Appearance API) */}
-          <View style={styles.menuRow}>
-            <View style={[styles.menuIconWrap, { backgroundColor: iconAmb }]}>
-              <Text style={styles.menuIcon}>☀️</Text>
+        {/* ── Care section ────────────────────────────────────────────────── */}
+        <View style={styles.group}>
+          <Text style={[styles.groupLabel, { color: textSub }]}>Care</Text>
+          <GlassCard unpadded>
+            <View style={styles.groupCard}>
+              <MenuItem
+                icon="medkit-outline"
+                tint="blue"
+                label="Health Records (ABHA)"
+                hint="Linked"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/abha-settings')}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="stats-chart-outline"
+                tint="violet"
+                label="Insights & trends"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => {}}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="calendar-outline"
+                tint="green"
+                label="Appointments"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/(tabs)/consultations' as never)}
+              />
             </View>
-            <Text style={[styles.menuLabel, { color: textPri }]}>Dark theme</Text>
-            <Switch
-              value={isDark}
-              onValueChange={handleThemeToggle}
-              trackColor={{
-                false: colors.borderLight,
-                true:  colors.electricBlue + '80',
-              }}
-              thumbColor={isDark ? colors.electricBlue : colors.white}
-              ios_backgroundColor={colors.borderLight}
-              accessibilityLabel="Toggle dark theme"
-            />
-          </View>
-
-          <Separator isDark={isDark} />
-          <MenuItem
-            icon="🔔"
-            iconBg={iconAmb}
-            label="Notifications"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => router.push('/notification-preferences')}
-          />
-          <Separator isDark={isDark} />
-          <MenuItem
-            icon="🔒"
-            iconBg={iconBlue}
-            label="Privacy & security"
-            hint="My consents"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => {}}
-          />
+          </GlassCard>
         </View>
-      </View>
 
-      {/* ── Account section ───────────────────────────────────────────────── */}
-      <View style={styles.group}>
-        <Text style={[styles.groupLabel, { color: textSub }]}>Account</Text>
-        <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-          <MenuItem
-            icon="📥"
-            iconBg={iconBlue}
-            label="Download my data"
-            labelColor={textPri}
-            hintColor={textSub}
-            onPress={() => {}}
-          />
-          <Separator isDark={isDark} />
-          <MenuItem
-            icon="⚠️"
-            iconBg={iconRed}
-            label="Delete my account"
-            labelColor={colors.criticalRed}
-            hintColor={colors.criticalRed}
-            onPress={() => {}}
-            accessibilityLabel="Delete my account"
-          />
+        {/* ── Preferences section ─────────────────────────────────────────── */}
+        <View style={styles.group}>
+          <Text style={[styles.groupLabel, { color: textSub }]}>Preferences</Text>
+          <GlassCard unpadded>
+            <View style={styles.groupCard}>
+
+              {/* Dark theme toggle (pure UI — Appearance API) */}
+              <View style={styles.menuRow}>
+                <IconChip icon={isDark ? 'moon-outline' : 'sunny-outline'} tint="amber" size={36} />
+                <Text style={[styles.menuLabel, { color: textPri }]}>Dark theme</Text>
+                <Switch
+                  value={isDark}
+                  onValueChange={handleThemeToggle}
+                  trackColor={{
+                    false: colors.borderLight,
+                    true:  colors.electricBlue + '80',
+                  }}
+                  thumbColor={isDark ? colors.electricBlue : colors.white}
+                  ios_backgroundColor={colors.borderLight}
+                  accessibilityLabel="Toggle dark theme"
+                />
+              </View>
+
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="notifications-outline"
+                tint="amber"
+                label="Notifications"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/notification-preferences')}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="lock-closed-outline"
+                tint="blue"
+                label="Privacy & security"
+                hint="My consents"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => {}}
+              />
+            </View>
+          </GlassCard>
         </View>
-      </View>
 
-      {/* ── Sign out ──────────────────────────────────────────────────────── */}
-      <Animated.View style={signAnim}>
-        <Pressable
+        {/* ── Account section ─────────────────────────────────────────────── */}
+        <View style={styles.group}>
+          <Text style={[styles.groupLabel, { color: textSub }]}>Account</Text>
+          <GlassCard unpadded>
+            <View style={styles.groupCard}>
+              <MenuItem
+                icon="download-outline"
+                tint="blue"
+                label="Download my data"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => {}}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="warning-outline"
+                tint="amber"
+                label="Delete my account"
+                labelColor={colors.criticalRed}
+                hintColor={colors.criticalRed}
+                onPress={() => {}}
+                accessibilityLabel="Delete my account"
+              />
+            </View>
+          </GlassCard>
+        </View>
+
+        {/* ── Sign out ────────────────────────────────────────────────────── */}
+        <HapticPressable
+          scaleTo={0.97}
           style={[
             styles.signOutBtn,
             {
@@ -239,15 +237,13 @@ export default function ProfileScreen() {
             },
           ]}
           onPress={signOut}
-          onPressIn={() => { signScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
-          onPressOut={() => { signScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
           accessibilityLabel="Sign out"
         >
           <Text style={[styles.signOutText, { color: textSub }]}>Sign out</Text>
-        </Pressable>
-      </Animated.View>
+        </HapticPressable>
 
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -259,21 +255,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[6],
-    paddingBottom: spacing[12],
+    paddingBottom: TAB_DOCK_CLEARANCE,
     gap: spacing[6],
   },
 
-  // Identity card (clay — elevated, soft shadow)
-  identityCard: {
-    borderRadius: borderRadius.xxl,
-    padding: spacing[5],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 3,
-  },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
   avatar: {
     width: 56,
@@ -281,11 +266,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   avatarText: {
     fontFamily: fontFamily.body,
@@ -317,7 +298,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Grouped settings (clay cards)
+  // Grouped settings
   group:    { gap: spacing[3] },
   groupLabel: {
     fontFamily: fontFamily.body,
@@ -328,15 +309,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
   },
   groupCard: {
-    borderRadius: borderRadius.xxl,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
   },
 
   // Menu row
@@ -346,14 +320,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     gap: spacing[3],
   },
-  menuIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuIcon:  { fontSize: 18 },
   menuLabel: {
     flex: 1,
     fontFamily: fontFamily.body,
@@ -364,11 +330,6 @@ const styles = StyleSheet.create({
   menuHint: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-  },
-  chevron: {
-    fontFamily: fontFamily.body,
-    fontSize: 20,
-    lineHeight: 22,
   },
 
   separator: {
@@ -382,11 +343,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[4],
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
   },
   signOutText: {
     fontFamily: fontFamily.body,

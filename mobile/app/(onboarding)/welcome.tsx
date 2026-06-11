@@ -1,22 +1,24 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { StyleSheet, Text, View } from 'react-native';
+import { AuthBackdrop } from '../../components/ui/AuthBackdrop';
+import { HapticPressable } from '../../components/ui/HapticPressable';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
-const PILLARS = [
-  { icon: '👩‍⚕️', title: 'Doctor-first care', text: 'A specialist who reads your full history' },
-  { icon: '🔬',   title: 'Your labs, decoded', text: 'Biomarkers that become a real care plan' },
-  { icon: '📋',   title: 'One record, always yours', text: 'Portable, private, and always accessible' },
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const PILLARS: { icon: IoniconName; title: string; text: string }[] = [
+  { icon: 'medkit-outline',        title: 'Doctor-first care',        text: 'A specialist who reads your full history' },
+  { icon: 'flask-outline',         title: 'Your labs, decoded',       text: 'Biomarkers that become a real care plan' },
+  { icon: 'document-text-outline', title: 'One record, always yours', text: 'Portable, private, and always accessible' },
 ];
 
 export default function WelcomeScreen() {
   const router = useRouter();
 
-  const btnScale = useSharedValue(1);
-  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
-
   return (
     <View style={styles.container}>
+      <AuthBackdrop />
 
       {/* Hero */}
       <View style={styles.hero}>
@@ -29,12 +31,12 @@ export default function WelcomeScreen() {
         </Text>
       </View>
 
-      {/* Feature pillars (glass cards on navy bg) */}
+      {/* Feature pillars (glass cards on the gradient) */}
       <View style={styles.pillars}>
         {PILLARS.map(({ icon, title, text }) => (
           <View key={title} style={styles.pillar}>
             <View style={styles.pillarIconWrap}>
-              <Text style={styles.pillarIcon}>{icon}</Text>
+              <Ionicons name={icon} size={22} color={colors.white} />
             </View>
             <View style={styles.pillarText}>
               <Text style={styles.pillarTitle}>{title}</Text>
@@ -46,17 +48,14 @@ export default function WelcomeScreen() {
 
       {/* Footer CTA */}
       <View style={styles.footer}>
-        <Animated.View style={btnAnim}>
-          <Pressable
-            style={styles.button}
-            onPress={() => router.push('/(onboarding)/conditions')}
-            onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
-            onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-            accessibilityLabel="Get started"
-          >
-            <Text style={styles.buttonText}>Get started</Text>
-          </Pressable>
-        </Animated.View>
+        <HapticPressable
+          haptic="medium"
+          style={styles.button}
+          onPress={() => router.push('/(onboarding)/conditions')}
+          accessibilityLabel="Get started"
+        >
+          <Text style={styles.buttonText}>Get started</Text>
+        </HapticPressable>
         <Text style={styles.privacyNote}>
           Your health data stays in India and is never sold.
         </Text>
@@ -117,7 +116,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  pillarIcon: { fontSize: 22 },
   pillarText: { flex: 1, gap: 2 },
   pillarTitle: {
     fontFamily: fontFamily.body,
@@ -139,11 +137,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.20,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: '0 8px 16px rgba(0,0,0,0.20)',
   },
   buttonText: {
     fontFamily: fontFamily.body,

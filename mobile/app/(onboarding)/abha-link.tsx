@@ -13,7 +13,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { confirmAbhaCreation, initAbhaCreation, linkAbhaNumber } from '../../lib/api/abha';
 import { useAuth } from '../../lib/auth/context';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 type Tab        = 'link' | 'create';
 type CreateStep = 'aadhaar' | 'otp';
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
 
   tabBar:   { flexDirection: 'row', borderRadius: borderRadius.xl, padding: 4 },
   tabItem:  { flex: 1, paddingVertical: spacing[3], alignItems: 'center', borderRadius: borderRadius.lg },
-  tabActive:{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  tabActive:{ boxShadow: '0 2px 8px rgba(0,0,0,0.07)' },
   tabText:  { fontFamily: fontFamily.body, fontSize: fontSize.body },
 
   form:       { gap: spacing[3] },
@@ -331,11 +331,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
@@ -355,11 +351,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[3],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
+    boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
     marginBottom: spacing[6],
   },
   successIconWrap: {
@@ -368,11 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.successGreen,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    boxShadow: `0 8px 16px ${withAlpha(colors.successGreen, 0.35)}`,
     marginBottom: spacing[2],
   },
   successIconText: { fontSize: 36, color: colors.white },

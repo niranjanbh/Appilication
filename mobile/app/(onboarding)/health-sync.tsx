@@ -5,7 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { captureConsentApi } from '../../lib/api/consent';
 import { postHealthSync } from '../../lib/api/health-sync';
 import { useAuth } from '../../lib/auth/context';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 import { fetchHealthData } from '../../lib/native/health-data';
 import { requestHealthPermissions } from '../../lib/native/health';
 import { registerHealthSyncTask } from '../../lib/native/background-sync';
@@ -191,11 +191,7 @@ const styles = StyleSheet.create({
     padding: spacing[5],
     gap: spacing[3],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
   },
   dataCardTitle: {
     fontFamily: fontFamily.body,
@@ -232,11 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   buttonMuted: { opacity: 0.70 },
   buttonText: {

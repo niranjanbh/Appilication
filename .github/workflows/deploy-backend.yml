@@ -76,6 +76,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          RDS_INSTANCE_ID: ${{ secrets.RDS_INSTANCE_ID }}
         run: |
           # Write SSH key (used over an SSM Session Manager tunnel — EC2_HOST is
           # the instance ID; no public IP or open port 22 required)

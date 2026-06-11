@@ -21,7 +21,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { HMSPrebuilt } from '@100mslive/react-native-room-kit';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../../lib/api/client';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -64,11 +64,7 @@ const wr = StyleSheet.create({
     borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 20,
-    elevation: 6,
+    boxShadow: '0 8px 20px rgba(0,0,0,0.10)',
   },
   title: { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600', textAlign: 'center' },
   sub:   { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
@@ -117,11 +113,7 @@ const er = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[4],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 20,
-    elevation: 6,
+    boxShadow: '0 8px 20px rgba(0,0,0,0.10)',
   },
   iconWrap: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   icon:     { fontSize: 30 },
@@ -220,11 +212,7 @@ const cd = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
   },
   allowBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
   skipBtn:  { width: '100%', height: 52, borderWidth: 1, borderRadius: borderRadius.xxl, alignItems: 'center', justifyContent: 'center' },

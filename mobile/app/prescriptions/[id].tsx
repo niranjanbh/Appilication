@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { CaptureGuard } from '../../components/ui/CaptureGuard';
 import { getPrescription, getPrescriptionPdfUrl, type Prescription, type PrescriptionItem } from '../../lib/api/prescriptions';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
@@ -59,11 +60,7 @@ const med = StyleSheet.create({
     padding: spacing[4],
     gap: spacing[2],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
   },
   name: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
   form: { fontFamily: fontFamily.body, fontSize: fontSize.caption, marginTop: -spacing[1] },
@@ -146,6 +143,8 @@ export default function PrescriptionDetailScreen() {
 
   return (
     <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+      {/* Prescription contents are PHI — block screen capture while focused */}
+      <CaptureGuard />
 
       {/* Download PDF */}
       <Animated.View style={pdfAnim}>
@@ -263,11 +262,7 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     gap: spacing[1],
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
   },
   infoLabel: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   infoValue: { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 22 },

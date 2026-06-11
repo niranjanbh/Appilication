@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -10,9 +8,14 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { listLabReports, type LabReport } from '../../lib/api/lab-reports';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { SkeletonCards } from '../../components/ui/Skeleton';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -51,44 +54,40 @@ function ReportCard({
   onPress: () => void;
   isDark: boolean;
 }) {
-  const scale  = useSharedValue(1);
-  const anim   = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const sColor = STATUS_COLOR[report.status] ?? colors.stone;
   const sLabel = STATUS_LABEL[report.status] ?? report.status;
   const isPdf  = report.content_type === 'application/pdf';
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const textPri = isDark ? colors.white     : colors.navyDeep;
   const textSub = isDark ? colors.slateText : colors.coolGray;
 
   return (
-    <Animated.View style={anim}>
-      <Pressable
-        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
-        onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
-        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-        accessibilityLabel={`View ${report.original_filename}`}
-      >
-        <View style={[styles.fileIcon, { backgroundColor: sColor + '18' }]}>
-          <Text style={[styles.fileIconText, { color: sColor }]}>{isPdf ? 'PDF' : 'IMG'}</Text>
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={[styles.filename, { color: textPri }]} numberOfLines={1}>
-            {report.original_filename}
-          </Text>
-          {report.lab_name ? <Text style={[styles.labName, { color: textSub }]}>{report.lab_name}</Text> : null}
-          <Text style={[styles.date, { color: textSub }]}>{formatDate(report.created_at)}</Text>
-        </View>
-        <View style={styles.cardRight}>
-          <View style={[styles.statusPill, { backgroundColor: sColor + '18' }]}>
-            <Text style={[styles.statusText, { color: sColor }]}>{sLabel}</Text>
+    <HapticPressable
+      scaleTo={0.97}
+      onPress={onPress}
+      accessibilityLabel={`View ${report.original_filename}`}
+    >
+      <GlassCard unpadded>
+        <View style={styles.card}>
+          <View style={[styles.fileIcon, { backgroundColor: sColor + '18' }]}>
+            <Text style={[styles.fileIconText, { color: sColor }]}>{isPdf ? 'PDF' : 'IMG'}</Text>
           </View>
-          <Text style={[styles.chevron, { color: textSub }]}>›</Text>
+          <View style={styles.cardBody}>
+            <Text style={[styles.filename, { color: textPri }]} numberOfLines={1}>
+              {report.original_filename}
+            </Text>
+            {report.lab_name ? <Text style={[styles.labName, { color: textSub }]}>{report.lab_name}</Text> : null}
+            <Text style={[styles.date, { color: textSub }]}>{formatDate(report.created_at)}</Text>
+          </View>
+          <View style={styles.cardRight}>
+            <View style={[styles.statusPill, { backgroundColor: sColor + '18' }]}>
+              <Text style={[styles.statusText, { color: sColor }]}>{sLabel}</Text>
+            </View>
+            <Text style={[styles.chevron, { color: textSub }]}>›</Text>
+          </View>
         </View>
-      </Pressable>
-    </Animated.View>
+      </GlassCard>
+    </HapticPressable>
   );
 }
 
@@ -120,21 +119,27 @@ export default function ReportsScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const fabScale = useSharedValue(1);
-  const fabAnim  = useAnimatedStyle(() => ({ transform: [{ scale: fabScale.value }] }));
-
   const bg = isDark ? colors.midnight : colors.skyMist;
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator color={colors.electricBlue} />
+      <View style={[styles.container, { backgroundColor: bg }]}>
+        <AmbientBackground />
+        <View style={styles.list}>
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: isDark ? colors.white : colors.navyDeep }]}>
+              Lab Reports
+            </Text>
+          </View>
+          <SkeletonCards count={4} />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
+      <AmbientBackground />
       <FlatList
         data={reports}
         keyExtractor={(r) => r.id}
@@ -165,35 +170,38 @@ export default function ReportsScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
-              <Text style={styles.emptyIconText}>🔬</Text>
-            </View>
-            <Text style={[styles.emptyTitle, { color: isDark ? colors.white : colors.navyDeep }]}>
-              {error ?? 'No reports yet'}
-            </Text>
-            {!error && (
-              <Text style={[styles.emptySub, { color: isDark ? colors.slateText : colors.coolGray }]}>
-                Upload a lab report and we'll extract your biomarker results automatically.
-              </Text>
-            )}
-          </View>
+          error ? (
+            <EmptyState
+              icon="cloud-offline-outline"
+              tint="amber"
+              title={error}
+              body="Pull down to refresh, or try again in a moment. Your reports are safe."
+            />
+          ) : (
+            <EmptyState
+              icon="flask-outline"
+              tint="green"
+              title="No reports yet"
+              body="Upload a lab report and we'll extract your biomarker results automatically."
+              ctaLabel="Upload report"
+              onCtaPress={() => router.push('/reports/upload')}
+            />
+          )
         }
       />
 
-      {/* Upload FAB */}
-      <Animated.View style={[styles.fab, fabAnim]}>
-        <Pressable
-          style={styles.uploadBtn}
-          onPress={() => router.push('/reports/upload')}
-          onPressIn={() => { fabScale.value = withSpring(0.95, { mass: 0.3, stiffness: 500 }); }}
-          onPressOut={() => { fabScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-          accessibilityLabel="Upload lab report"
-        >
-          <Text style={styles.uploadIcon}>+</Text>
-          <Text style={styles.uploadText}>Upload report</Text>
-        </Pressable>
-      </Animated.View>
+      {/* Upload FAB — floats above the tab dock */}
+      <HapticPressable
+        haptic="medium"
+        scaleTo={0.95}
+        containerStyle={styles.fab}
+        style={styles.uploadBtn}
+        onPress={() => router.push('/reports/upload')}
+        accessibilityLabel="Upload lab report"
+      >
+        <Text style={styles.uploadIcon}>+</Text>
+        <Text style={styles.uploadText}>Upload report</Text>
+      </HapticPressable>
     </View>
   );
 }
@@ -202,8 +210,11 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: spacing[4], paddingTop: spacing[2], paddingBottom: 100 },
+  list: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[2],
+    paddingBottom: TAB_DOCK_CLEARANCE + 72,
+  },
 
   header: { paddingVertical: spacing[4], gap: spacing[1] },
   title: {
@@ -217,17 +228,10 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: borderRadius.xl,
     padding: spacing[4],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
   },
   fileIcon: {
     width: 48,
@@ -273,37 +277,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
 
-  empty: { alignItems: 'center', paddingTop: spacing[16], gap: spacing[4] },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  emptyIconText: { fontSize: 32 },
-  emptyTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: spacing[6],
-  },
-
   fab: {
     position: 'absolute',
-    bottom: spacing[8],
+    bottom: TAB_DOCK_CLEARANCE - spacing[6],
     left: spacing[6],
     right: spacing[6],
   },
@@ -315,11 +291,7 @@ const styles = StyleSheet.create({
     height: 56,
     backgroundColor: colors.navyDeep,
     borderRadius: borderRadius.xxl,
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.30,
-    shadowRadius: 16,
-    elevation: 8,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
   uploadIcon: {
     fontFamily: fontFamily.body,

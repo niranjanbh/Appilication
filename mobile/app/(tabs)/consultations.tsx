@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -10,9 +8,14 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { SkeletonCards } from '../../components/ui/Skeleton';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -74,40 +77,36 @@ function ConsultationCard({
   isDark: boolean;
   onPress: () => void;
 }) {
-  const scale = useSharedValue(1);
-  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const sc    = STATUS_COLOR[item.status];
-
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const sc      = STATUS_COLOR[item.status];
   const textPri = isDark ? colors.white     : colors.navyDeep;
   const textSub = isDark ? colors.slateText : colors.coolGray;
 
   return (
-    <Animated.View style={anim}>
-      <Pressable
-        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}
-        onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
-        onPressOut={() => { scale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-        accessibilityLabel={`Consultation on ${formatDate(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardDate, { color: textSub }]}>
-            {formatDate(item.scheduled_start_at)} · {formatTime(item.scheduled_start_at)}
-          </Text>
-          <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>
-            <Text style={[styles.statusText, { color: sc }]}>{STATUS_LABEL[item.status]}</Text>
+    <HapticPressable
+      scaleTo={0.97}
+      onPress={onPress}
+      containerStyle={styles.cardSpacing}
+      accessibilityLabel={`Consultation on ${formatDate(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
+    >
+      <GlassCard unpadded>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardDate, { color: textSub }]}>
+              {formatDate(item.scheduled_start_at)} · {formatTime(item.scheduled_start_at)}
+            </Text>
+            <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>
+              <Text style={[styles.statusText, { color: sc }]}>{STATUS_LABEL[item.status]}</Text>
+            </View>
           </View>
+          <Text style={[styles.cardCategory, { color: textPri }]}>
+            {formatCat(item.condition_category)}
+          </Text>
+          <Text style={[styles.cardMeta, { color: textSub }]}>
+            {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'} · {formatRupees(item.consultation_fee_paise)}
+          </Text>
         </View>
-        <Text style={[styles.cardCategory, { color: textPri }]}>
-          {formatCat(item.condition_category)}
-        </Text>
-        <Text style={[styles.cardMeta, { color: textSub }]}>
-          {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'} · {formatRupees(item.consultation_fee_paise)}
-        </Text>
-      </Pressable>
-    </Animated.View>
+      </GlassCard>
+    </HapticPressable>
   );
 }
 
@@ -142,81 +141,79 @@ export default function ConsultationsScreen() {
     setRefreshing(false);
   }, [fetchConsultations]);
 
-  const bookScale = useSharedValue(1);
-  const bookAnim  = useAnimatedStyle(() => ({ transform: [{ scale: bookScale.value }] }));
-
   const upcoming = consultations.filter(isUpcoming);
   const past     = consultations.filter(c => !isUpcoming(c));
   const bg       = isDark ? colors.midnight : colors.skyMist;
   const textPri  = isDark ? colors.white    : colors.navyDeep;
   const textSub  = isDark ? colors.slateText : colors.coolGray;
 
-  if (loading) {
-    return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator color={colors.electricBlue} />
-      </View>
-    );
-  }
-
   return (
-    <ScrollView
-      style={[styles.flex, { backgroundColor: bg }]}
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.electricBlue} />}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: textPri }]}>Consultations</Text>
-        <Animated.View style={bookAnim}>
-          <Pressable
+    <View style={[styles.flex, { backgroundColor: bg }]}>
+      <AmbientBackground />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.electricBlue} />}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: textPri }]}>Consultations</Text>
+          <HapticPressable
+            scaleTo={0.94}
             style={styles.bookBtn}
             onPress={() => router.push('/consultations/book')}
-            onPressIn={() => { bookScale.value = withSpring(0.94, { mass: 0.3, stiffness: 500 }); }}
-            onPressOut={() => { bookScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
             accessibilityLabel="Book a consultation"
           >
             <Text style={styles.bookBtnText}>+ Book</Text>
-          </Pressable>
-        </Animated.View>
-      </View>
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {/* Upcoming */}
-      <Text style={[styles.sectionLabel, { color: textSub }]}>Upcoming</Text>
-      {upcoming.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: isDark ? colors.nightSurface : colors.white, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)' }]}>
-          <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={[styles.emptyText, { color: textPri }]}>No upcoming consultations</Text>
-          <Text style={[styles.emptySub, { color: textSub }]}>Book a consultation to get started.</Text>
+          </HapticPressable>
         </View>
-      ) : (
-        upcoming.map(c => (
-          <ConsultationCard
-            key={c.id}
-            item={c}
-            isDark={isDark}
-            onPress={() => router.push(`/consultations/${c.id}`)}
-          />
-        ))
-      )}
 
-      {/* Past */}
-      {past.length > 0 && (
-        <>
-          <Text style={[styles.sectionLabel, styles.sectionLabelLower, { color: textSub }]}>Past</Text>
-          {past.map(c => (
-            <ConsultationCard
-              key={c.id}
-              item={c}
-              isDark={isDark}
-              onPress={() => router.push(`/consultations/${c.id}`)}
-            />
-          ))}
-        </>
-      )}
-    </ScrollView>
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        {loading ? (
+          <SkeletonCards count={3} />
+        ) : (
+          <>
+            {/* Upcoming */}
+            <Text style={[styles.sectionLabel, { color: textSub }]}>Upcoming</Text>
+            {upcoming.length === 0 ? (
+              <EmptyState
+                icon="calendar-outline"
+                tint="blue"
+                title="No upcoming consultations"
+                body="Book a consultation with a Kyros specialist to get started — your care plan begins with one conversation."
+                ctaLabel="Book a consultation"
+                onCtaPress={() => router.push('/consultations/book')}
+              />
+            ) : (
+              upcoming.map(c => (
+                <ConsultationCard
+                  key={c.id}
+                  item={c}
+                  isDark={isDark}
+                  onPress={() => router.push(`/consultations/${c.id}`)}
+                />
+              ))
+            )}
+
+            {/* Past */}
+            {past.length > 0 && (
+              <>
+                <Text style={[styles.sectionLabel, styles.sectionLabelLower, { color: textSub }]}>Past</Text>
+                {past.map(c => (
+                  <ConsultationCard
+                    key={c.id}
+                    item={c}
+                    isDark={isDark}
+                    onPress={() => router.push(`/consultations/${c.id}`)}
+                  />
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -228,9 +225,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[6],
-    paddingBottom: spacing[10],
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   header: {
     flexDirection: 'row',
@@ -250,11 +246,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
   },
   bookBtnText: {
     fontFamily: fontFamily.body,
@@ -273,17 +265,10 @@ const styles = StyleSheet.create({
   },
   sectionLabelLower: { marginTop: spacing[6] },
 
+  cardSpacing: { marginBottom: spacing[3] },
   card: {
-    borderRadius: borderRadius.xl,
     padding: spacing[4],
-    marginBottom: spacing[3],
     gap: spacing[2],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -312,27 +297,6 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-  },
-
-  emptyCard: {
-    borderRadius: borderRadius.xl,
-    padding: spacing[6],
-    alignItems: 'center',
-    gap: spacing[2],
-    marginBottom: spacing[3],
-    borderWidth: 1,
-  },
-  emptyIcon:  { fontSize: 32 },
-  emptyText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
-    textAlign: 'center',
   },
 
   error: {

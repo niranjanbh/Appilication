@@ -7,7 +7,7 @@
 import { Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
 
 export default function JoinConsultationWebScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -72,11 +72,7 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 20,
-    elevation: 6,
+    boxShadow: '0 8px 20px rgba(0,0,0,0.10)',
   },
   iconWrap: {
     width: 72,
@@ -96,11 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
   },
   btnText:     { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
   backBtn:     { paddingVertical: spacing[2] },

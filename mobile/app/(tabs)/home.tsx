@@ -1,8 +1,16 @@
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
 import { useAuth } from '../../lib/auth/context';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import {
+  borderRadius, colors, fontFamily, fontSize, spacing, tintSoft, withAlpha, type TintName,
+} from '../../lib/design-tokens';
+import { useTheme } from '../../lib/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = spacing[6];
@@ -11,21 +19,21 @@ const QUICK_SIZE = Math.max((SCREEN_W - H_PAD * 2 - GAP * 3) / 4, 56);
 
 // ─── Quick actions ────────────────────────────────────────────────────────────
 
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
 interface QuickAction {
   id: string;
   label: string;
-  icon: string;
-  lightBg: string;
-  darkBg: string;
-  tint: string;
+  icon: IoniconName;
+  tint: TintName;
   route: string;
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { id: 'consult',   label: 'Consult',   icon: '🩺', lightBg: '#EBF3FF', darkBg: '#0F1E38', tint: colors.electricBlue, route: '/(tabs)/consultations' },
-  { id: 'reminders', label: 'Reminders', icon: '⏰', lightBg: '#FFF4E5', darkBg: '#2A1A05', tint: colors.warningAmber,  route: '/(tabs)/reminders' },
-  { id: 'reports',   label: 'Reports',   icon: '🔬', lightBg: '#EDFAF3', darkBg: '#061E12', tint: colors.successGreen,  route: '/(tabs)/reports' },
-  { id: 'profile',   label: 'Profile',   icon: '👤', lightBg: '#F3EFFF', darkBg: '#150F2B', tint: '#7C3AED',            route: '/(tabs)/profile' },
+  { id: 'consult',   label: 'Consult',   icon: 'medkit-outline',        tint: 'blue',   route: '/(tabs)/consultations' },
+  { id: 'reminders', label: 'Reminders', icon: 'alarm-outline',         tint: 'amber',  route: '/(tabs)/reminders' },
+  { id: 'reports',   label: 'Reports',   icon: 'flask-outline',         tint: 'green',  route: '/(tabs)/reports' },
+  { id: 'profile',   label: 'Profile',   icon: 'person-circle-outline', tint: 'violet', route: '/(tabs)/profile' },
 ];
 
 function getGreeting(): string {
@@ -56,25 +64,21 @@ function QuickBtn({
   isDark: boolean;
   onPress: () => void;
 }) {
-  const scale = useSharedValue(1);
-  const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const pair = tintSoft[action.tint];
+  const bg   = isDark ? pair.bgDark : pair.bgLight;
+  const tint = isDark ? pair.tintDark : pair.tintLight;
 
   return (
-    <Animated.View style={[{ width: QUICK_SIZE }, anim]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.90, { mass: 0.25, stiffness: 500 }); }}
-        onPressOut={() => { scale.value = withSpring(1,    { mass: 0.25, stiffness: 500 }); }}
-        style={[
-          styles.quickBtn,
-          { width: QUICK_SIZE, height: QUICK_SIZE, backgroundColor: isDark ? action.darkBg : action.lightBg },
-        ]}
-        accessibilityLabel={action.label}
-      >
-        <Text style={styles.quickIcon}>{action.icon}</Text>
-        <Text style={[styles.quickLabel, { color: action.tint }]}>{action.label}</Text>
-      </Pressable>
-    </Animated.View>
+    <HapticPressable
+      onPress={onPress}
+      scaleTo={0.9}
+      accessibilityLabel={action.label}
+      containerStyle={{ width: QUICK_SIZE }}
+      style={[styles.quickBtn, { width: QUICK_SIZE, height: QUICK_SIZE, backgroundColor: bg }]}
+    >
+      <Ionicons name={action.icon} size={24} color={tint} />
+      <Text style={[styles.quickLabel, { color: tint }]}>{action.label}</Text>
+    </HapticPressable>
   );
 }
 
@@ -83,95 +87,99 @@ function QuickBtn({
 export default function HomeScreen() {
   const { state } = useAuth();
   const router    = useRouter();
-  const isDark    = useColorScheme() === 'dark';
+  const t         = useTheme();
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
   const initials  = state.status === 'authenticated' ? getInitials(state.user.name) : 'K';
 
-  const ctaScale = useSharedValue(1);
-  const ctaAnim  = useAnimatedStyle(() => ({ transform: [{ scale: ctaScale.value }] }));
-
-  const bg       = isDark ? colors.midnight     : colors.skyMist;
-  const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg   = isDark ? colors.nightSurface : colors.white;
-  const cardBdr  = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-
   return (
-    <ScrollView
-      style={[styles.flex, { backgroundColor: bg }]}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.flex, { backgroundColor: t.background }]}>
+      <AmbientBackground />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.greeting, { color: textSub }]}>{getGreeting()}</Text>
-          <Text style={[styles.heroName, { color: textPri }]}>{firstName || 'Welcome'}</Text>
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: t.textSub }]}>{getGreeting()}</Text>
+            <Text style={[styles.heroName, { color: t.text }]}>{firstName || 'Welcome'}</Text>
+          </View>
+          <LinearGradient colors={[colors.navyMid, colors.navyDeep]} style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </LinearGradient>
         </View>
-        <View style={[styles.avatar, { backgroundColor: colors.navyDeep }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-      </View>
 
-      {/* ── Hero CTA — dark navy card ──────────────────────────────────────── */}
-      <Animated.View style={ctaAnim}>
-        <Pressable
+        {/* ── Hero CTA — gradient glass card ─────────────────────────────── */}
+        <HapticPressable
+          haptic="medium"
+          scaleTo={0.97}
           onPress={() => router.push('/consultations/book')}
-          onPressIn={() => { ctaScale.value = withSpring(0.97, { mass: 0.5, stiffness: 400 }); }}
-          onPressOut={() => { ctaScale.value = withSpring(1,    { mass: 0.5, stiffness: 400 }); }}
           accessibilityLabel="Book your first consultation"
         >
-          <View style={styles.heroCard}>
-            {/* glass-effect inner border */}
+          <LinearGradient
+            colors={[colors.navyMid, colors.navyDeep]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            {/* glass sheen along the top edge */}
+            <LinearGradient
+              colors={[withAlpha(colors.white, 0.14), withAlpha(colors.white, 0)]}
+              style={styles.heroSheen}
+              pointerEvents="none"
+            />
             <View style={styles.heroRow}>
               <View style={styles.heroIconWrap}>
-                <Text style={styles.heroIconEmoji}>🛡️</Text>
+                <Ionicons name="shield-checkmark-outline" size={22} color={colors.white} />
               </View>
               <View style={styles.heroContent}>
                 <Text style={styles.heroTitle}>Complete your health profile</Text>
                 <Text style={styles.heroSub}>5 quick questions · ~2 min</Text>
               </View>
-              <Text style={styles.heroArrow}>→</Text>
+              <Ionicons name="arrow-forward" size={20} color={withAlpha(colors.white, 0.6)} />
             </View>
             {/* progress bar */}
             <View style={styles.progressTrack}>
               <View style={styles.progressFill} />
             </View>
+          </LinearGradient>
+        </HapticPressable>
+
+        {/* ── Quick actions ───────────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: t.text }]}>Quick actions</Text>
+          <View style={styles.quickRow}>
+            {QUICK_ACTIONS.map(a => (
+              <QuickBtn
+                key={a.id}
+                action={a}
+                isDark={t.isDark}
+                onPress={() => router.push(a.route as never)}
+              />
+            ))}
           </View>
-        </Pressable>
-      </Animated.View>
-
-      {/* ── Quick actions ─────────────────────────────────────────────────── */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: textPri }]}>Quick actions</Text>
-        <View style={styles.quickRow}>
-          {QUICK_ACTIONS.map(a => (
-            <QuickBtn
-              key={a.id}
-              action={a}
-              isDark={isDark}
-              onPress={() => router.push(a.route as never)}
-            />
-          ))}
         </View>
-      </View>
 
-      {/* ── Care plan card ────────────────────────────────────────────────── */}
-      <View style={[styles.carePlanCard, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-        <Text style={[styles.eyebrow, { color: textSub }]}>YOUR CARE PLAN</Text>
-        <Text style={[styles.carePlanTitle, { color: textPri }]}>
-          Personalized care starts here
-        </Text>
-        <Text style={[styles.carePlanBody, { color: textSub }]}>
-          Talk to a Kyros specialist about your hormonal health. Your care plan —
-          prescriptions, reminders, and lab orders — will appear here after your
-          first consultation.
-        </Text>
-      </View>
+        {/* ── Care plan card ──────────────────────────────────────────────── */}
+        <GlassCard>
+          <View style={styles.carePlanInner}>
+            <Text style={[styles.eyebrow, { color: t.textSub }]}>YOUR CARE PLAN</Text>
+            <Text style={[styles.carePlanTitle, { color: t.text }]}>
+              Personalized care starts here
+            </Text>
+            <Text style={[styles.carePlanBody, { color: t.textSub }]}>
+              Talk to a Kyros specialist about your hormonal health. Your care plan —
+              prescriptions, reminders, and lab orders — will appear here after your
+              first consultation.
+            </Text>
+          </View>
+        </GlassCard>
 
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -183,7 +191,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: H_PAD,
     paddingTop: spacing[6],
-    paddingBottom: spacing[12],
+    paddingBottom: TAB_DOCK_CLEARANCE,
     gap: spacing[6],
   },
 
@@ -213,19 +221,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Hero card (dark navy — skeuomorphic glow + glass border)
+  // Hero card — gradient surface with a glass sheen and soft glow
   heroCard: {
-    backgroundColor: colors.navyDeep,
     borderRadius: borderRadius.xxl,
     padding: spacing[4],
     gap: spacing[4],
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.40,
-    shadowRadius: 24,
-    elevation: 10,
+    overflow: 'hidden',
+    boxShadow: `0 14px 24px ${withAlpha(colors.navyDeep, 0.40)}`,
+  },
+  heroSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 56,
   },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   heroIconWrap: {
@@ -236,8 +247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroIconEmoji: { fontSize: 22 },
-  heroContent:   { flex: 1 },
+  heroContent: { flex: 1 },
   heroTitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
@@ -249,11 +259,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: 'rgba(255,255,255,0.58)',
     marginTop: 2,
-  },
-  heroArrow: {
-    fontFamily: fontFamily.body,
-    fontSize: 20,
-    color: 'rgba(255,255,255,0.60)',
   },
   progressTrack: {
     height: 3,
@@ -275,20 +280,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Quick action buttons (claymorphism: soft rounded, inset shadow, pastel bg)
-  quickRow:  { flexDirection: 'row', justifyContent: 'space-between' },
+  // Quick action buttons — soft pastel chips with haptic spring presses
+  quickRow: { flexDirection: 'row', justifyContent: 'space-between' },
   quickBtn: {
     borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[1],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.09,
-    shadowRadius: 10,
-    elevation: 3,
+    boxShadow: '0 4px 10px rgba(0,0,0,0.09)',
   },
-  quickIcon:  { fontSize: 24 },
   quickLabel: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,
@@ -296,18 +296,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Care plan card (glassmorphism: white/dark surface, subtle border, soft shadow)
-  carePlanCard: {
-    borderRadius: borderRadius.xxl,
-    padding: spacing[6],
-    gap: spacing[2],
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 2,
-  },
+  carePlanInner: { gap: spacing[2] },
   eyebrow: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,

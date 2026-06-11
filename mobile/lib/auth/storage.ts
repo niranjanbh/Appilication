@@ -16,7 +16,11 @@ if (Platform.OS !== 'web') {
 
 async function setItem(key: string, value: string): Promise<void> {
   if (SecureStore) {
-    await SecureStore.setItemAsync(key, value);
+    // WHEN_UNLOCKED_THIS_DEVICE_ONLY: tokens are unreadable while the device is
+    // locked and are excluded from device backups / transfers to a new device.
+    await SecureStore.setItemAsync(key, value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
   } else {
     localStorage.setItem(key, value);
   }

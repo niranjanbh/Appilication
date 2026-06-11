@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -15,11 +16,13 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { z } from 'zod';
 import { signupApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { AuthBackdrop } from '../../components/ui/AuthBackdrop';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳', name: 'India' },
@@ -45,6 +48,7 @@ export default function SignupScreen() {
   const [apiError, setApiError]         = useState<string | null>(null);
   const [countryCode, setCountryCode]   = useState('+91');
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -71,11 +75,6 @@ export default function SignupScreen() {
     }
   };
 
-  const btnScale = useSharedValue(1);
-  const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
-
-  const outerBg  = isDark ? colors.midnight    : colors.navyDeep;
-  const cardBg   = isDark ? colors.nightSurface : colors.white;
   const textPri  = isDark ? colors.white        : colors.navyDeep;
   const textSub  = isDark ? colors.slateText    : colors.coolGray;
   const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
@@ -85,9 +84,10 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: outerBg }]}
+      style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <AuthBackdrop />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -100,8 +100,9 @@ export default function SignupScreen() {
           <Text style={styles.tagline}>Create your account</Text>
         </View>
 
-        {/* Form card */}
-        <View style={[styles.card, { backgroundColor: cardBg }]}>
+        {/* Form card — frosted glass over the gradient */}
+        <GlassCard strong unpadded style={styles.cardShadow}>
+          <View style={styles.cardInner}>
           <View style={styles.fields}>
 
             {/* Name */}
@@ -198,18 +199,29 @@ export default function SignupScreen() {
                 control={control}
                 name="password"
                 render={({ field }) => (
-                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.password ? colors.criticalRed : inputBdr }]}>
+                  <View style={[styles.inputWrap, styles.inputRow, { backgroundColor: inputBg, borderColor: errors.password ? colors.criticalRed : inputBdr }]}>
                     <TextInput
-                      style={[styles.textInput, { color: inputTxt }]}
+                      style={[styles.textInput, styles.textInputFlex, { color: inputTxt }]}
                       value={field.value}
                       onChangeText={field.onChange}
                       onBlur={field.onBlur}
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                       autoComplete="password-new"
                       accessibilityLabel="Password"
                       placeholderTextColor={textSub}
                       placeholder="8+ characters"
                     />
+                    <Pressable
+                      onPress={() => setShowPassword(v => !v)}
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={textSub}
+                      />
+                    </Pressable>
                   </View>
                 )}
               />
@@ -220,27 +232,25 @@ export default function SignupScreen() {
 
           {apiError ? <Text style={styles.apiError}>{apiError}</Text> : null}
 
-          <Animated.View style={btnAnim}>
-            <Pressable
-              style={[styles.button, isSubmitting && styles.buttonBusy]}
-              onPress={handleSubmit(onSubmit)}
-              onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
-              onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-              disabled={isSubmitting}
-              accessibilityLabel="Create account"
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Create account</Text>
-              )}
-            </Pressable>
-          </Animated.View>
+          <HapticPressable
+            haptic="medium"
+            style={[styles.button, isSubmitting && styles.buttonBusy]}
+            onPress={handleSubmit(onSubmit)}
+            disabled={isSubmitting}
+            accessibilityLabel="Create account"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Create account</Text>
+            )}
+          </HapticPressable>
 
           <Link href="/(auth)/login" style={[styles.signInLink, { color: textSub }]}>
             Already have an account? Sign in
           </Link>
-        </View>
+          </View>
+        </GlassCard>
 
       </ScrollView>
 
@@ -291,15 +301,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.60)',
   },
 
-  card: {
-    borderRadius: borderRadius.xxl,
+  cardShadow: {
+    boxShadow: '0 24px 40px rgba(0,0,0,0.22)',
+  },
+  cardInner: {
     padding: spacing[6],
     gap: spacing[4],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.22,
-    shadowRadius: 40,
-    elevation: 16,
   },
 
   fields: { gap: spacing[4] },
@@ -316,11 +323,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[4],
   },
   phoneInputWrap: { flex: 1 },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
   textInput: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
     padding: 0,
   },
+  textInputFlex: { flex: 1 },
   fieldError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
@@ -356,11 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.navyDeep,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.30,
-    shadowRadius: 16,
-    elevation: 6,
+    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: {

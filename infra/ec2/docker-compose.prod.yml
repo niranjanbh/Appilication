@@ -1,46 +1,19 @@
 # Phase 1 production Docker Compose — runs on a single EC2 instance (ap-south-1),
-# recommended t3.small (2 vCPU, 2 GB RAM). Also fits t2/t3.micro (1 GB) with the
-# 2 GB swap configured below, but t3.small gives headroom for Caddy + bursts.
-# Postgres and Redis run in-container (no RDS, no ElastiCache — keeps cost minimal).
+# recommended t3.small (2 vCPU, 2 GB RAM).
+# Postgres runs on RDS (managed, encrypted, automated backups) — KYROS_DATABASE_URL
+# in /etc/kyros/backend.env points at the RDS endpoint with ssl=require.
+# Redis runs in-container: it holds only ephemeral state (OTPs, rate limits, Celery
+# queue — security rule #13), so a managed ElastiCache node is deferred.
 # Managed by systemd unit kyros-backend.service.
 # Secrets are pre-written to /etc/kyros/backend.env by kyros-prepare-env.sh.
 # Requires 2 GB swap enabled on the host (setup step, not done here).
 #
 # Deploy: pull new image tag, then `docker compose -f /etc/kyros/docker-compose.yml up -d`
 #
-# Memory budget (~1 GB of 2 GB on t3.small; ~1 GB of 1 GB + swap on micro):
-#   postgres 200M | redis 64M | api 320M | worker 256M | beat 128M | caddy 48M
+# Memory budget (~1.1 GB of 2 GB on t3.small):
+#   redis 64M | api 512M | worker 384M | beat 128M | caddy 48M
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: kyros
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: kyros
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - /etc/kyros/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kyros -d kyros"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 200M
-        reservations:
-          memory: 80M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -75,8 +48,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -88,13 +59,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 320M
+          memory: 512M
         reservations:
-          memory: 150M
-    # 1 worker only — t2.micro (1 GB RAM) cannot support 2
+          memory: 200M
+    # 2 workers — Postgres moved to RDS, freeing ~200 MB on the host
     command: >
       gunicorn app.main:app
-      --workers 1
+      --workers 2
       --worker-class uvicorn.workers.UvicornWorker
       --bind 0.0.0.0:8000
       --timeout 120
@@ -112,16 +83,14 @@ services:
     restart: unless-stopped
     env_file: /etc/kyros/backend.env
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
         reservations:
-          memory: 100M
+          memory: 150M
     # concurrency=2 to stay within memory budget
     command: >
       celery -A app.worker.celery_app worker
@@ -142,8 +111,6 @@ services:
     volumes:
       - /var/lib/kyros/beat:/app/beat
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     deploy:
@@ -191,7 +158,5 @@ services:
         max-file: "2"
 
 volumes:
-  postgres_data:
-    name: kyros_postgres_data
   caddy_data:
     name: kyros_caddy_data

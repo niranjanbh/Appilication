@@ -1,8 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -17,15 +17,23 @@ import {
   markAllNotificationsReadApi,
   markNotificationReadApi,
 } from '../../lib/api/notifications';
+import { AmbientBackground } from '../../components/ui/AmbientBackground';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
+import { HapticPressable } from '../../components/ui/HapticPressable';
+import { SkeletonCards } from '../../components/ui/Skeleton';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 import type { Notification } from '../../types/notifications';
 
-const TEMPLATE_ICON: Record<string, string> = {
-  appointment_confirmation:  '📅',
-  appointment_reminder:      '⏰',
-  lab_result_ready:          '🔬',
-  pre_consult_report_ready:  '📋',
-  medication_reminder:       '💊',
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TEMPLATE_ICON: Record<string, IoniconName> = {
+  appointment_confirmation:  'calendar-outline',
+  appointment_reminder:      'alarm-outline',
+  lab_result_ready:          'flask-outline',
+  pre_consult_report_ready:  'clipboard-outline',
+  medication_reminder:       'medical-outline',
 };
 
 const SCREEN_ROUTE: Record<string, string> = {
@@ -45,40 +53,43 @@ interface NotificationRowProps {
 
 function NotificationRow({ item, onPress, isDark }: NotificationRowProps) {
   const isUnread = item.read_at === null;
-  const icon     = TEMPLATE_ICON[item.template_name] ?? '🔔';
+  const icon     = TEMPLATE_ICON[item.template_name] ?? 'notifications-outline';
   const sentDate = new Date(item.sent_at);
   const timeLabel = sentDate.toLocaleDateString('en-IN', {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 
-  const rowBg    = isUnread
-    ? (isDark ? colors.navyMid + '40' : colors.iceBlue)
-    : (isDark ? colors.nightSurface   : colors.white);
-  const rowBdr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const titleClr = isDark ? colors.white     : colors.navyDeep;
-  const bodyClr  = isDark ? colors.slateText : colors.coolGray;
+  const unreadWash = isDark ? colors.navyMid + '40' : colors.iceBlue;
+  const titleClr   = isDark ? colors.white     : colors.navyDeep;
+  const bodyClr    = isDark ? colors.slateText : colors.coolGray;
+  const iconClr    = isUnread ? colors.electricBlue : bodyClr;
 
   return (
-    <Pressable
-      style={[styles.row, { backgroundColor: rowBg, borderColor: rowBdr }]}
+    <HapticPressable
+      haptic="selection"
+      scaleTo={0.98}
       onPress={() => onPress(item)}
       accessibilityLabel={`${item.title}. ${isUnread ? 'Unread.' : 'Read.'} ${item.body}`}
       accessibilityRole="button"
     >
-      <View style={[styles.iconBubble, { backgroundColor: isDark ? colors.nightElev : colors.skyMist }]}>
-        <Text style={styles.iconEmoji}>{icon}</Text>
-        {isUnread && (
-          <View style={[styles.unreadDot, { borderColor: rowBg }]} />
-        )}
-      </View>
-      <View style={styles.rowContent}>
-        <Text style={[styles.rowTitle, { color: titleClr, fontWeight: isUnread ? '700' : '500' }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text style={[styles.rowBody, { color: bodyClr }]} numberOfLines={2}>{item.body}</Text>
-        <Text style={[styles.rowTime, { color: bodyClr }]}>{timeLabel}</Text>
-      </View>
-    </Pressable>
+      <GlassCard unpadded strong={isUnread}>
+        <View style={[styles.row, isUnread && { backgroundColor: unreadWash }]}>
+          <View style={[styles.iconBubble, { backgroundColor: isDark ? colors.nightElev : colors.skyMist }]}>
+            <Ionicons name={icon} size={20} color={iconClr} />
+            {isUnread && (
+              <View style={styles.unreadDot} />
+            )}
+          </View>
+          <View style={styles.rowContent}>
+            <Text style={[styles.rowTitle, { color: titleClr, fontWeight: isUnread ? '700' : '500' }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.rowBody, { color: bodyClr }]} numberOfLines={2}>{item.body}</Text>
+            <Text style={[styles.rowTime, { color: bodyClr }]}>{timeLabel}</Text>
+          </View>
+        </View>
+      </GlassCard>
+    </HapticPressable>
   );
 }
 
@@ -118,14 +129,18 @@ export default function NotificationsScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: bg }]}>
-        <ActivityIndicator size="large" color={colors.electricBlue} />
+      <View style={[styles.container, { backgroundColor: bg }]}>
+        <AmbientBackground />
+        <View style={styles.list}>
+          <SkeletonCards count={4} />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
+      <AmbientBackground />
 
       {/* Unread toolbar */}
       {unreadCount > 0 && (
@@ -166,17 +181,12 @@ export default function NotificationsScreen() {
         ]}
         ItemSeparatorComponent={() => <View style={{ height: spacing[2] }} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
-              <Text style={styles.emptyIcon}>🔔</Text>
-            </View>
-            <Text style={[styles.emptyTitle, { color: isDark ? colors.white : colors.navyDeep }]}>
-              No notifications yet
-            </Text>
-            <Text style={[styles.emptyBody, { color: isDark ? colors.slateText : colors.coolGray }]}>
-              Appointment confirmations, lab results, and reminders will appear here.
-            </Text>
-          </View>
+          <EmptyState
+            icon="notifications-outline"
+            tint="blue"
+            title="No notifications yet"
+            body="Appointment confirmations, lab results, and reminders will appear here."
+          />
         }
         onEndReached={() => {
           if (data && page < data.pages) setPage((p) => p + 1);
@@ -191,7 +201,6 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   toolbar: {
     flexDirection: 'row',
@@ -224,20 +233,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  list: { padding: spacing[4], gap: spacing[2] },
+  list: {
+    padding: spacing[4],
+    paddingBottom: TAB_DOCK_CLEARANCE,
+    gap: spacing[2],
+  },
 
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     padding: spacing[4],
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
     gap: spacing[3],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
   },
   iconBubble: {
     width: 44,
@@ -248,7 +254,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     position: 'relative',
   },
-  iconEmoji:  { fontSize: 20 },
   unreadDot: {
     position: 'absolute',
     top: 0,
@@ -257,7 +262,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: colors.electricBlue,
-    borderWidth: 2,
   },
   rowContent: { flex: 1, gap: 2 },
   rowTitle: {
@@ -275,31 +279,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  emptyContainer: { flexGrow: 1 },
-  empty: { alignItems: 'center', paddingHorizontal: spacing[6], paddingTop: spacing[16], gap: spacing[4] },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  emptyIcon:  { fontSize: 32 },
-  emptyTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.h3,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptyBody: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  emptyContainer: { flexGrow: 1, justifyContent: 'center' },
 });
