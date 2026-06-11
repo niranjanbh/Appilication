@@ -4,9 +4,9 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import { listLabReports, type LabReport } from '../../lib/api/lab-reports';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
@@ -95,7 +95,7 @@ function ReportCard({
 
 export default function ReportsScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [reports, setReports] = useState<LabReport[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);

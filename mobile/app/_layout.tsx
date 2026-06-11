@@ -6,6 +6,7 @@ import { AuthProvider } from '../lib/auth/context';
 import { OpenInAppBanner } from '../components/web/OpenInAppBanner';
 import { PrivacyShield } from '../components/ui/PrivacyShield';
 import { colors, fontFamily, fontSize } from '../lib/design-tokens';
+import { ThemeProvider, useThemePreference } from '../lib/theme-context';
 // Side-effect: registers the background sync task definition before the React tree mounts.
 import '../lib/native/background-sync';
 
@@ -28,9 +29,7 @@ export default function RootLayout() {
     'TiroDevanagariHindi-Regular': { uri: 'https://fonts.gstatic.com/s/tirodevanagarihindu/v6/55xyezMfnuiTmFNjvECeQjDanASeyhf5LuQQ6AVA.ttf' },
   });
 
-  const loadingBg  = isDark ? colors.midnight    : colors.navyDeep;
-  const headerBg   = isDark ? colors.nightSurface : colors.navyDeep;
-  const headerText = colors.white;
+  const loadingBg = isDark ? colors.midnight : colors.navyDeep;
 
   if (!fontsLoaded) {
     return (
@@ -42,24 +41,38 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <OpenInAppBanner />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: headerBg },
-            headerTintColor: headerText,
-            headerTitleStyle: {
-              fontFamily: fontFamily.display,
-              fontSize: fontSize.h3,
-              color: headerText,
-            },
-            headerShadowVisible: false,
-            contentStyle: { backgroundColor: isDark ? colors.midnight : colors.skyMist },
-          }}
-        />
-        {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
-        <PrivacyShield />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <OpenInAppBanner />
+          <RootLayoutNav />
+          {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
+          <PrivacyShield />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
+  );
+}
+
+function RootLayoutNav() {
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
+
+  const headerBg   = isDark ? colors.nightSurface : colors.navyDeep;
+  const headerText = colors.white;
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: headerBg },
+        headerTintColor: headerText,
+        headerTitleStyle: {
+          fontFamily: fontFamily.display,
+          fontSize: fontSize.h3,
+          color: headerText,
+        },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: isDark ? colors.midnight : colors.skyMist },
+      }}
+    />
   );
 }

@@ -4,9 +4,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import { apiFetch } from '../../lib/api/client';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
@@ -114,7 +114,7 @@ function ConsultationCard({
 
 export default function ConsultationsScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);

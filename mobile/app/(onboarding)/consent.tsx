@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { captureConsentApi } from '../../lib/api/consent';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
@@ -153,7 +154,7 @@ const c = StyleSheet.create({
 
 export default function ConsentScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [dpdpAgreed, setDpdpAgreed] = useState(false);
   const [teleAgreed, setTeleAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);

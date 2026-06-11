@@ -4,7 +4,8 @@
  * Metro picks this file (.web.tsx) over [id].tsx automatically on web builds.
  */
 
-import { Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
@@ -12,7 +13,7 @@ import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from 
 export default function JoinConsultationWebScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
 
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));

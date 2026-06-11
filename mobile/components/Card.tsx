@@ -1,5 +1,6 @@
-import { StyleSheet, View, useColorScheme, type ViewProps } from 'react-native';
+import { StyleSheet, View, type ViewProps } from 'react-native';
 import { borderRadius, colors, spacing , withAlpha } from '../lib/design-tokens';
+import { useThemePreference } from '../lib/theme-context';
 
 type CardVariant = 'clay' | 'dark' | 'glass' | 'flat' | 'white' | 'ivory';
 
@@ -8,7 +9,7 @@ interface CardProps extends ViewProps {
 }
 
 export function Card({ variant = 'clay', style, children, ...props }: CardProps) {
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
 
   const dynamicBg =
     variant === 'clay' || variant === 'white' || variant === 'flat'

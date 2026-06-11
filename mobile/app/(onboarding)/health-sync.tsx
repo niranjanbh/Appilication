@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { captureConsentApi } from '../../lib/api/consent';
 import { postHealthSync } from '../../lib/api/health-sync';
@@ -29,7 +30,7 @@ const STEP = 4;
 export default function HealthSyncScreen() {
   const router = useRouter();
   const { markOnboardingComplete } = useAuth();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
   const [loading, setLoading] = useState(false);
 
   const finish = async () => {

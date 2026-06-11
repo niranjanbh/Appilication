@@ -8,9 +8,9 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 
 import {
   listNotificationsApi,
@@ -98,7 +98,7 @@ function NotificationRow({ item, onPress, isDark }: NotificationRowProps) {
 export default function NotificationsScreen() {
   const queryClient = useQueryClient();
   const router      = useRouter();
-  const isDark      = useColorScheme() === 'dark';
+  const isDark      = useThemePreference().colorScheme === 'dark';
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isFetching, refetch } = useQuery({

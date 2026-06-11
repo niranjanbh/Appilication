@@ -6,7 +6,7 @@ import { CTASection } from '../../components/marketing/CTASection';
 export const metadata: Metadata = {
   title: 'Our Doctors — NMC-Registered Specialists',
   description:
-    'Kyros Clinic doctors are NMC-registered specialists in thyroid, PCOS, weight management, hormones, skin & hair, diabetes, and longevity. Verified by registration number before onboarding.',
+    'Kyros Clinic doctors are NMC-registered specialists in thyroid, PCOS, weight management, hormones, skin & hair, sexual health, diabetes, and longevity. Verified by registration number before onboarding.',
   alternates: { canonical: 'https://kyrosclinic.com/our-doctors' },
   openGraph: {
     title: 'Our Doctors — NMC-Registered Specialists at Kyros Clinic',
@@ -26,7 +26,7 @@ const schema = {
   name: 'Our Doctors — Kyros Clinic',
   url: 'https://kyrosclinic.com/our-doctors',
   description:
-    'NMC-registered specialist doctors at Kyros Clinic, covering thyroid, PCOS, weight management, hormones, skin & hair, diabetes, and longevity.',
+    'NMC-registered specialist doctors at Kyros Clinic, covering thyroid, PCOS, weight management, hormones, skin & hair, sexual health, diabetes, and longevity.',
 };
 
 export default function OurDoctorsPage() {

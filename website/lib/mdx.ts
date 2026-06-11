@@ -4,17 +4,54 @@ import matter from "gray-matter";
 
 const CONTENT_DIR = path.join(process.cwd(), "content", "learn");
 
+export interface ArticleReviewer {
+  name: string;
+  credentials?: string;
+  nmcRegNo?: string;
+  specialty?: string;
+  doctorSlug?: string;
+}
+
+export interface ArticleHeroImage {
+  src: string;
+  alt: string;
+  suggestion?: string;
+}
+
+export interface ArticleFaq {
+  q: string;
+  a: string;
+}
+
 export interface ArticleFrontmatter {
   title: string;
   slug: string;
   vertical: string;
-  deck: string;
-  doctor_author_id: string;
-  doctor_reviewed_at: string;
-  references: Array<{ citation: string; url?: string }>;
+  pillar?: string;
+  intentLayer?: string;
+  canonical?: string;
+  metaTitle?: string;
+  metaDescription: string;
+  primaryKeyword?: string;
+  secondaryKeywords?: string[];
+  reviewer?: ArticleReviewer;
+  lastReviewed: string;
+  datePublished?: string;
+  heroImage?: ArticleHeroImage;
+  schemaTypes?: string[];
+  about?: string;
+  alternateName?: string[];
+  faq?: ArticleFaq[];
+  relatedLearn?: string[];
+  conversionPage?: string;
+  sources?: string[];
+  scheduleJReviewed?: boolean;
+  complianceNotes?: string;
 }
 
 export interface ArticleMeta extends ArticleFrontmatter {
+  /** Convenience alias for metaDescription, used as the article deck/summary. */
+  deck: string;
   readingTimeMinutes: number;
 }
 
@@ -32,21 +69,47 @@ function getVerticalDir(vertical: string): string {
   return path.join(CONTENT_DIR, vertical);
 }
 
+/**
+ * A directory is a content vertical only if it is not hidden (no leading dot)
+ * and contains at least one .mdx file. This guards routing against stray dirs
+ * such as an accidental `.claude/` settings folder landing under content/learn.
+ */
+function isVerticalDir(name: string): boolean {
+  if (name.startsWith(".")) return false;
+  const dir = path.join(CONTENT_DIR, name);
+  if (!fs.statSync(dir).isDirectory()) return false;
+  return fs.readdirSync(dir).some((f) => f.endsWith(".mdx"));
+}
+
+/**
+ * Build an ArticleMeta from parsed frontmatter. The directory name (`vertical`)
+ * and filename (`slug`) are the source of truth for routing — they override any
+ * value declared in the frontmatter so links always resolve to a real route.
+ */
+function toMeta(
+  data: Record<string, unknown>,
+  vertical: string,
+  slug: string,
+  content: string,
+): ArticleMeta {
+  const fm = data as unknown as ArticleFrontmatter;
+  return {
+    ...fm,
+    slug,
+    vertical,
+    deck: fm.metaDescription,
+    readingTimeMinutes: estimateReadingTime(content),
+  };
+}
+
 export function getArticle(vertical: string, slug: string): ArticleWithContent | null {
   const filePath = path.join(getVerticalDir(vertical), `${slug}.mdx`);
   if (!fs.existsSync(filePath)) return null;
 
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
-  const fm = data as ArticleFrontmatter;
 
-  return {
-    ...fm,
-    slug,
-    vertical,
-    readingTimeMinutes: estimateReadingTime(content),
-    content,
-  };
+  return { ...toMeta(data, vertical, slug, content), content };
 }
 
 export function getArticlesByVertical(vertical: string): ArticleMeta[] {
@@ -60,11 +123,10 @@ export function getArticlesByVertical(vertical: string): ArticleMeta[] {
       const slug = f.replace(/\.mdx$/, "");
       const raw = fs.readFileSync(path.join(dir, f), "utf-8");
       const { data, content } = matter(raw);
-      const fm = data as ArticleFrontmatter;
-      return { ...fm, slug, vertical, readingTimeMinutes: estimateReadingTime(content) };
+      return toMeta(data, vertical, slug, content);
     })
     .sort((a, b) =>
-      new Date(b.doctor_reviewed_at).getTime() - new Date(a.doctor_reviewed_at).getTime()
+      new Date(b.lastReviewed).getTime() - new Date(a.lastReviewed).getTime()
     );
 }
 
@@ -73,7 +135,7 @@ export function getAllArticles(): ArticleMeta[] {
 
   return fs
     .readdirSync(CONTENT_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && isVerticalDir(d.name))
     .flatMap((d) => getArticlesByVertical(d.name));
 }
 
@@ -82,7 +144,7 @@ export function getAllArticleParams(): Array<{ vertical: string; slug: string }>
 
   return fs
     .readdirSync(CONTENT_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && isVerticalDir(d.name))
     .flatMap((d) => {
       const dir = path.join(CONTENT_DIR, d.name);
       return fs
@@ -96,6 +158,6 @@ export function getVerticals(): string[] {
   if (!fs.existsSync(CONTENT_DIR)) return [];
   return fs
     .readdirSync(CONTENT_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && isVerticalDir(d.name))
     .map((d) => d.name);
 }

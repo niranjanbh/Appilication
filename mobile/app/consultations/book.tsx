@@ -18,9 +18,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
@@ -396,7 +396,7 @@ type Step = 'condition' | 'doctor' | 'slot' | 'pay' | 'success';
 
 export default function BookConsultationScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [step,        setStep]        = useState<Step>('condition');
   const [condition,   setCondition]   = useState('');
   const [doctor,      setDoctor]      = useState<typeof SEED_DOCTORS[0] | null>(null);

@@ -12,9 +12,9 @@ const CONDITIONS = [
   { slug: 'weight-management', name: 'Weight Management', sub: 'Metabolic, GLP-1, insulin resistance' },
   { slug: 'diabetes', name: 'Diabetes', sub: 'Blood sugar management, prediabetes, type 2 diabetes' },
   { slug: 'thyroid', name: 'Thyroid', sub: 'Fatigue, weight changes, hair loss, brain fog' },
-  { slug: 'pcos', name: 'PCOS', sub: 'Irregular cycles, acne, hair loss, weight' },
+  { slug: 'pmos', name: 'PMOS (PCOS)', sub: 'Irregular cycles, acne, hair loss, weight' },
   { slug: 'skin-and-hair', name: 'Skin & Hair', sub: 'AGA, adult acne, melasma' },
-  { slug: 'mens-intimate-health', name: "Men's Intimate Health", sub: 'ED, premature ejaculation, low libido' },
+  { slug: 'sexual-health', name: 'Sexual & Intimate Health', sub: 'Low libido, ED, premature ejaculation, painful sex, dryness' },
   { slug: 'hormones-trt', name: 'Hormones & TRT', sub: 'Low testosterone, hormonal imbalance' },
   { slug: 'longevity', name: 'Longevity', sub: 'Preventive care, advanced biomarkers' },
 ] as const;
@@ -28,7 +28,7 @@ const INTAKE_QUESTIONS: Record<ConditionSlug, Array<{ id: string; label: string;
     { id: 'current_medication', label: 'Are you currently on thyroid medication?', options: ['No', 'Yes, levothyroxine', 'Yes, other medication', 'Previously, not currently'] },
     { id: 'recent_labs', label: 'When did you last have a thyroid panel?', options: ['Never', 'More than 1 year ago', 'Within the last year', 'Within the last 3 months'] },
   ],
-  pcos: [
+  pmos: [
     { id: 'cycle_regularity', label: 'How regular is your menstrual cycle?', options: ['Regular (24–35 days)', 'Slightly irregular', 'Very irregular', 'Absent'] },
     { id: 'primary_concern', label: 'What is your primary concern right now?', options: ['Irregular cycles', 'Acne or hair issues', 'Weight management', 'Fertility', 'General hormonal health'] },
     { id: 'previous_diagnosis', label: 'Have you been diagnosed with PCOS or PCOD before?', options: ['Yes', 'No', 'Suspected but unconfirmed'] },
@@ -45,8 +45,8 @@ const INTAKE_QUESTIONS: Record<ConditionSlug, Array<{ id: string; label: string;
     { id: 'duration', label: 'How long have you been experiencing this?', options: ['Less than 6 months', '6 months to 1 year', '1–3 years', 'More than 3 years'] },
     { id: 'treatments_tried', label: 'Have you tried any treatments?', options: ['No treatment yet', 'Over-the-counter products', 'Doctor-prescribed treatment', 'Clinic procedures (PRP, laser)'] },
   ],
-  'mens-intimate-health': [
-    { id: 'primary_concern', label: 'What is your primary concern?', options: ['Erectile dysfunction', 'Premature ejaculation', 'Reduced libido', 'Multiple concerns'] },
+  'sexual-health': [
+    { id: 'primary_concern', label: 'What is your primary concern?', options: ['Reduced libido or desire', 'Erectile difficulty', 'Premature ejaculation', 'Pain or dryness during sex', 'Multiple concerns'] },
     { id: 'duration', label: 'How long have you been experiencing this?', options: ['Less than 6 months', '6 months to 1 year', '1–3 years', 'More than 3 years'] },
     { id: 'previous_consultation', label: 'Have you discussed this with a doctor before?', options: ['No, this is my first consultation', 'Yes, previously', 'I prefer not to say'] },
   ],

@@ -7,9 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,7 +31,7 @@ function formatBytes(b: number) {
 
 export default function UploadReportScreen() {
   const router       = useRouter();
-  const isDark       = useColorScheme() === 'dark';
+  const isDark       = useThemePreference().colorScheme === 'dark';
   const { isDesktop } = useBreakpoint();
   const [picked, setPicked]   = useState<PickedFile | null>(null);
   const [step, setStep]       = useState<UploadStep>('idle');

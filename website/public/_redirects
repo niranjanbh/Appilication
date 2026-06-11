@@ -1,0 +1,16 @@
+# Cloudflare static-asset redirects (honoured by the ASSETS binding when serving ./out).
+# Format: <from> <to> <status>
+#
+# 2026-06: "Men's Intimate Health" was renamed to "Sexual & Intimate Health" and the
+# URL slug changed from mens-intimate-health -> sexual-health. Preserve any indexed
+# links and inbound SEO from the old slug.
+/conditions/mens-intimate-health      /conditions/sexual-health   301
+/learn/mens-intimate-health           /learn/sexual-health        301
+/learn/mens-intimate-health/*         /learn/sexual-health        301
+
+# 2026-06: PCOS vertical renamed to PMOS (metabolic-first framing). Folder/route
+# slug changed pcos -> pmos; article filenames are unchanged, so map each old
+# article URL straight to its new equivalent.
+/conditions/pcos                      /conditions/pmos            301
+/learn/pcos                           /learn/pmos                 301
+/learn/pcos/*                         /learn/pmos/:splat          301

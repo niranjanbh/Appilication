@@ -6,7 +6,8 @@
  * Metro picks this file (.web.tsx) over [name].tsx automatically on web builds.
  */
 
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -51,7 +52,7 @@ function formatDate(iso: string | null): string {
 export default function BiomarkerTrendWebScreen() {
   const { name }  = useLocalSearchParams<{ name: string }>();
   const router    = useRouter();
-  const isDark    = useColorScheme() === 'dark';
+  const isDark    = useThemePreference().colorScheme === 'dark';
   const [range,   setRange]   = useState<BiomarkerRange>('all');
   const [data,    setData]    = useState<BiomarkerTrendResponse | null>(null);
   const [loading, setLoading] = useState(true);

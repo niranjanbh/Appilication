@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getArticlesByVertical, getVerticals } from "../../../lib/mdx";
-import { getDoctor } from "../../../lib/doctors";
 import { getCondition } from "../../../lib/conditions";
 import { CONDITION_DISPLAY_NAMES } from "../../../lib/conditionDisplay";
 import { JsonLD } from "../../../components/schema/JsonLD";
@@ -92,7 +91,10 @@ export default function VerticalLearnPage({ params }: Params) {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {articles.map((article) => {
-              const doctor = getDoctor(article.doctor_author_id);
+              const reviewerName =
+                article.reviewer?.name && article.reviewer.name !== "TO BE ADDED AT PUBLISH"
+                  ? article.reviewer.name
+                  : null;
               return (
                 <Link
                   key={article.slug}
@@ -107,7 +109,7 @@ export default function VerticalLearnPage({ params }: Params) {
                     {article.deck}
                   </p>
                   <p className="font-body text-caption text-stone">
-                    {doctor ? `Reviewed by ${doctor.name}` : "Doctor-reviewed"}{" "}
+                    {reviewerName ? `Reviewed by ${reviewerName}` : "Doctor-reviewed"}{" "}
                     · {article.readingTimeMinutes} min read
                   </p>
                 </Link>

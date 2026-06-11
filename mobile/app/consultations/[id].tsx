@@ -6,9 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
@@ -82,7 +82,7 @@ function Row({ label, value, textPri, textSub, borderColor }: {
 export default function ConsultationDetailScreen() {
   const { id }   = useLocalSearchParams<{ id: string }>();
   const router   = useRouter();
-  const isDark   = useColorScheme() === 'dark';
+  const isDark   = useThemePreference().colorScheme === 'dark';
 
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [loading,    setLoading]    = useState(true);

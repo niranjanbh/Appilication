@@ -4,8 +4,14 @@ import { getAllArticles } from '../lib/mdx';
 
 const BASE_URL = 'https://kyrosclinic.com';
 
-// Static pages have real dates; article routes use doctor_reviewed_at from frontmatter.
+// Static pages have real dates; article routes use lastReviewed from frontmatter.
 const SITE_BUILT = '2026-06-01';
+
+function safeIso(value: string | undefined): string {
+  if (!value) return SITE_BUILT;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? SITE_BUILT : d.toISOString();
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -42,7 +48,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       seenVerticals.add(a.vertical);
       learnVerticalRoutes.push({
         url: `${BASE_URL}/learn/${a.vertical}`,
-        lastModified: new Date(a.doctor_reviewed_at).toISOString(),
+        lastModified: safeIso(a.lastReviewed),
         changeFrequency: 'weekly' as const,
         priority: 0.8,
       });
@@ -51,7 +57,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const articleRoutes: MetadataRoute.Sitemap = articles.map((a) => ({
     url: `${BASE_URL}/learn/${a.vertical}/${a.slug}`,
-    lastModified: new Date(a.doctor_reviewed_at).toISOString(),
+    lastModified: safeIso(a.lastReviewed),
     changeFrequency: 'monthly' as const,
     priority: 0.85,
   }));

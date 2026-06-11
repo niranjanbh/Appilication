@@ -10,12 +10,13 @@ import { StatBlock } from '../../../components/marketing/StatBlock';
 
 const CONDITION_SPECIALTY: Record<string, string> = {
   thyroid: 'Endocrinology',
-  pcos: 'Endocrinology',
+  pmos: 'Endocrinology',
   'weight-management': 'Internal Medicine',
   'skin-and-hair': 'Dermatology',
-  'mens-intimate-health': 'Urology',
+  'sexual-health': 'Sexual Medicine',
   'hormones-trt': 'Endocrinology',
   longevity: 'Preventive Medicine',
+  diabetes: 'Endocrinology',
 };
 
 interface Params {

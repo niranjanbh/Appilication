@@ -12,9 +12,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CartesianChart, Line, useChartPressState } from 'victory-native';
 import { Circle, Rect, Group } from '@shopify/react-native-skia';
@@ -288,7 +288,7 @@ function ChartSkeleton({ isDark }: { isDark: boolean }) {
 export default function BiomarkerTrendScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
   const router   = useRouter();
-  const isDark   = useColorScheme() === 'dark';
+  const isDark   = useThemePreference().colorScheme === 'dark';
 
   const [range,   setRange]   = useState<BiomarkerRange>('all');
   const [data,    setData]    = useState<BiomarkerTrendResponse | null>(null);

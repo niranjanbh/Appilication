@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Switch, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
+import { useThemePreference } from '../lib/theme-context';
 
 import {
   getNotificationPreferencesApi,
@@ -83,7 +84,7 @@ const r = StyleSheet.create({
 
 export default function NotificationPreferencesScreen() {
   const queryClient = useQueryClient();
-  const isDark      = useColorScheme() === 'dark';
+  const isDark      = useThemePreference().colorScheme === 'dark';
 
   const { data, isLoading } = useQuery<NotificationPreferences>({
     queryKey: ['notification-preferences'],

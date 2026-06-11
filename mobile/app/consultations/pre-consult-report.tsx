@@ -1,4 +1,5 @@
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -192,7 +193,7 @@ function FlagsSection({ flags, cardBg, cardBdr, textPri, textSub }: {
 export default function PreConsultReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
 
   const [report,  setReport]  = useState<PreConsultReport | null>(null);
   const [loading, setLoading] = useState(true);

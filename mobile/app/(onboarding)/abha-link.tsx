@@ -7,9 +7,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { confirmAbhaCreation, initAbhaCreation, linkAbhaNumber } from '../../lib/api/abha';
 import { useAuth } from '../../lib/auth/context';
@@ -25,7 +25,7 @@ const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 export default function AbhaLinkScreen() {
   const router = useRouter();
   const { markOnboardingComplete } = useAuth();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
 
   const [tab,          setTab]          = useState<Tab>('link');
   const [loading,      setLoading]      = useState(false);

@@ -1,9 +1,9 @@
 export const CONDITION_DISPLAY_NAMES: Record<string, string> = {
   thyroid: "Thyroid",
   "weight-management": "Weight Management",
-  pcos: "PCOS",
+  pmos: "PMOS (PCOS)",
   "skin-and-hair": "Skin & Hair",
-  "mens-intimate-health": "Men's Intimate Health",
+  "sexual-health": "Sexual & Intimate Health",
   "hormones-trt": "Hormones & TRT",
   longevity: "Longevity",
   diabetes: "Diabetes",

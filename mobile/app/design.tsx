@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useThemePreference } from '../lib/theme-context';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { PullQuote } from '../components/PullQuote';
@@ -17,7 +18,7 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 export default function DesignShowcase() {
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const bg      = isDark ? colors.midnight     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
   const textSub = isDark ? colors.slateText    : colors.coolGray;

@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-# Create a manual RDS snapshot before a production deploy.
+# Logical backup of the in-container Postgres database before a production
+# deploy/migration. Pushes a gzipped pg_dump to S3.
+#
+# Postgres runs on the EC2 host itself (no RDS) — this replaces the old RDS
+# snapshot step. Restore with:
+#   gunzip -c <backup>.sql.gz | docker exec -i kyros-postgres-1 \
+#     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+#
+# Old backups expire via an S3 lifecycle rule on the db-backups/ prefix
+# (set once on the bucket — see infra/ec2 bootstrap notes), so no pruning here.
+#
+# On a first-ever deploy the postgres container doesn't exist yet (empty DB,
+# nothing to back up) — this script detects that and exits 0.
+#
 # Called by deploy-phase1.sh but can also run standalone.
 #
 # Usage: ./snapshot-before-deploy.sh <image_tag>
@@ -7,40 +20,42 @@
 set -euo pipefail
 
 IMAGE_TAG="${1:-manual}"
-RDS_INSTANCE="${RDS_INSTANCE_ID:?RDS_INSTANCE_ID not set}"
+INSTANCE_ID="${EC2_HOST:?EC2_HOST (instance ID) not set}"
 AWS_REGION="ap-south-1"
-SNAPSHOT_ID="kyros-pre-deploy-$(date -u +%Y%m%d-%H%M%S)-${IMAGE_TAG:0:12}"
+DEPLOY_USER="ec2-user"
+SSH_KEY="/tmp/deploy_key"
 
 log() { echo "[snapshot] $(date -u +%H:%M:%S) $*"; }
 
-log "Creating RDS snapshot: ${SNAPSHOT_ID}"
-aws rds create-db-snapshot \
-  --db-instance-identifier "${RDS_INSTANCE}" \
-  --db-snapshot-identifier "${SNAPSHOT_ID}" \
-  --region "${AWS_REGION}"
+SSH_CONFIG="$(mktemp)"
+cat > "${SSH_CONFIG}" <<EOF
+Host ${INSTANCE_ID}
+  User ${DEPLOY_USER}
+  IdentityFile ${SSH_KEY}
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ProxyCommand aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p --region ${AWS_REGION}
+EOF
 
-log "Waiting for snapshot to complete (this can take 1–5 min)..."
-aws rds wait db-snapshot-completed \
-  --db-instance-identifier "${RDS_INSTANCE}" \
-  --db-snapshot-identifier "${SNAPSHOT_ID}" \
-  --region "${AWS_REGION}"
+SSH_CMD="ssh -F ${SSH_CONFIG}"
 
-log "Snapshot ready: ${SNAPSHOT_ID}"
+BACKUP_NAME="kyros-pre-deploy-$(date -u +%Y%m%d-%H%M%S)-${IMAGE_TAG:0:12}.sql.gz"
 
-# Prune pre-deploy snapshots older than 14 days to manage cost
-CUTOFF=$(date -u -d "14 days ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-  || date -u -v -14d +%Y-%m-%dT%H:%M:%SZ)
+log "Backing up kyros-postgres-1 -> db-backups/${BACKUP_NAME}"
 
-OLD_SNAPSHOTS=$(aws rds describe-db-snapshots \
-  --db-instance-identifier "${RDS_INSTANCE}" \
-  --snapshot-type manual \
-  --query "DBSnapshots[?SnapshotCreateTime<='${CUTOFF}' && starts_with(DBSnapshotIdentifier,'kyros-pre-deploy-')].DBSnapshotIdentifier" \
-  --output text \
-  --region "${AWS_REGION}")
+$SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
+  set -euo pipefail
+  if ! sudo docker ps --format '{{.Names}}' | grep -qx kyros-postgres-1; then
+    echo "[snapshot] kyros-postgres-1 not running yet (first deploy?) — skipping backup"
+    exit 0
+  fi
+  source <(grep -E '^(POSTGRES_USER|POSTGRES_DB|KYROS_S3_BUCKET)=' /etc/kyros/backend.env)
+  DEST="s3://\${KYROS_S3_BUCKET}/db-backups/${BACKUP_NAME}"
+  sudo docker exec kyros-postgres-1 \
+    pg_dump -U "\${POSTGRES_USER}" -d "\${POSTGRES_DB}" --no-owner --no-acl \
+    | gzip \
+    | aws s3 cp - "\${DEST}" --region ${AWS_REGION}
+  echo "[snapshot] backup written to \${DEST}"
+REMOTE
 
-for snap in ${OLD_SNAPSHOTS}; do
-  log "Pruning old snapshot: ${snap}"
-  aws rds delete-db-snapshot \
-    --db-snapshot-identifier "${snap}" \
-    --region "${AWS_REGION}" || true
-done
+log "Backup step complete."

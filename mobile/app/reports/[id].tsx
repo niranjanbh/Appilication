@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { CaptureGuard } from '../../components/ui/CaptureGuard';
@@ -165,7 +165,7 @@ function MetaCard({ report, onDownload, isDark, textPri, textSub, cardBg, cardBd
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
 
   const [report,      setReport]      = useState<LabReport | null>(null);
   const [loading,     setLoading]     = useState(true);

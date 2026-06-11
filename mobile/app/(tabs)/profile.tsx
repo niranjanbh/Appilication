@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Appearance, ScrollView, StyleSheet, Switch, Text, useColorScheme, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
@@ -9,6 +9,7 @@ import { HapticPressable } from '../../components/ui/HapticPressable';
 import { IconChip } from '../../components/ui/IconChip';
 import { useAuth } from '../../lib/auth/context';
 import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
+import { useThemePreference } from '../../lib/theme-context';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -72,13 +73,14 @@ function Separator({ isDark }: { isDark: boolean }) {
 export default function ProfileScreen() {
   const router = useRouter();
   const { state, signOut } = useAuth();
-  const isDark = useColorScheme() === 'dark';
+  const { colorScheme, setPreference } = useThemePreference();
+  const isDark = colorScheme === 'dark';
 
   const user     = state.status === 'authenticated' ? state.user : null;
   const initials = user ? getInitials(user.name) : 'K';
 
   function handleThemeToggle(val: boolean) {
-    Appearance.setColorScheme(val ? 'dark' : 'light');
+    setPreference(val ? 'dark' : 'light');
   }
 
   const bg      = isDark ? colors.midnight     : colors.skyMist;
@@ -159,7 +161,7 @@ export default function ProfileScreen() {
           <GlassCard unpadded>
             <View style={styles.groupCard}>
 
-              {/* Dark theme toggle (pure UI — Appearance API) */}
+              {/* Dark theme toggle (persisted via ThemeProvider) */}
               <View style={styles.menuRow}>
                 <IconChip icon={isDark ? 'moon-outline' : 'sunny-outline'} tint="amber" size={36} />
                 <Text style={[styles.menuLabel, { color: textPri }]}>Dark theme</Text>

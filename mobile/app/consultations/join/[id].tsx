@@ -14,9 +14,9 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { HMSPrebuilt } from '@100mslive/react-native-room-kit';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -224,7 +224,7 @@ const cd = StyleSheet.create({
 export default function JoinScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [state, setState] = useState<ScreenState>({ phase: 'loading' });
   const pollAttempts = useRef(0);
   const pollTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);

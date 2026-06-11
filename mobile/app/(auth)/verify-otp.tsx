@@ -10,9 +10,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
 import { sendOtpApi, verifyOtpApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
@@ -32,7 +32,7 @@ export default function VerifyOtpScreen() {
   const router  = useRouter();
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const { signIn }  = useAuth();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [apiError, setApiError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [resent, setResent]       = useState(false);

@@ -114,7 +114,7 @@ export default function ForDoctorsPage() {
             {[
               { specialty: 'Endocrinology', verticals: 'Thyroid, PCOS, TRT, Diabetes, Longevity' },
               { specialty: 'Dermatology', verticals: 'AGA, Adult acne, Melasma, Skin conditions' },
-              { specialty: 'Urology / Andrology', verticals: "Men's intimate health, ED, TRT" },
+              { specialty: 'Urology / Andrology', verticals: 'Sexual & intimate health, ED, TRT' },
               { specialty: 'Internal Medicine / GP', verticals: 'Weight management, Metabolic health, Longevity' },
               { specialty: 'Gynaecology', verticals: 'PCOS, hormonal health, fertility support' },
               { specialty: 'Psychiatry / Psychology', verticals: 'Hormonal mood effects, anxiety related to chronic conditions' },

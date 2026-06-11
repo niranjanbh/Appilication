@@ -6,8 +6,8 @@
 #   - SSH_PRIVATE_KEY written to /tmp/deploy_key, EC2_HOST set to the instance ID
 #     (e.g. i-0123456789abcdef0) — no public IP/bastion needed, SSH tunnels over SSM
 #   - ECR image already pushed: ECR_REGISTRY/kyros-backend:IMAGE_TAG
-#   - Postgres runs on RDS; RDS_INSTANCE_ID set so a snapshot is taken before
-#     the Alembic migration (snapshot-before-deploy.sh)
+#   - Postgres runs in-container on this host (no RDS); a pg_dump backup is
+#     pushed to S3 before the Alembic migration (snapshot-before-deploy.sh)
 #
 # Usage: ./deploy-phase1.sh <image_tag>
 
@@ -40,21 +40,31 @@ EOF
 
 SSH_CMD="ssh -F ${SSH_CONFIG}"
 
-# ── Step 1: Snapshot RDS before touching the schema ─────────────────────────
-# A restorable snapshot must exist before every migration (PHI database).
+# ── Step 1: Back up Postgres before touching the schema ─────────────────────
+# A restorable backup must exist before every migration (PHI database).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "${SCRIPT_DIR}/snapshot-before-deploy.sh" "${IMAGE_TAG}"
 
-# ── Step 2: Run Alembic migration on EC2 ────────────────────────────────────
+# ── Step 2: Bring up Postgres + Redis (creates the kyros_default network on a
+#            first deploy, no-ops on subsequent ones) ───────────────────────
+log "Ensuring postgres + redis are up..."
+
+$SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
+  set -euo pipefail
+  sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d --wait postgres redis
+REMOTE
+
+# ── Step 3: Run Alembic migration on EC2 ────────────────────────────────────
 log "Running migration: alembic upgrade head (image=${IMAGE_TAG})"
 
 $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
   set -euo pipefail
   aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${ECR_REGISTRY}
   sudo docker pull ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG}
-  # Migration runs against RDS via KYROS_DATABASE_URL in backend.env —
-  # no compose network needed
+  # Postgres runs in-container on the kyros compose network — join it so
+  # KYROS_DATABASE_URL's "postgres" hostname resolves.
   sudo docker run --rm \
+    --network kyros_default \
     --env-file /etc/kyros/backend.env \
     ${ECR_REGISTRY}/kyros-backend:${IMAGE_TAG} \
     alembic upgrade head
@@ -62,7 +72,7 @@ REMOTE
 
 log "Migration completed successfully."
 
-# ── Step 3: Deploy new containers ───────────────────────────────────────────
+# ── Step 4: Deploy new containers ───────────────────────────────────────────
 log "Deploying new containers..."
 
 $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
@@ -74,7 +84,7 @@ $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
   sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d --remove-orphans
 REMOTE
 
-# ── Step 4: Health check ─────────────────────────────────────────────────────
+# ── Step 5: Health check ─────────────────────────────────────────────────────
 log "Waiting for health check..."
 for i in {1..12}; do
   if $SSH_CMD "${INSTANCE_ID}" curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then

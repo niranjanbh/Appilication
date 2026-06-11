@@ -1,5 +1,5 @@
-import { useColorScheme } from 'react-native';
 import { colors, glass } from './design-tokens';
+import { useThemePreference } from './theme-context';
 
 export const lightPalette = {
   background:   colors.skyMist,
@@ -40,6 +40,6 @@ export const darkPalette = {
 export type AppPalette = typeof lightPalette | typeof darkPalette;
 
 export function useTheme(): AppPalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? darkPalette : lightPalette;
+  const { colorScheme } = useThemePreference();
+  return colorScheme === 'dark' ? darkPalette : lightPalette;
 }

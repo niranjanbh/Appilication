@@ -7,9 +7,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import {
   confirmAbhaCreation,
@@ -25,7 +25,7 @@ type CreateStep = 'aadhaar' | 'otp';
 
 export default function AbhaSettingsScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
 
   const [status,         setStatus]        = useState<AbhaStatus | null>(null);
   const [statusLoading,  setStatusLoading] = useState(true);

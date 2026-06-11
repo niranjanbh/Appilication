@@ -2,10 +2,10 @@ import Link from 'next/link';
 
 const VERTICALS = [
   { href: '/conditions/thyroid', label: 'Thyroid' },
-  { href: '/conditions/pcos', label: 'PCOS' },
+  { href: '/conditions/pmos', label: 'PMOS (PCOS)' },
   { href: '/conditions/weight-management', label: 'Weight Management' },
   { href: '/conditions/skin-and-hair', label: 'Skin & Hair' },
-  { href: '/conditions/mens-intimate-health', label: "Men's Intimate Health" },
+  { href: '/conditions/sexual-health', label: 'Sexual & Intimate Health' },
   { href: '/conditions/hormones-trt', label: 'Hormones & TRT' },
   { href: '/conditions/longevity', label: 'Longevity' },
   { href: '/conditions/diabetes', label: 'Diabetes' },

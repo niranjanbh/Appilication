@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllArticles } from "../../lib/mdx";
-import { getDoctor } from "../../lib/doctors";
 import { CONDITION_DISPLAY_NAMES } from "../../lib/conditionDisplay";
 import { JsonLD } from "../../components/schema/JsonLD";
 
 export const metadata: Metadata = {
   title: "Learn — Hormonal Health Guides",
   description:
-    "Doctor-reviewed articles on thyroid, PCOS, weight management, skin and hair, men's intimate health, hormones, diabetes, and longevity — written by NMC-registered specialists.",
+    "Doctor-reviewed articles on thyroid, PCOS, weight management, skin and hair, sexual and intimate health, hormones, diabetes, and longevity — written by NMC-registered specialists.",
   alternates: { canonical: "https://kyrosclinic.com/learn" },
   openGraph: {
     title: "Learn — Kyros Clinic",
@@ -36,7 +35,10 @@ function ArticleCard({
 }: {
   article: ReturnType<typeof getAllArticles>[number];
 }) {
-  const doctor = getDoctor(article.doctor_author_id);
+  const reviewerName =
+    article.reviewer?.name && article.reviewer.name !== "TO BE ADDED AT PUBLISH"
+      ? article.reviewer.name
+      : null;
   const verticalLabel = CONDITION_DISPLAY_NAMES[article.vertical] ?? article.vertical;
 
   return (
@@ -54,7 +56,7 @@ function ArticleCard({
       <p className="font-body text-body text-stone leading-relaxed mb-4">{article.deck}</p>
       <div className="flex items-center justify-between">
         <p className="font-body text-caption text-stone">
-          {doctor ? `Reviewed by ${doctor.name}` : "Doctor-reviewed"}{" "}
+          {reviewerName ? `Reviewed by ${reviewerName}` : "Doctor-reviewed"}{" "}
           · {article.readingTimeMinutes} min
         </p>
         <span className="font-body text-caption text-forest font-medium">Read →</span>

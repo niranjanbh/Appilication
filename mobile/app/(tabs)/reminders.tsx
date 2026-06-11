@@ -11,9 +11,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -403,7 +403,7 @@ function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps)
 
 export default function RemindersScreen() {
   const qc     = useQueryClient();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemePreference().colorScheme === 'dark';
   const [modalVisible, setModalVisible] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [adherenceState, setAdherenceState] = useState<{

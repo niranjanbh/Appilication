@@ -1,29 +1,51 @@
-import type { DoctorProfile } from "../../lib/doctors";
+import type { ArticleReviewer } from "../../lib/mdx";
 
 interface DoctorBylineProps {
-  doctor: DoctorProfile;
+  reviewer?: ArticleReviewer;
   reviewedAt: string;
   compact?: boolean;
 }
 
 function formatReviewDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-IN", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 }
 
-export function DoctorByline({ doctor, reviewedAt, compact = false }: DoctorBylineProps) {
+const PLACEHOLDER_NAME = "TO BE ADDED AT PUBLISH";
+
+function isNamed(reviewer?: ArticleReviewer): boolean {
+  return Boolean(reviewer?.name) && reviewer!.name !== PLACEHOLDER_NAME;
+}
+
+export function DoctorByline({ reviewer, reviewedAt, compact = false }: DoctorBylineProps) {
+  const named = isNamed(reviewer);
+  const reviewedDate = formatReviewDate(reviewedAt);
+  const specialty = reviewer?.specialty;
+
   if (compact) {
     return (
       <p className="font-body text-caption text-stone">
-        Reviewed by{" "}
-        <span className="text-forest font-medium">{doctor.name}</span>
-        {" · "}
-        <span className="font-mono">{doctor.nmcRegistration}</span>
-        {" · "}
-        {formatReviewDate(reviewedAt)}
+        {named ? (
+          <>
+            Reviewed by <span className="text-forest font-medium">{reviewer!.name}</span>
+            {reviewer!.nmcRegNo ? (
+              <>
+                {" · "}
+                <span className="font-mono">NMC Reg. {reviewer!.nmcRegNo}</span>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            Reviewed by a Kyros{specialty ? ` ${specialty}` : ""} specialist
+          </>
+        )}
+        {reviewedDate ? <>{" · "}{reviewedDate}</> : null}
       </p>
     );
   }
@@ -36,23 +58,35 @@ export function DoctorByline({ doctor, reviewedAt, compact = false }: DoctorByli
         aria-hidden="true"
       >
         <span className="font-display text-h3 font-medium text-forest">
-          {doctor.name.replace("Dr. ", "").charAt(0)}
+          {named ? reviewer!.name.replace("Dr. ", "").charAt(0) : "K"}
         </span>
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <p className="font-body text-body-lg font-medium text-forest">{doctor.name}</p>
-          <p className="font-body text-caption text-stone">{doctor.qualifications}</p>
+          <p className="font-body text-body-lg font-medium text-forest">
+            {named ? reviewer!.name : "Reviewed by a Kyros specialist"}
+          </p>
+          {named && reviewer!.credentials ? (
+            <p className="font-body text-caption text-stone">{reviewer!.credentials}</p>
+          ) : null}
         </div>
-        <p className="font-body text-caption text-stone mt-0.5">
-          {doctor.specialty}
-          {" · NMC Reg. "}
-          <span className="font-mono">{doctor.nmcRegistration}</span>
-        </p>
-        <p className="font-body text-caption text-stone mt-0.5">
-          Medically reviewed: {formatReviewDate(reviewedAt)}
-        </p>
+        {specialty ? (
+          <p className="font-body text-caption text-stone mt-0.5">
+            {specialty}
+            {named && reviewer!.nmcRegNo ? (
+              <>
+                {" · NMC Reg. "}
+                <span className="font-mono">{reviewer!.nmcRegNo}</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+        {reviewedDate ? (
+          <p className="font-body text-caption text-stone mt-0.5">
+            Medically reviewed: {reviewedDate}
+          </p>
+        ) : null}
       </div>
     </div>
   );

@@ -13,9 +13,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
+import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
 import { signupApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
@@ -44,7 +44,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function SignupScreen() {
   const router  = useRouter();
-  const isDark  = useColorScheme() === 'dark';
+  const isDark  = useThemePreference().colorScheme === 'dark';
   const [apiError, setApiError]         = useState<string | null>(null);
   const [countryCode, setCountryCode]   = useState('+91');
   const [pickerVisible, setPickerVisible] = useState(false);
