@@ -73,6 +73,14 @@ function RootLayoutNav() {
         headerShadowVisible: false,
         contentStyle: { backgroundColor: isDark ? colors.midnight : colors.skyMist },
       }}
-    />
+    >
+      {/* Route groups render their own headers (or none) — hide the outer
+          Stack header so its default title (the literal group segment name,
+          e.g. "(tabs)" / "(auth)") never appears. */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+    </Stack>
   );
 }
