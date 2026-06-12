@@ -452,7 +452,7 @@ cat > /tmp/backend-secrets.json <<EOF
   "KYROS_RATE_LIMIT_ENABLED": "true",
   "KYROS_STARTUP_SCHEMA_CHECK": "true",
 
-  "KYROS_CORS_ALLOWED_ORIGINS": "https://kyrosclinic.com,https://www.kyrosclinic.com,https://portal.kyrosclinic.com",
+  "KYROS_CORS_ALLOWED_ORIGINS": "https://kyrosclinic.com,https://www.kyrosclinic.com,https://doctor.kyrosclinic.com",
 
   "KYROS_AWS_REGION": "${AWS_REGION}",
   "KYROS_S3_BUCKET": "kyros-phi-production",
