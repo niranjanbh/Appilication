@@ -8,8 +8,6 @@
 # queue — security rule #13), so a managed ElastiCache node is deferred.
 # Managed by systemd unit kyros-backend.service.
 # Secrets are pre-written to /etc/kyros/backend.env by kyros-prepare-env.sh.
-# Requires 2 GB swap enabled on the host (setup step, not done here).
-#
 # Deploy: pull new image tag, then `docker compose -f /etc/kyros/docker-compose.yml up -d`
 #
 # Memory budget (~1.39 GB of 2 GB on t3.small — leaves ~0.65 GB for OS/containerd):
