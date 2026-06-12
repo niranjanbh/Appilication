@@ -249,7 +249,9 @@ async def test_booking_inquiry_without_otp_returns_201(client: AsyncClient) -> N
             "name": "Test Patient",
             "gender": "female",
             "phone": _synth_phone(),
-            "email": "testpatient@test.kyros.local",
+            # example.com, not @test.kyros.local: EmailStr (email-validator)
+            # rejects the special-use .local TLD at the API boundary.
+            "email": "testpatient@example.com",
             "condition_category": "thyroid",
             "intake_responses": {"symptom_duration": "more_than_6_months", "previous_diagnosis": "no"},
         },
@@ -348,7 +350,7 @@ async def test_booking_inquiry_valid_otp_returns_201(
             "name": "Test Patient",
             "gender": "female",
             "phone": phone,
-            "email": "testpatient@test.kyros.local",
+            "email": "testpatient@example.com",
             "condition_category": "thyroid",
             "intake_responses": {"symptom_duration": "more_than_6_months", "previous_diagnosis": "no"},
             "otp": otp,
@@ -461,7 +463,7 @@ async def test_lead_valid_body_returns_201(client: AsyncClient) -> None:
         "/v1/public/lead",
         json={
             "name": "Test Visitor",
-            "email": _synth_email(),
+            "email": "testvisitor@example.com",
             "subject": "support",
             "message": "I have a question about how consultations work.",
         },
