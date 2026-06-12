@@ -49,7 +49,8 @@ $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
     echo "[snapshot] kyros-postgres-1 not running yet (first deploy?) — skipping backup"
     exit 0
   fi
-  source <(grep -E '^(POSTGRES_USER|POSTGRES_DB|KYROS_S3_BUCKET)=' /etc/kyros/backend.env)
+  # backend.env is root-owned 0600; this remote shell runs as ec2-user
+  source <(sudo grep -E '^(POSTGRES_USER|POSTGRES_DB|KYROS_S3_BUCKET)=' /etc/kyros/backend.env)
   DEST="s3://\${KYROS_S3_BUCKET}/db-backups/${BACKUP_NAME}"
   sudo docker exec kyros-postgres-1 \
     pg_dump -U "\${POSTGRES_USER}" -d "\${POSTGRES_DB}" --no-owner --no-acl \

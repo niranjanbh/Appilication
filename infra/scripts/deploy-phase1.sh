@@ -40,21 +40,32 @@ EOF
 
 SSH_CMD="ssh -F ${SSH_CONFIG}"
 
-# ── Step 1: Back up Postgres before touching the schema ─────────────────────
+# ── Step 1: Refresh /etc/kyros/backend.env from SSM ─────────────────────────
+# Nothing else on the deploy path writes backend.env (the systemd unit only runs
+# prepare-env on service start), so refresh it here — this also picks up SSM
+# parameter changes on every deploy.
+log "Refreshing backend.env from SSM Parameter Store..."
+
+$SSH_CMD "${INSTANCE_ID}" "sudo /usr/local/bin/kyros-prepare-env.sh"
+
+# ── Step 2: Back up Postgres before touching the schema ─────────────────────
 # A restorable backup must exist before every migration (PHI database).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "${SCRIPT_DIR}/snapshot-before-deploy.sh" "${IMAGE_TAG}"
 
-# ── Step 2: Bring up Postgres + Redis (creates the kyros_default network on a
+# ── Step 3: Bring up Postgres + Redis (creates the kyros_default network on a
 #            first deploy, no-ops on subsequent ones) ───────────────────────
+# --env-file feeds compose's ${VAR} substitution (env_file: inside the yml only
+# reaches container environments, not substitution).
 log "Ensuring postgres + redis are up..."
 
 $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
   set -euo pipefail
-  sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d --wait postgres redis
+  sudo docker compose --env-file /etc/kyros/backend.env \
+    -f /etc/kyros/docker-compose.yml --project-name kyros up -d --wait postgres redis
 REMOTE
 
-# ── Step 3: Run Alembic migration on EC2 ────────────────────────────────────
+# ── Step 4: Run Alembic migration on EC2 ────────────────────────────────────
 log "Running migration: alembic upgrade head (image=${IMAGE_TAG})"
 
 $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
@@ -72,19 +83,23 @@ REMOTE
 
 log "Migration completed successfully."
 
-# ── Step 4: Deploy new containers ───────────────────────────────────────────
+# ── Step 5: Deploy new containers ───────────────────────────────────────────
+# Vars are passed inline after sudo (sudo resets exported environment), and they
+# take precedence over the --env-file values.
 log "Deploying new containers..."
 
 $SSH_CMD "${INSTANCE_ID}" bash <<REMOTE
   set -euo pipefail
   echo "${IMAGE_TAG}" | sudo tee /etc/kyros/image-tag > /dev/null
-  export IMAGE_TAG="${IMAGE_TAG}"
-  export ECR_REGISTRY="${ECR_REGISTRY}"
-  sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros pull
-  sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d --remove-orphans
+  sudo ECR_REGISTRY="${ECR_REGISTRY}" IMAGE_TAG="${IMAGE_TAG}" \
+    docker compose --env-file /etc/kyros/backend.env \
+    -f /etc/kyros/docker-compose.yml --project-name kyros pull
+  sudo ECR_REGISTRY="${ECR_REGISTRY}" IMAGE_TAG="${IMAGE_TAG}" \
+    docker compose --env-file /etc/kyros/backend.env \
+    -f /etc/kyros/docker-compose.yml --project-name kyros up -d --remove-orphans
 REMOTE
 
-# ── Step 5: Health check ─────────────────────────────────────────────────────
+# ── Step 6: Health check ─────────────────────────────────────────────────────
 log "Waiting for health check..."
 for i in {1..12}; do
   if $SSH_CMD "${INSTANCE_ID}" curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
@@ -94,7 +109,7 @@ for i in {1..12}; do
   if [ "${i}" -eq 12 ]; then
     log "ERROR: health check failed after 60 s — rolling back"
     $SSH_CMD "${INSTANCE_ID}" \
-      "sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs --tail=50"
+      "sudo docker compose --env-file /etc/kyros/backend.env -f /etc/kyros/docker-compose.yml --project-name kyros logs --tail=50"
     exit 1
   fi
   log "Not healthy yet (${i}/12), retrying in 5s..."

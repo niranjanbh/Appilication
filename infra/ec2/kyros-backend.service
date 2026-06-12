@@ -9,15 +9,20 @@ Type=forking
 RemainAfterExit=yes
 # Pull env-prep before starting (oneshot, runs first)
 ExecStartPre=/usr/local/bin/kyros-prepare-env.sh
+# --env-file feeds ${ECR_REGISTRY}/${IMAGE_TAG} substitution — prepare-env
+# writes both into backend.env
 ExecStart=/usr/bin/docker compose \
+    --env-file /etc/kyros/backend.env \
     -f /etc/kyros/docker-compose.yml \
     --project-name kyros \
     up -d --remove-orphans
 ExecStop=/usr/bin/docker compose \
+    --env-file /etc/kyros/backend.env \
     -f /etc/kyros/docker-compose.yml \
     --project-name kyros \
     down
 ExecReload=/usr/bin/docker compose \
+    --env-file /etc/kyros/backend.env \
     -f /etc/kyros/docker-compose.yml \
     --project-name kyros \
     up -d --remove-orphans
