@@ -52,6 +52,8 @@ jobs:
         env:
           KYROS_DATABASE_URL: postgresql+asyncpg://kyros:test@localhost:55432/kyros_test
           KYROS_REDIS_URL: redis://localhost:56379/0
+          KYROS_CELERY_BROKER_URL: redis://localhost:56379/1
+          KYROS_CELERY_RESULT_BACKEND: redis://localhost:56379/2
         run: uv run pytest -v
 
   build-and-deploy:

@@ -144,6 +144,8 @@ test: ## Run pytest in the test compose environment
 	cd backend && \
 		KYROS_DATABASE_URL="postgresql+asyncpg://kyros:test@localhost:55432/kyros_test" \
 		KYROS_REDIS_URL="redis://localhost:56379/0" \
+		KYROS_CELERY_BROKER_URL="redis://localhost:56379/1" \
+		KYROS_CELERY_RESULT_BACKEND="redis://localhost:56379/2" \
 		uv run pytest -v
 	$(SAY) "Tearing down test services..."
 	$(COMPOSE_TEST) down
@@ -154,6 +156,8 @@ test-watch: ## Run pytest in watch mode (test compose must be up — see test-up
 	cd backend && \
 		KYROS_DATABASE_URL="postgresql+asyncpg://kyros:test@localhost:55432/kyros_test" \
 		KYROS_REDIS_URL="redis://localhost:56379/0" \
+		KYROS_CELERY_BROKER_URL="redis://localhost:56379/1" \
+		KYROS_CELERY_RESULT_BACKEND="redis://localhost:56379/2" \
 		uv run ptw
 
 .PHONY: test-up
@@ -169,6 +173,8 @@ test-rbac: ## Run only the RBAC matrix test (fast feedback for endpoint scoping)
 	cd backend && \
 		KYROS_DATABASE_URL="postgresql+asyncpg://kyros:test@localhost:55432/kyros_test" \
 		KYROS_REDIS_URL="redis://localhost:56379/0" \
+		KYROS_CELERY_BROKER_URL="redis://localhost:56379/1" \
+		KYROS_CELERY_RESULT_BACKEND="redis://localhost:56379/2" \
 		uv run pytest tests/integration/api/test_rbac_matrix.py -v
 
 .PHONY: test-migrations
