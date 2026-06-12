@@ -15,6 +15,11 @@ os.environ.setdefault(
     "KYROS_DATABASE_URL", "postgresql+asyncpg://kyros:test@localhost:55432/kyros_test"
 )
 os.environ.setdefault("KYROS_REDIS_URL", "redis://localhost:56379/0")
+# Point Celery at the test Redis — otherwise fire-and-forget dispatches
+# (apply_async) publish into the dev broker on localhost:6379, where a running
+# dev worker would actually send the emails/messages.
+os.environ.setdefault("KYROS_CELERY_BROKER_URL", "redis://localhost:56379/3")
+os.environ.setdefault("KYROS_CELERY_RESULT_BACKEND", "redis://localhost:56379/4")
 os.environ.setdefault("KYROS_DEBUG", "true")
 # The suite drives auth endpoints from a single test-client IP; per-IP limits
 # would trip across unrelated tests. Dedicated rate-limit tests re-enable it.

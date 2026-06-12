@@ -146,6 +146,7 @@ tr:hover td { background: #fdf8f0; }
 .chip-verified { background: rgba(45,122,95,.2); color: #1a4d3a; }
 .chip-inactive, .chip-suspended { background: rgba(107,107,104,.15); color: var(--stone); }
 .chip-scheduled { background: rgba(45,122,95,.15); color: var(--jade); }
+.chip-confirmed { background: rgba(143,168,142,.25); color: #1e4d1b; }
 .chip-completed { background: rgba(143,168,142,.25); color: #1e4d1b; }
 .chip-cancelled { background: rgba(181,58,43,.15); color: var(--alert); }
 .chip-draft { background: rgba(107,107,104,.12); color: var(--stone); }

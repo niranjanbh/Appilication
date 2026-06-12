@@ -18,7 +18,7 @@ from app.models.education import EducationAssignment, EducationContent
 from app.models.identity import RefreshToken, User
 from app.models.notifications import Notification
 from app.models.payment import Payment
-from app.models.public import BookingInquiry
+from app.models.public import BookingInquiry, Lead
 from app.models.wellness import HealthDatapoint, HealthSyncSession, Reminder, ReminderLog
 
 __all__ = [
@@ -39,6 +39,7 @@ __all__ = [
     "HealthSyncSession",
     "LabOrder",
     "LabReport",
+    "Lead",
     "Notification",
     "Patient",
     "Payment",

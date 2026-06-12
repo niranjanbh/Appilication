@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Deliver the OTP to the user's registered email when WhatsApp fails
     # (delivery chain: WhatsApp → email → SMS)
     otp_email_fallback_enabled: bool = True
+    # Require phone OTP verification on the public website booking form.
+    # Off by default; the website must set NEXT_PUBLIC_BOOKING_OTP_ENABLED to match.
+    booking_otp_enabled: bool = False
 
     # Abuse protection — per-IP fixed-window limits on auth endpoints
     rate_limit_enabled: bool = True
@@ -93,6 +96,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     email_from: str = "contact@kyrosclinic.com"
     admin_alert_email: str = "admin@kyrosclinic.com"
+    # Single ops inbox for new booking inquiries / help queries from the public
+    # website. Empty → falls back to admin_alert_email.
+    ops_notify_email: str = ""
 
     # ABDM / ABHA sandbox
     abha_client_id: str = ""

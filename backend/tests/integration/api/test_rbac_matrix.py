@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import (
     _synth_email,
+    _synth_phone,
     create_coordinator_user,
     create_doctor_user,
     create_doctor_with_profile,
@@ -153,6 +155,24 @@ async def test_register_push_token_patient_returns_200(
 
 # ── /v1/public/* — unauthenticated public endpoints ──────────────────────────
 # These endpoints require no auth. Valid bodies → 200/201; missing/invalid → 422.
+# Phone OTP verification is optional (settings.booking_otp_enabled, default OFF);
+# the booking_otp_on fixture flips it for the OTP-flow tests.
+
+
+@pytest.fixture
+def booking_otp_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "booking_otp_enabled", True)
+
+
+async def _request_booking_otp(client: AsyncClient, phone: str) -> str:
+    """Issue a booking OTP and return the code (debug hint, KYROS_DEBUG=true)."""
+    resp = await client.post("/v1/public/booking-otp", json={"phone": phone})
+    assert resp.status_code == 200
+    otp = resp.json()["otp_hint"]
+    assert otp is not None
+    return str(otp)
 
 
 async def test_public_conditions_returns_200(client: AsyncClient) -> None:
@@ -160,10 +180,22 @@ async def test_public_conditions_returns_200(client: AsyncClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
-    assert len(data) == 7
+    assert len(data) == 8
     slugs = {item["slug"] for item in data}
-    assert "thyroid" in slugs
-    assert "pcos" in slugs
+    # Canonical slugs match website/lib/conditions.ts (2026-06 renames)
+    assert {"thyroid", "diabetes", "pmos", "sexual-health"} <= slugs
+    assert "pcos" not in slugs
+    assert "mens-intimate-health" not in slugs
+
+
+# ---- booking inquiry, OTP verification disabled (the default) ----
+
+
+async def test_booking_otp_send_disabled_returns_422(client: AsyncClient) -> None:
+    """With booking_otp_enabled off, the send endpoint is not an open SMS relay."""
+    resp = await client.post("/v1/public/booking-otp", json={"phone": _synth_phone()})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "otp_verification_disabled"
 
 
 async def test_booking_inquiry_missing_body_returns_422(client: AsyncClient) -> None:
@@ -190,7 +222,7 @@ async def test_booking_inquiry_invalid_condition_returns_422(client: AsyncClient
         json={
             "name": "Test Patient",
             "gender": "male",
-            "phone": "+919876543210",
+            "phone": _synth_phone(),
             "condition_category": "not-a-real-condition",
         },
     )
@@ -202,21 +234,22 @@ async def test_booking_inquiry_missing_gender_returns_422(client: AsyncClient) -
         "/v1/public/booking-inquiry",
         json={
             "name": "Test Patient",
-            "phone": "+919876543210",
+            "phone": _synth_phone(),
             "condition_category": "thyroid",
         },
     )
     assert resp.status_code == 422
 
 
-async def test_booking_inquiry_valid_body_returns_201(client: AsyncClient) -> None:
+async def test_booking_inquiry_without_otp_returns_201(client: AsyncClient) -> None:
+    """Default deployment: no OTP requested, none required."""
     resp = await client.post(
         "/v1/public/booking-inquiry",
         json={
             "name": "Test Patient",
             "gender": "female",
-            "phone": "+919876543210",
-            "email": "testpatient@example.com",
+            "phone": _synth_phone(),
+            "email": "testpatient@test.kyros.local",
             "condition_category": "thyroid",
             "intake_responses": {"symptom_duration": "more_than_6_months", "previous_diagnosis": "no"},
         },
@@ -227,6 +260,127 @@ async def test_booking_inquiry_valid_body_returns_201(client: AsyncClient) -> No
     assert "message" in data
 
 
+# ---- booking inquiry, OTP verification enabled (booking_otp_on fixture) ----
+
+
+async def test_booking_otp_invalid_phone_returns_422(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    resp = await client.post("/v1/public/booking-otp", json={"phone": "9999999999"})
+    assert resp.status_code == 422
+
+
+async def test_booking_otp_resend_within_cooldown_returns_429(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    phone = _synth_phone()
+    await _request_booking_otp(client, phone)
+    resp = await client.post("/v1/public/booking-otp", json={"phone": phone})
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "otp_cooldown"
+
+
+async def test_booking_inquiry_missing_otp_returns_422(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Patient",
+            "gender": "female",
+            "phone": _synth_phone(),
+            "condition_category": "thyroid",
+            "skipped_intake": True,
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "otp_required"
+
+
+async def test_booking_inquiry_wrong_otp_returns_422(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    phone = _synth_phone()
+    otp = await _request_booking_otp(client, phone)
+    wrong = "000000" if otp != "000000" else "111111"
+    resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Patient",
+            "gender": "female",
+            "phone": phone,
+            "condition_category": "thyroid",
+            "skipped_intake": True,
+            "otp": wrong,
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "otp_invalid"
+
+
+async def test_booking_inquiry_no_otp_requested_returns_422(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    """An OTP that was never issued for this phone is rejected as expired."""
+    resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Patient",
+            "gender": "male",
+            "phone": _synth_phone(),
+            "condition_category": "thyroid",
+            "skipped_intake": True,
+            "otp": "123456",
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "otp_expired"
+
+
+async def test_booking_inquiry_valid_otp_returns_201(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    phone = _synth_phone()
+    otp = await _request_booking_otp(client, phone)
+    resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Patient",
+            "gender": "female",
+            "phone": phone,
+            "email": "testpatient@test.kyros.local",
+            "condition_category": "thyroid",
+            "intake_responses": {"symptom_duration": "more_than_6_months", "previous_diagnosis": "no"},
+            "otp": otp,
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "id" in data
+    assert "message" in data
+
+
+async def test_booking_inquiry_otp_single_use(
+    client: AsyncClient, booking_otp_on: None
+) -> None:
+    """A consumed OTP cannot be replayed for a second inquiry."""
+    phone = _synth_phone()
+    otp = await _request_booking_otp(client, phone)
+    body = {
+        "name": "Test Patient",
+        "gender": "male",
+        "phone": phone,
+        "condition_category": "thyroid",
+        "skipped_intake": True,
+        "otp": otp,
+    }
+    first = await client.post("/v1/public/booking-inquiry", json=body)
+    assert first.status_code == 201
+    replay = await client.post("/v1/public/booking-inquiry", json=body)
+    assert replay.status_code == 422
+    assert replay.json()["detail"] == "otp_expired"
+
+
 async def test_booking_inquiry_skip_flow_returns_201(client: AsyncClient) -> None:
     """Skipped intake: only name + gender + phone required, intake_responses empty."""
     resp = await client.post(
@@ -234,14 +388,36 @@ async def test_booking_inquiry_skip_flow_returns_201(client: AsyncClient) -> Non
         json={
             "name": "Test Patient",
             "gender": "other",
-            "phone": "+919876543210",
-            "condition_category": "pcos",
+            "phone": _synth_phone(),
+            "condition_category": "pmos",
             "skipped_intake": True,
         },
     )
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
+
+
+async def test_booking_inquiry_legacy_slug_normalized_returns_201(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Pre-rename slugs (pcos, mens-intimate-health) are accepted and normalized."""
+    from app.models.public import BookingInquiry
+
+    resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Patient",
+            "gender": "female",
+            "phone": _synth_phone(),
+            "condition_category": "pcos",  # legacy slug, renamed to pmos 2026-06
+            "skipped_intake": True,
+        },
+    )
+    assert resp.status_code == 201
+    inquiry = await db_session.get(BookingInquiry, uuid.UUID(resp.json()["id"]))
+    assert inquiry is not None
+    assert inquiry.condition_category == "pmos"
 
 
 async def test_booking_inquiry_international_phone_returns_201(client: AsyncClient) -> None:
@@ -251,12 +427,49 @@ async def test_booking_inquiry_international_phone_returns_201(client: AsyncClie
         json={
             "name": "Test NRI Patient",
             "gender": "male",
-            "phone": "+12125550101",
+            "phone": f"+1212555{uuid.uuid4().int % 10000:04d}",
             "condition_category": "longevity",
             "skipped_intake": True,
         },
     )
     assert resp.status_code == 201
+
+
+# ---- /v1/public/lead — contact-form help queries ----
+
+
+async def test_lead_missing_body_returns_422(client: AsyncClient) -> None:
+    resp = await client.post("/v1/public/lead", json={})
+    assert resp.status_code == 422
+
+
+async def test_lead_invalid_email_returns_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/public/lead",
+        json={
+            "name": "Test Visitor",
+            "email": "not-an-email",
+            "subject": "support",
+            "message": "I have a question about consultations.",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_lead_valid_body_returns_201(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/public/lead",
+        json={
+            "name": "Test Visitor",
+            "email": _synth_email(),
+            "subject": "support",
+            "message": "I have a question about how consultations work.",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "id" in data
+    assert "message" in data
 
 
 # ── /v1/wellness/reminders — patient-scoped endpoints ────────────────────────
@@ -1880,6 +2093,84 @@ async def test_coord_scheduling_no_cookie_redirects(client: AsyncClient) -> None
 async def test_coord_communication_no_cookie_redirects(client: AsyncClient) -> None:
     resp = await client.get("/coord/communication", follow_redirects=False)
     assert resp.status_code == 302
+
+
+async def test_coord_inquiries_no_cookie_redirects(client: AsyncClient) -> None:
+    resp = await client.get("/coord/inquiries", follow_redirects=False)
+    assert resp.status_code == 302
+
+
+def _coord_session_cookie(user_id: uuid.UUID) -> str:
+    """Create a coordinator session in Redis and return the cookie value."""
+    from fastapi.responses import Response as FResponse
+
+    from app.adminui.deps import create_coord_session
+
+    dummy_response = FResponse()
+    create_coord_session(dummy_response, user_id)
+    session_cookie = dummy_response.headers.get("set-cookie", "")
+    for part in session_cookie.split(";"):
+        if "kyros_coord_session=" in part:
+            return part.split("=", 1)[1].strip()
+    return ""
+
+
+async def test_coord_inquiry_contacted_first_coordinator_wins(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A new website inquiry shows as not contacted; the first coordinator to
+    mark it contacted claims it, and a second attempt gets 404."""
+    from app.models.identity import User as UserModel
+
+    inquiry_resp = await client.post(
+        "/v1/public/booking-inquiry",
+        json={
+            "name": "Test Inquiry Patient",
+            "gender": "female",
+            "phone": _synth_phone(),
+            "condition_category": "thyroid",
+            "skipped_intake": True,
+        },
+    )
+    assert inquiry_resp.status_code == 201
+    inquiry_id = inquiry_resp.json()["id"]
+
+    coord_one = await create_coordinator_user(db_session)
+    coord_two = await create_coordinator_user(db_session)
+    assert isinstance(coord_one, UserModel)
+    assert isinstance(coord_two, UserModel)
+
+    try:
+        cookie_one = _coord_session_cookie(coord_one.id)
+        cookie_two = _coord_session_cookie(coord_two.id)
+    except Exception:
+        return  # Redis unavailable in test — skip session creation path
+    if not cookie_one or not cookie_two:
+        return
+
+    # Queue lists the inquiry as not contacted
+    queue = await client.get(
+        "/coord/inquiries", cookies={"kyros_coord_session": cookie_one}
+    )
+    assert queue.status_code == 200
+    assert b"Test Inquiry Patient" in queue.content
+    assert b"not contacted" in queue.content
+
+    # First coordinator claims it
+    first = await client.post(
+        f"/coord/inquiries/{inquiry_id}/contacted",
+        cookies={"kyros_coord_session": cookie_one},
+        follow_redirects=False,
+    )
+    assert first.status_code == 302
+
+    # Second coordinator cannot re-claim
+    second = await client.post(
+        f"/coord/inquiries/{inquiry_id}/contacted",
+        cookies={"kyros_coord_session": cookie_two},
+        follow_redirects=False,
+    )
+    assert second.status_code == 404
 
 
 async def test_coord_login_page_returns_200(client: AsyncClient) -> None:

@@ -47,20 +47,23 @@ class SignupResult:
     phone: str
 
 
-def _otp_key(phone: str) -> str:
-    return f"otp:phone:{phone}"
+# Namespaces keep OTP flows isolated: a code issued for the public booking flow
+# ("booking") can never be replayed against /v1/auth/verify-otp ("phone"), which
+# would mark the phone verified and mint a session.
+def _otp_key(phone: str, namespace: str = "phone") -> str:
+    return f"otp:{namespace}:{phone}"
 
 
-def _otp_cooldown_key(phone: str) -> str:
-    return f"otp:phone:{phone}:cooldown"
+def _otp_cooldown_key(phone: str, namespace: str = "phone") -> str:
+    return f"otp:{namespace}:{phone}:cooldown"
 
 
-def _otp_attempts_key(phone: str) -> str:
-    return f"otp:phone:{phone}:attempts"
+def _otp_attempts_key(phone: str, namespace: str = "phone") -> str:
+    return f"otp:{namespace}:{phone}:attempts"
 
 
-def _otp_debug_key(phone: str) -> str:
-    return f"otp:phone:{phone}:debug"
+def _otp_debug_key(phone: str, namespace: str = "phone") -> str:
+    return f"otp:{namespace}:{phone}:debug"
 
 
 async def _send_otp_email(email: str, code: str) -> bool:
@@ -116,6 +119,7 @@ async def _issue_otp(
     *,
     email: str | None = None,
     preferred_channel: str | None = None,
+    namespace: str = "phone",
 ) -> str:
     """Generate OTP, store HMAC hash in Redis, and deliver it.
 
@@ -130,18 +134,22 @@ async def _issue_otp(
 
         raise BusinessRuleError("email_channel_unavailable")
 
-    if await redis.exists(_otp_cooldown_key(phone)):
+    if await redis.exists(_otp_cooldown_key(phone, namespace)):
         raise OtpCooldownError()
 
     code = generate_otp(6)
     hashed = hash_otp(code)
 
     async with redis.pipeline(transaction=False) as pipe:
-        pipe.set(_otp_key(phone), hashed, ex=settings.otp_ttl_seconds)
-        pipe.set(_otp_cooldown_key(phone), "1", ex=settings.otp_resend_cooldown_seconds)
-        pipe.delete(_otp_attempts_key(phone))
+        pipe.set(_otp_key(phone, namespace), hashed, ex=settings.otp_ttl_seconds)
+        pipe.set(
+            _otp_cooldown_key(phone, namespace),
+            "1",
+            ex=settings.otp_resend_cooldown_seconds,
+        )
+        pipe.delete(_otp_attempts_key(phone, namespace))
         if settings.debug:
-            pipe.set(_otp_debug_key(phone), code, ex=settings.otp_ttl_seconds)
+            pipe.set(_otp_debug_key(phone, namespace), code, ex=settings.otp_ttl_seconds)
         await pipe.execute()
 
     channel = await _deliver_otp(phone, code, email=email, preferred=preferred_channel)
@@ -153,17 +161,19 @@ async def _issue_otp(
     return code
 
 
-async def _verify_otp_code(redis: RedisClient, phone: str, code: str) -> None:
+async def _verify_otp_code(
+    redis: RedisClient, phone: str, code: str, namespace: str = "phone"
+) -> None:
     """Validate OTP from Redis. Raises on invalid/expired/too-many-attempts."""
-    attempts = await redis.incr(_otp_attempts_key(phone))
+    attempts = await redis.incr(_otp_attempts_key(phone, namespace))
     if attempts == 1:
-        await redis.expire(_otp_attempts_key(phone), 900)
+        await redis.expire(_otp_attempts_key(phone, namespace), 900)
 
     if attempts > settings.otp_max_attempts:
-        await redis.delete(_otp_key(phone))
+        await redis.delete(_otp_key(phone, namespace))
         raise OtpMaxAttemptsError()
 
-    stored = await redis.get(_otp_key(phone))
+    stored = await redis.get(_otp_key(phone, namespace))
     if stored is None:
         from app.core.exceptions import BusinessRuleError
 
@@ -175,7 +185,7 @@ async def _verify_otp_code(redis: RedisClient, phone: str, code: str) -> None:
 
         raise BusinessRuleError("otp_invalid")
 
-    await redis.delete(_otp_key(phone), _otp_attempts_key(phone))
+    await redis.delete(_otp_key(phone, namespace), _otp_attempts_key(phone, namespace))
 
 
 async def _create_token_pair(

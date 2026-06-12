@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -121,9 +121,36 @@ function clearSession() {
   try { sessionStorage.removeItem(SESSION_KEY); } catch {}
 }
 
+// ── Error display ─────────────────────────────────────────────────────────────
+
+// Backend error codes (app/core/exceptions.py detail strings) → human messages.
+const ERROR_MESSAGES: Record<string, string> = {
+  otp_required: 'Please verify your phone number first — tap “Verify your number?”.',
+  otp_invalid: 'That code didn’t match. Please check the SMS and try again.',
+  otp_expired: 'That code has expired. Tap “Resend code” to get a new one.',
+  otp_max_attempts: 'Too many incorrect attempts. Tap “Resend code” to get a fresh code.',
+  otp_cooldown: 'A code was sent recently. Please wait a minute before requesting another.',
+  rate_limited: 'Too many requests. Please wait a minute and try again.',
+};
+
+function friendlyError(detail: unknown, fallback: string): string {
+  // FastAPI validation errors send detail as an array of objects — never show those raw.
+  if (typeof detail !== 'string') return fallback;
+  return ERROR_MESSAGES[detail] ?? detail;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 type Step = 'condition' | 'intake' | 'contact' | 'success';
+
+const STEPS: readonly Step[] = ['condition', 'intake', 'contact', 'success'];
+
+// Phone OTP verification is opt-in. Must match the backend's
+// KYROS_BOOKING_OTP_ENABLED — with the flag off (default) no code is ever asked.
+const OTP_ENABLED = process.env.NEXT_PUBLIC_BOOKING_OTP_ENABLED === 'true';
+
+const OTP_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 60; // matches backend otp_resend_cooldown_seconds
 
 export function BookingFlow() {
   const [step, setStep] = useState<Step>('condition');
@@ -134,6 +161,12 @@ export function BookingFlow() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpDigits, setOtpDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  // Tokens are single-use; bumping the key remounts the widget for a fresh one.
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const {
     register,
@@ -141,6 +174,7 @@ export function BookingFlow() {
     setValue,
     watch,
     reset,
+    getValues,
     formState: { errors },
   } = useForm<ContactFormData>({ resolver: zodResolver(contactSchema) });
 
@@ -155,7 +189,7 @@ export function BookingFlow() {
       const raw = sessionStorage.getItem(SESSION_KEY);
       if (!raw) return;
       const s = JSON.parse(raw) as Partial<BookingSession>;
-      if (s.step) setStep(s.step);
+      if (s.step && STEPS.includes(s.step)) setStep(s.step);
       if (s.selectedCondition) setSelectedCondition(s.selectedCondition);
       if (s.intakeAnswers) setIntakeAnswers(s.intakeAnswers);
       if (s.skippedIntake !== undefined) setSkippedIntake(s.skippedIntake);
@@ -181,10 +215,90 @@ export function BookingFlow() {
   useEffect(() => { saveToSession({ phoneNumber: watchedPhone ?? '' }); }, [watchedPhone]);
   useEffect(() => { saveToSession({ email: watchedEmail ?? '' }); }, [watchedEmail]);
 
+  // Resend-cooldown ticker
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // A code belongs to one number — editing the phone invalidates the OTP UI.
+  useEffect(() => {
+    setOtpSent(false);
+    setOtpDigits(Array(OTP_LENGTH).fill(''));
+  }, [watchedPhone, countryCode]);
+
   const handleSkipIntake = () => {
     setSkippedIntake(true);
     setIntakeAnswers({});
     setStep('contact');
+  };
+
+  const sendOtp = async (phone: string): Promise<boolean> => {
+    if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !turnstileToken) {
+      setSubmitError('Please complete the verification challenge before continuing.');
+      return false;
+    }
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const resp = await fetch('/api/book/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, turnstileToken }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        const detail = (err as { detail?: unknown }).detail;
+        // A code from a recent attempt is still valid — let the user enter it.
+        if (resp.status === 429 && detail === 'otp_cooldown') return true;
+        throw new Error(friendlyError(detail, 'Could not send the code. Please try again.'));
+      }
+      return true;
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+      return false;
+    } finally {
+      // The Turnstile token is single-use; remount the widget for a fresh one.
+      setTurnstileToken(null);
+      setTurnstileKey((k) => k + 1);
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    const sent = await sendOtp(`${countryCode}${getValues('phoneNumber')}`);
+    if (sent) {
+      setOtpDigits(Array(OTP_LENGTH).fill(''));
+      setOtpSent(true);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      otpRefs.current[0]?.focus();
+    }
+  };
+
+  const handleOtpInput = (index: number, raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setOtpDigits((prev) => {
+      const next = [...prev];
+      if (digits.length <= 1) {
+        next[index] = digits;
+      } else {
+        // Paste: spread the digits across the boxes from this position.
+        for (let j = 0; index + j < OTP_LENGTH && j < digits.length; j++) {
+          next[index + j] = digits[j];
+        }
+      }
+      return next;
+    });
+    if (digits) {
+      otpRefs.current[Math.min(index + digits.length, OTP_LENGTH - 1)]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
   };
 
   // Step 1: condition selection
@@ -322,10 +436,24 @@ export function BookingFlow() {
 
   // Step 3: contact
   if (step === 'contact') {
+    const otpCode = otpDigits.join('');
+    const phoneReady =
+      countryCode === '+91'
+        ? /^\d{10}$/.test(watchedPhone ?? '')
+        : /^\d{6,12}$/.test(watchedPhone ?? '');
+
     const onSubmit = async (data: ContactFormData) => {
       if (!selectedCondition) return;
       if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !turnstileToken) {
         setSubmitError('Please complete the verification challenge before continuing.');
+        return;
+      }
+      if (OTP_ENABLED && (!otpSent || otpCode.length !== OTP_LENGTH)) {
+        setSubmitError(
+          otpSent
+            ? 'Please enter the 6-digit code we sent to your phone.'
+            : ERROR_MESSAGES.otp_required
+        );
         return;
       }
       setIsSubmitting(true);
@@ -343,13 +471,17 @@ export function BookingFlow() {
             condition_category: selectedCondition,
             intake_responses: skippedIntake ? {} : intakeAnswers,
             skipped_intake: skippedIntake,
+            ...(OTP_ENABLED ? { otp: otpCode } : {}),
             turnstileToken,
           }),
         });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
           throw new Error(
-            (err as { detail?: string }).detail ?? 'Submission failed. Please try again.'
+            friendlyError(
+              (err as { detail?: unknown }).detail,
+              'Submission failed. Please try again.'
+            )
           );
         }
         clearSession();
@@ -357,6 +489,9 @@ export function BookingFlow() {
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
       } finally {
+        // Token was consumed by the submit attempt — remount for a fresh one.
+        setTurnstileToken(null);
+        setTurnstileKey((k) => k + 1);
         setIsSubmitting(false);
       }
     };
@@ -462,6 +597,58 @@ export function BookingFlow() {
             {errors.phoneNumber && (
               <p className="font-body text-caption text-alert mt-1">{errors.phoneNumber.message}</p>
             )}
+
+            {OTP_ENABLED && !otpSent && (
+              <div className="flex justify-end mt-1">
+                <button
+                  type="button"
+                  onClick={() => void handleSendOtp()}
+                  disabled={!phoneReady || isSubmitting}
+                  className="font-body text-caption text-forest underline
+                             disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                >
+                  Verify your number?
+                </button>
+              </div>
+            )}
+
+            {OTP_ENABLED && otpSent && (
+              <div className="mt-3 bg-ivory rounded-card p-4">
+                <p className="font-body text-caption text-stone mb-3">
+                  Enter the 6-digit code sent to {countryCode} {watchedPhone} by WhatsApp or SMS.
+                </p>
+                <div className="flex gap-2">
+                  {otpDigits.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => { otpRefs.current[i] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                      aria-label={`OTP digit ${i + 1} of 6`}
+                      value={digit}
+                      onChange={(e) => handleOtpInput(i, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                      className="w-9 h-11 text-center font-body text-body-lg text-ink bg-transparent
+                                 border-0 border-b-2 border-forest/30 rounded-none
+                                 focus:outline-none focus:border-forest"
+                    />
+                  ))}
+                </div>
+                <p className="font-body text-caption text-stone mt-3">
+                  Didn’t get it?{' '}
+                  <button
+                    type="button"
+                    onClick={() => void handleSendOtp()}
+                    disabled={isSubmitting || resendCooldown > 0}
+                    className="text-forest underline
+                               disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                  </button>
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Email (optional) */}
@@ -485,7 +672,11 @@ export function BookingFlow() {
             )}
           </div>
 
-          <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
+          <TurnstileWidget
+            key={turnstileKey}
+            onVerify={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
 
           {submitError && (
             <p className="font-body text-body text-alert bg-alert/8 rounded-card px-4 py-3">
@@ -531,7 +722,7 @@ export function BookingFlow() {
       </h2>
       <p className="font-body text-body-lg text-ink mb-6">
         A Kyros care coordinator will call you within 4 hours to schedule your consultation.
-        Check your phone — they will call from a Bengaluru number.
+        Check your phone — they will call you with Fancy number.
       </p>
       <p className="font-body text-body text-stone">
         Questions in the meantime?{' '}

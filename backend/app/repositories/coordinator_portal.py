@@ -22,6 +22,7 @@ from app.models.admin import Coordinator
 from app.models.clinic import Consultation, Patient
 from app.models.doctor import Availability, Doctor
 from app.models.identity import User
+from app.models.public import BookingInquiry, Lead
 
 # ── Coordinator profile ────────────────────────────────────────────────────────
 
@@ -376,3 +377,101 @@ async def count_pending_intake(db: AsyncSession, coordinator_id: uuid.UUID) -> i
         )
     )
     return result.scalar_one()
+
+
+# ── Website inquiries & help queries (shared queue) ────────────────────────────
+# Pre-account submissions have no patient assignment, so every coordinator sees
+# the full queue. The first coordinator to reach out marks the item contacted.
+
+
+async def list_booking_inquiries(
+    db: AsyncSession,
+    *,
+    only_new: bool = False,
+    limit: int = 200,
+) -> list[tuple[BookingInquiry, str | None]]:
+    """Return (inquiry, contacted_by_name) newest first."""
+    stmt = (
+        select(BookingInquiry, User.name)
+        .outerjoin(User, User.id == BookingInquiry.contacted_by_user_id)
+        .where(BookingInquiry.deleted_at.is_(None))
+        .order_by(BookingInquiry.created_at.desc())
+        .limit(limit)
+    )
+    if only_new:
+        stmt = stmt.where(BookingInquiry.contacted_at.is_(None))
+    result = await db.execute(stmt)
+    return [(row.BookingInquiry, row.name) for row in result]
+
+
+async def mark_inquiry_contacted(
+    db: AsyncSession,
+    *,
+    inquiry_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> bool:
+    """Claim an inquiry as contacted. First coordinator wins; returns False when
+    the inquiry doesn't exist or someone already contacted it."""
+    from sqlalchemy import update
+
+    result = await db.execute(
+        update(BookingInquiry)
+        .where(
+            BookingInquiry.id == inquiry_id,
+            BookingInquiry.contacted_at.is_(None),
+            BookingInquiry.deleted_at.is_(None),
+        )
+        .values(
+            status="contacted",
+            contacted_by_user_id=user_id,
+            contacted_at=datetime.now(UTC),
+        )
+        .returning(BookingInquiry.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def list_leads(
+    db: AsyncSession,
+    *,
+    only_new: bool = False,
+    limit: int = 200,
+) -> list[tuple[Lead, str | None]]:
+    """Return (lead, contacted_by_name) newest first."""
+    stmt = (
+        select(Lead, User.name)
+        .outerjoin(User, User.id == Lead.contacted_by_user_id)
+        .where(Lead.deleted_at.is_(None))
+        .order_by(Lead.created_at.desc())
+        .limit(limit)
+    )
+    if only_new:
+        stmt = stmt.where(Lead.contacted_at.is_(None))
+    result = await db.execute(stmt)
+    return [(row.Lead, row.name) for row in result]
+
+
+async def mark_lead_contacted(
+    db: AsyncSession,
+    *,
+    lead_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> bool:
+    """Claim a help query as contacted. First coordinator wins."""
+    from sqlalchemy import update
+
+    result = await db.execute(
+        update(Lead)
+        .where(
+            Lead.id == lead_id,
+            Lead.contacted_at.is_(None),
+            Lead.deleted_at.is_(None),
+        )
+        .values(
+            status="contacted",
+            contacted_by_user_id=user_id,
+            contacted_at=datetime.now(UTC),
+        )
+        .returning(Lead.id)
+    )
+    return result.scalar_one_or_none() is not None

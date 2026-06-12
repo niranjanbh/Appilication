@@ -119,6 +119,7 @@ async def notify_appointment_confirmed(
     from sqlalchemy import select
 
     from app.models.clinic import Consultation, Patient
+    from app.models.doctor import Doctor
     from app.models.identity import User
 
     result = await db.execute(
@@ -188,6 +189,54 @@ async def notify_appointment_confirmed(
         channels=channels_sent,
         data=data,
     )
+
+    # Tell the doctor too — generic, no patient details (email is an external channel).
+    doctor_row = (
+        await db.execute(
+            select(User.name, User.email)
+            .join(Doctor, Doctor.user_id == User.id)
+            .join(Consultation, Consultation.doctor_id == Doctor.id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if doctor_row is not None and doctor_row.email:
+        _dispatch_email(
+            to_email=doctor_row.email,
+            subject="New confirmed consultation on your Kyros schedule",
+            html_body=render_email(
+                "doctor_new_booking",
+                first_name=_first_name(doctor_row.name),
+                time_str=time_str,
+            ),
+        )
+
+
+# ── Staff alerts (ops inbox) ──────────────────────────────────────────────────
+
+
+def notify_ops_new_inquiry(*, kind: str) -> None:
+    """Alert the ops inbox that a new website submission is waiting.
+
+    kind: "booking_inquiry" or "lead". Deliberately content-free — no name,
+    phone, or condition. Staff open the coordinator portal for details.
+    """
+    from app.core.config import settings
+
+    to_email = settings.ops_notify_email or settings.admin_alert_email
+    if not to_email:
+        return
+    kind_label = (
+        "consultation request" if kind == "booking_inquiry" else "help query"
+    )
+    try:
+        _dispatch_email(
+            to_email=to_email,
+            subject=f"[Kyros] New {kind_label} from the website",
+            html_body=render_email("ops_new_inquiry", kind_label=kind_label),
+        )
+    except Exception:
+        # A broker outage must not fail the inquiry submission itself.
+        logger.exception("notify_ops_new_inquiry_failed", kind=kind)
 
 
 # ── Appointment reminder ──────────────────────────────────────────────────────
@@ -717,6 +766,45 @@ def _tpl_otp_code(*, otp: str, ttl_minutes: str) -> str:
     )
 
 
+def _tpl_doctor_new_booking(*, first_name: str, time_str: str) -> str:
+    return _render(
+        title="New confirmed consultation",
+        heading="New Consultation Booked",
+        body_html=(
+            _body_p(f"Hi Dr. {first_name},")
+            + _body_p(
+                f"A consultation has been confirmed on your schedule for "
+                f"<strong>{time_str} IST</strong>."
+            )
+            + _body_p(
+                "Open your Kyros doctor portal to review the patient's "
+                "pre-consultation details."
+            )
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
+def _tpl_ops_new_inquiry(*, kind_label: str) -> str:
+    # No patient details by design — email is an external channel.
+    return _render(
+        title=f"New {kind_label} waiting",
+        heading="New Website Submission",
+        body_html=(
+            _body_p(
+                f"A new <strong>{kind_label}</strong> was just submitted on "
+                f"kyrosclinic.com and is waiting in the queue."
+            )
+            + _body_p(
+                "Open the coordinator portal to view the details and mark it "
+                "contacted once you have reached out."
+            )
+            + _cta_button("Open Inquiry Queue", "https://api.kyrosclinic.com/coord/inquiries")
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
 _EMAIL_TEMPLATES: dict[str, Callable[..., str]] = {
     "appointment_confirmation": _tpl_appointment_confirmation,
     "appointment_reminder": _tpl_appointment_reminder,
@@ -724,4 +812,6 @@ _EMAIL_TEMPLATES: dict[str, Callable[..., str]] = {
     "pre_consult_report_ready": _tpl_pre_consult_report_ready,
     "medication_reminder": _tpl_medication_reminder,
     "otp_code": _tpl_otp_code,
+    "doctor_new_booking": _tpl_doctor_new_booking,
+    "ops_new_inquiry": _tpl_ops_new_inquiry,
 }

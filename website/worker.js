@@ -2,8 +2,11 @@ const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverif
 
 // Static export has no Next.js server, so the form-proxy route handlers under
 // app/api/ never ship to ./out — this map is the production equivalent of them.
+// Every proxied form call is Turnstile-verified; phone OTP on the booking flow
+// is an optional extra gate (backend KYROS_BOOKING_OTP_ENABLED).
 const FORM_PROXY_ROUTES = {
   "/api/contact": "/v1/public/lead",
+  "/api/book/send-otp": "/v1/public/booking-otp",
   "/api/book": "/v1/public/booking-inquiry",
 };
 

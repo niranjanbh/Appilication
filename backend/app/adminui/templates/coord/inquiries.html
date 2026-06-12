@@ -1,0 +1,117 @@
+{% extends "coord/base.html" %}
+{% block title %}Website Inquiries — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Website Inquiries
+    {% if inquiries or leads %}<span style="font-size:14px;font-weight:400;color:var(--stone);"> ({{ (inquiries | length) + (leads | length) }})</span>{% endif %}
+  </h2>
+  <div>
+    <a href="/coord/inquiries?show=new" class="btn btn-sm {{ 'btn-primary' if show == 'new' else 'btn-secondary' }}">Not contacted</a>
+    <a href="/coord/inquiries?show=all" class="btn btn-sm {{ 'btn-primary' if show == 'all' else 'btn-secondary' }}">All</a>
+  </div>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  <h3 style="margin:0 0 12px;">Consultation requests</h3>
+  {% if not inquiries %}
+  <div class="card" style="margin-bottom:24px;">
+    <p style="font-size:14px;color:var(--stone);">
+      {{ 'No uncontacted consultation requests. Every inquiry has been called.' if show == 'new' else 'No consultation requests yet.' }}
+    </p>
+  </div>
+  {% else %}
+  {% for inquiry, contacted_by_name in inquiries %}
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <strong style="font-size:15px;">{{ inquiry.name }}</strong>
+        <div style="font-size:12px;color:var(--stone);margin-top:2px;">
+          {{ inquiry.condition_category.replace('-', ' ').title() }}
+          {% if inquiry.gender %}· {{ inquiry.gender.title() }}{% endif %}
+          · {{ inquiry.phone }}
+          {% if inquiry.email %}· {{ inquiry.email }}{% endif %}
+          · {{ inquiry.created_at | ist }}
+        </div>
+      </div>
+      {% if inquiry.contacted_at %}
+      <span class="chip chip-confirmed">contacted</span>
+      {% else %}
+      <span class="chip chip-scheduled">not contacted</span>
+      {% endif %}
+    </div>
+
+    {% if inquiry.skipped_intake %}
+    <p style="font-size:12px;color:var(--stone);margin:0 0 12px;">
+      Skipped intake — wants to talk to a coordinator directly.
+    </p>
+    {% elif inquiry.intake_responses %}
+    <details style="margin:0 0 12px;">
+      <summary style="font-size:12px;color:var(--stone);cursor:pointer;">Intake answers</summary>
+      <ul style="font-size:12px;color:var(--stone);margin:6px 0 0;padding-left:18px;">
+        {% for key, value in inquiry.intake_responses.items() %}
+        <li>{{ key.replace('_', ' ').title() }}: {{ value }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% if inquiry.contacted_at %}
+    <p style="font-size:12px;color:var(--stone);margin:0;">
+      Contacted by {{ contacted_by_name or '—' }} on {{ inquiry.contacted_at | ist }}.
+    </p>
+    {% else %}
+    <form method="POST" action="/coord/inquiries/{{ inquiry.id }}/contacted">
+      <button type="submit" class="btn btn-primary btn-sm"
+              onclick="return confirm('Confirm you have called this patient?')">Mark contacted</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h3 style="margin:24px 0 12px;">Help queries</h3>
+  {% if not leads %}
+  <div class="card">
+    <p style="font-size:14px;color:var(--stone);">
+      {{ 'No unanswered help queries.' if show == 'new' else 'No help queries yet.' }}
+    </p>
+  </div>
+  {% else %}
+  {% for lead, contacted_by_name in leads %}
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <strong style="font-size:15px;">{{ lead.name }}</strong>
+        <div style="font-size:12px;color:var(--stone);margin-top:2px;">
+          {{ lead.subject.replace('-', ' ').title() }}
+          · {{ lead.email }}
+          · {{ lead.created_at | ist }}
+        </div>
+      </div>
+      {% if lead.contacted_at %}
+      <span class="chip chip-confirmed">contacted</span>
+      {% else %}
+      <span class="chip chip-scheduled">not contacted</span>
+      {% endif %}
+    </div>
+
+    <p style="font-size:13px;margin:0 0 12px;white-space:pre-wrap;">{{ lead.message }}</p>
+
+    {% if lead.contacted_at %}
+    <p style="font-size:12px;color:var(--stone);margin:0;">
+      Contacted by {{ contacted_by_name or '—' }} on {{ lead.contacted_at | ist }}.
+    </p>
+    {% else %}
+    <form method="POST" action="/coord/inquiries/queries/{{ lead.id }}/contacted">
+      <button type="submit" class="btn btn-primary btn-sm"
+              onclick="return confirm('Confirm you have replied to this query?')">Mark contacted</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
