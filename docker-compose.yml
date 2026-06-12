@@ -98,7 +98,7 @@ services:
       redis:
         condition: service_healthy
     command: >
-      celery -A app.tasks.celery_app worker
+      celery -A app.worker.celery_app worker
       --loglevel=INFO
       --queues=default
       --concurrency=2
@@ -125,7 +125,7 @@ services:
       redis:
         condition: service_healthy
     command: >
-      celery -A app.tasks.celery_app beat
+      celery -A app.worker.celery_app beat
       --loglevel=INFO
       --schedule=/app/beat/celerybeat-schedule
 

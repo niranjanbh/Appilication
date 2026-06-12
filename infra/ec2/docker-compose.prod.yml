@@ -102,16 +102,9 @@ services:
           memory: 512M
         reservations:
           memory: 200M
-    # 2 workers — fits the t3.small memory budget alongside in-container Postgres
-    command: >
-      gunicorn app.main:app
-      --workers 2
-      --worker-class uvicorn.workers.UvicornWorker
-      --bind 0.0.0.0:8000
-      --timeout 120
-      --keepalive 5
-      --access-logfile -
-      --error-logfile -
+    # No command override: the prod image's CMD runs uvicorn with 2 workers
+    # (gunicorn is not installed in the image). 2 workers fits the t3.small
+    # memory budget alongside in-container Postgres.
     logging:
       driver: "json-file"
       options:

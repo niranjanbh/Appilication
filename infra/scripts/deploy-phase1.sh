@@ -40,17 +40,21 @@ EOF
 
 SSH_CMD="ssh -F ${SSH_CONFIG}"
 
-# ── Step 1: Refresh /etc/kyros/backend.env from SSM ─────────────────────────
-# Nothing else on the deploy path writes backend.env (the systemd unit only runs
-# prepare-env on service start), so refresh it here — this also picks up SSM
-# parameter changes on every deploy.
-log "Refreshing backend.env from SSM Parameter Store..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Step 1: Sync compose file + refresh /etc/kyros/backend.env from SSM ─────
+# The EC2 runs from a copy of docker-compose.prod.yml — sync it every deploy so
+# compose changes in the repo take effect without a manual copy step. backend.env
+# is refreshed from SSM here too (the systemd unit only runs prepare-env on
+# service start), so SSM parameter changes are picked up on every deploy.
+log "Syncing docker-compose.yml and refreshing backend.env..."
+
+$SSH_CMD "${INSTANCE_ID}" "sudo tee /etc/kyros/docker-compose.yml > /dev/null" \
+  < "${SCRIPT_DIR}/../ec2/docker-compose.prod.yml"
 $SSH_CMD "${INSTANCE_ID}" "sudo /usr/local/bin/kyros-prepare-env.sh"
 
 # ── Step 2: Back up Postgres before touching the schema ─────────────────────
 # A restorable backup must exist before every migration (PHI database).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "${SCRIPT_DIR}/snapshot-before-deploy.sh" "${IMAGE_TAG}"
 
 # ── Step 3: Bring up Postgres + Redis (creates the kyros_default network on a
