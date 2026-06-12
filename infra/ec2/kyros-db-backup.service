@@ -1,0 +1,8 @@
+[Unit]
+Description=Kyros nightly Postgres backup to S3
+Requires=docker.service
+After=docker.service kyros-backend.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kyros-db-backup.sh

@@ -10,34 +10,43 @@ credits usable over 6 months, plus "Always Free" services — there is no specia
 
 ## Cost reality check
 
-The topology below (single EC2 instance for app containers + Redis, **RDS Postgres**
-for the database, no ElastiCache, no ALB) costs roughly:
+The topology below (single EC2 instance running **all** containers — Postgres, Redis,
+API, Celery, Caddy — no RDS, no ElastiCache, no ALB) costs roughly:
 
 | Item | Approx monthly cost (ap-south-1) |
 |---|---|
 | EC2 t3.small (2 vCPU, 2 GB) | ~$15 |
-| EBS 20 GB gp3 | ~$1.6 |
-| RDS db.t4g.small single-AZ (2 vCPU, 2 GB) | ~$25 |
-| RDS storage 20 GB gp3 + backups within retention | ~$2.5 |
+| EBS 20 GB gp3, encrypted | ~$1.6 |
 | Elastic IP (attached to running instance) | $0 |
 | ECR storage (a few images) | ~$0.10/GB-month, negligible |
+| S3 (DB backups + PHI files, a few GB) | ~$0.5 |
 | SSM Parameter Store (standard tier) | $0 |
 | Data transfer out (low volume) | ~$1–3 |
-| **Total** | **~$42–47/month** |
+| **Total** | **~$18–21/month** |
 
-The $200 credit covers roughly the first 4 months at this rate. The deliberate
+The $200 credit covers roughly the first 9 months at this rate. The deliberate
 trade-offs at this stage:
 
-- **Postgres on RDS** — this is the PHI store. RDS gives automated daily backups,
-  point-in-time recovery (any moment in the last 7 days), KMS storage encryption,
-  pre-migration snapshots, and push-button resizing. Worth paying for from day one.
+- **Postgres runs in Docker on the EC2, not RDS.** This is a Phase-0 cost call
+  (saves ~$27/month). What replaces RDS's safety features: the EBS volume is
+  encrypted at launch (KMS), a pre-deploy `pg_dump` to S3 runs before every
+  migration (`infra/scripts/snapshot-before-deploy.sh`), and a nightly `pg_dump`
+  to S3 runs via systemd timer (`infra/ec2/kyros-db-backup.timer`). The S3
+  `db-backups/` prefix has a 14-day lifecycle expiry. **RPO is up to 24 hours** —
+  RDS point-in-time recovery would be ~5 minutes. **Move to RDS when the first
+  real patient data lands**, not when user count grows: backups-as-cron is fine
+  for test data, weak once actual PHI exists (DPDP breach notification applies to
+  availability loss too). The move is a `pg_dump`/`pg_restore` plus a
+  `KYROS_DATABASE_URL` change in SSM.
 - **Redis stays in Docker on the EC2** — it holds only ephemeral state (OTPs, rate
   limits, Celery queue; security rule #13 says Redis is never the source of truth),
   so a managed ElastiCache node (~$11/month) buys little today. Move to ElastiCache
   in Phase 2.
-- **Single-AZ RDS** — Multi-AZ doubles the RDS cost and only reduces downtime during
-  an AZ failure; backups already protect against data loss. Enable Multi-AZ
-  (`aws rds modify-db-instance --multi-az`) once there are paying users.
+- **Memory is the binding constraint.** Postgres + Redis + API + 2 Celery
+  containers + Caddy share 2 GB of RAM (budget in
+  `infra/ec2/docker-compose.prod.yml`). If `free -h` / `docker stats` shows
+  sustained pressure, resize to t3.medium (~$30/month) — at that point RDS plus
+  t3.small costs about the same and is the better buy.
 
 ---
 
@@ -110,8 +119,9 @@ oversized instance or a runaway Celery task generating S3/data-transfer costs).
 ### 1a. EC2 instance role
 
 The EC2 instance needs permission to: pull from ECR, read the SSM secrets parameter,
-decrypt it, and register with SSM Session Manager (so you can shell in **without
-opening port 22**).
+decrypt it, register with SSM Session Manager (so you can shell in **without
+opening port 22**), and write/read database backups under the S3 `db-backups/`
+prefix (both the pre-deploy and the nightly `pg_dump` run on this instance).
 
 ```bash
 cat > /tmp/ec2-trust-policy.json <<'EOF'
@@ -138,6 +148,11 @@ aws iam attach-role-policy --role-name kyros-ec2-role \
 # SSM Parameter Store read + KMS decrypt for the SecureString
 KMS_KEY_ARN=$(aws kms describe-key --key-id alias/aws/ssm --query KeyMetadata.Arn --output text)
 
+# KMS key S3 uses for SSE-KMS default encryption (bucket created in Phase 3b).
+# If this errors with NotFoundException, the AWS-managed aws/s3 key doesn't exist
+# yet in this account — do Phase 3b first, then come back and re-run this block.
+S3_KMS_KEY_ARN=$(aws kms describe-key --key-id alias/aws/s3 --query KeyMetadata.Arn --output text)
+
 cat > /tmp/ec2-ssm-params-policy.json <<EOF
 {
   "Version": "2012-10-17",
@@ -156,6 +171,25 @@ cat > /tmp/ec2-ssm-params-policy.json <<EOF
       "Effect": "Allow",
       "Action": "ecr:DescribeRegistry",
       "Resource": "*"
+    },
+    {
+      "Sid": "DBBackupsReadWrite",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::kyros-phi-production/db-backups/*"
+    },
+    {
+      "Sid": "DBBackupsList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::kyros-phi-production",
+      "Condition": {"StringLike": {"s3:prefix": "db-backups/*"}}
+    },
+    {
+      "Sid": "DBBackupsKMS",
+      "Effect": "Allow",
+      "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
+      "Resource": "${S3_KMS_KEY_ARN}"
     }
   ]
 }
@@ -212,21 +246,6 @@ cat > /tmp/ci-policy.json <<EOF
       "Effect": "Allow",
       "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
       "Resource": "arn:aws:ssm:${AWS_REGION}:*:session/$${aws:username}-*"
-    },
-    {
-      "Sid": "RDSPreDeploySnapshot",
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBSnapshot",
-        "rds:DeleteDBSnapshot",
-        "rds:DescribeDBSnapshots",
-        "rds:DescribeDBInstances",
-        "rds:AddTagsToResource"
-      ],
-      "Resource": [
-        "arn:aws:rds:${AWS_REGION}:${ACCOUNT_ID}:db:kyros-prod",
-        "arn:aws:rds:${AWS_REGION}:${ACCOUNT_ID}:snapshot:kyros-pre-deploy-*"
-      ]
     }
   ]
 }
@@ -309,84 +328,81 @@ echo "Security group rules added."
 
 ---
 
-## Phase 3b — RDS Postgres (the PHI database)
+## Phase 3b — S3 bucket for database backups (and later, PHI files)
 
-The database does **not** run in Docker. Provision a managed RDS Postgres 16 instance:
-encrypted at rest (KMS), automated backups with point-in-time recovery, not publicly
-accessible, reachable only from the EC2 security group.
+Postgres runs in Docker on the EC2 (Phase 6), so there is no database instance to
+provision. What **must** exist before the first deploy is the S3 bucket: the deploy
+pipeline `pg_dump`s the database to `s3://…/db-backups/` before every migration, and
+the nightly backup timer writes there too. The same bucket later holds lab reports
+and prescriptions (security rule #6): SSE-KMS default encryption, all public access
+blocked, TLS-only access enforced.
 
 ```bash
-# Security group for RDS: port 5432 only from the EC2 instances' SG
-RDS_SG_ID=$(aws ec2 create-security-group \
-  --group-name kyros-rds-sg \
-  --description "Kyros RDS - Postgres from backend EC2 only" \
-  --vpc-id $VPC_ID --query GroupId --output text)
+BUCKET=kyros-phi-production
 
-aws ec2 authorize-security-group-ingress --group-id $RDS_SG_ID \
-  --protocol tcp --port 5432 --source-group $SG_ID
+aws s3api create-bucket --bucket $BUCKET --region $AWS_REGION \
+  --create-bucket-configuration LocationConstraint=$AWS_REGION
 
-# DB subnet group across the default VPC's subnets (RDS requires >= 2 AZs)
-SUBNET_IDS=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID \
-  --query 'Subnets[].SubnetId' --output text)
+aws s3api put-public-access-block --bucket $BUCKET \
+  --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 
-aws rds create-db-subnet-group \
-  --db-subnet-group-name kyros-db-subnets \
-  --db-subnet-group-description "Kyros default-VPC subnets" \
-  --subnet-ids $SUBNET_IDS
+# SSE-KMS default encryption (uses the AWS-managed aws/s3 key; BucketKeyEnabled
+# keeps KMS request costs near zero)
+aws s3api put-bucket-encryption --bucket $BUCKET \
+  --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},"BucketKeyEnabled":true}]}'
 
-# Master password — you'll embed this in KYROS_DATABASE_URL in Phase 4
-RDS_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
-echo "RDS_PASSWORD=$RDS_PASSWORD"   # note it down securely; also goes into SSM in Phase 4
+# Deny any non-TLS access (security rule #6)
+cat > /tmp/bucket-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "DenyInsecureTransport",
+    "Effect": "Deny",
+    "Principal": "*",
+    "Action": "s3:*",
+    "Resource": ["arn:aws:s3:::${BUCKET}", "arn:aws:s3:::${BUCKET}/*"],
+    "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+  }]
+}
+EOF
+aws s3api put-bucket-policy --bucket $BUCKET --policy file:///tmp/bucket-policy.json
 
-# Latest Postgres 16.x available on RDS
-PG_VERSION=$(aws rds describe-db-engine-versions --engine postgres \
-  --query "DBEngineVersions[?starts_with(EngineVersion,'16.')].EngineVersion | [-1]" \
-  --output text)
-echo "Postgres version: $PG_VERSION"
-
-aws rds create-db-instance \
-  --db-instance-identifier kyros-prod \
-  --db-instance-class db.t4g.small \
-  --engine postgres \
-  --engine-version $PG_VERSION \
-  --db-name kyros \
-  --master-username kyros \
-  --master-user-password "$RDS_PASSWORD" \
-  --allocated-storage 20 \
-  --max-allocated-storage 100 \
-  --storage-type gp3 \
-  --storage-encrypted \
-  --backup-retention-period 7 \
-  --deletion-protection \
-  --no-publicly-accessible \
-  --no-multi-az \
-  --vpc-security-group-ids $RDS_SG_ID \
-  --db-subnet-group-name kyros-db-subnets \
-  --auto-minor-version-upgrade \
-  --tags Key=Name,Value=kyros-prod
-
-# Takes 5–10 minutes
-aws rds wait db-instance-available --db-instance-identifier kyros-prod
-
-RDS_ENDPOINT=$(aws rds describe-db-instances --db-instance-identifier kyros-prod \
-  --query 'DBInstances[0].Endpoint.Address' --output text)
-echo "RDS endpoint: $RDS_ENDPOINT"
+# DB backups expire after 14 days (pre-deploy and nightly dumps both live under
+# db-backups/ — this rule does NOT touch future lab-report/prescription prefixes)
+cat > /tmp/lifecycle.json <<EOF
+{
+  "Rules": [{
+    "ID": "expire-db-backups",
+    "Filter": {"Prefix": "db-backups/"},
+    "Status": "Enabled",
+    "Expiration": {"Days": 14}
+  }]
+}
+EOF
+aws s3api put-bucket-lifecycle-configuration --bucket $BUCKET \
+  --lifecycle-configuration file:///tmp/lifecycle.json
 ```
 
-> **As built (June 2026):** the live `kyros-prod` instance was created via the console
-> with master username **`postgres`** (console default), not `kyros`. The database name
-> is `kyros`. All connection strings below use `postgres` as the user.
+> S3 bucket names are globally unique. If `kyros-phi-production` is taken, pick
+> another name and update it in three places: `KYROS_S3_BUCKET` in the Phase 4 SSM
+> JSON, and the two `arn:aws:s3:::kyros-phi-production…` resources in the Phase 1a
+> instance-role policy.
 
-**Write down `$RDS_ENDPOINT` and `$RDS_PASSWORD`** — both go into the SSM parameter in
-Phase 4. The instance identifier `kyros-prod` becomes the `RDS_INSTANCE_ID` GitHub
-secret in Phase 8 (the deploy pipeline snapshots it before every migration).
+While you're here, generate the Postgres password — it goes into the SSM parameter
+in Phase 4 (the postgres container reads it as `POSTGRES_PASSWORD` on first init):
 
-Storage autoscaling is capped at 100 GB (`--max-allocated-storage`) so a runaway
-writer can't generate an unbounded storage bill.
+```bash
+POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"   # note it down securely
+```
 
-> **Multi-AZ later:** when you have paying users, enable failover with
-> `aws rds modify-db-instance --db-instance-identifier kyros-prod --multi-az
-> --apply-immediately`. No data migration needed.
+> **Moving to RDS later** (when the first real patient data lands): provision RDS
+> Postgres 16, `pg_dump` the container database, `pg_restore`/`psql` into RDS, update
+> `KYROS_DATABASE_URL` in SSM, restart the stack, then remove the postgres service
+> from the compose file. The git history of this file (pre-June-2026) contains the
+> full RDS provisioning commands.
 
 ---
 
@@ -398,18 +414,25 @@ parameter, exactly as `infra/ec2/kyros-prepare-env.sh` expects.
 ```bash
 JWT_SECRET=$(openssl rand -hex 32)
 OTP_SECRET=$(openssl rand -hex 32)
-# $RDS_ENDPOINT and $RDS_PASSWORD come from Phase 3b
+# $POSTGRES_PASSWORD comes from Phase 3b
 
 # Key names below are verified against backend/app/core/config.py (pydantic-settings,
 # env_prefix "KYROS_" + field name). config.py is the source of truth — re-verify after
 # any Settings change.
+# The POSTGRES_* keys (no KYROS_ prefix) are consumed by the postgres container in
+# docker-compose.prod.yml and by the backup scripts — they must stay consistent with
+# the credentials inside KYROS_DATABASE_URL. The "postgres" hostname is the compose
+# service name; no ssl param, the connection never leaves the Docker network.
 cat > /tmp/backend-secrets.json <<EOF
 {
   "KYROS_APP_ENV": "production",
   "KYROS_APP_VERSION": "1.0.0",
   "KYROS_DEBUG": "false",
 
-  "KYROS_DATABASE_URL": "postgresql+asyncpg://postgres:${RDS_PASSWORD}@${RDS_ENDPOINT}:5432/kyros?ssl=require",
+  "POSTGRES_USER": "kyros",
+  "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}",
+  "POSTGRES_DB": "kyros",
+  "KYROS_DATABASE_URL": "postgresql+asyncpg://kyros:${POSTGRES_PASSWORD}@postgres:5432/kyros",
 
   "KYROS_REDIS_URL": "redis://redis:6379/0",
   "KYROS_CELERY_BROKER_URL": "redis://redis:6379/1",
@@ -492,10 +515,9 @@ shred -u /tmp/backend-secrets.json
 > those features just won't work until you fill them in (re-run `put-parameter` with
 > `--overwrite` and restart the stack to pick up changes).
 >
-> `KYROS_S3_BUCKET` references a bucket that doesn't exist yet. Creating the
-> SSE-KMS-encrypted, public-access-blocked S3 bucket for lab reports/prescriptions is
-> a separate follow-up (security rule #6) — the API will still start without it;
-> file-upload endpoints just won't work until it exists.
+> `KYROS_S3_BUCKET` must match the bucket created in Phase 3b — the backup scripts
+> read it from `backend.env`, and `kyros-prepare-env.sh` refuses to start the stack
+> if the `POSTGRES_*` keys are missing from this JSON.
 
 ---
 
@@ -519,7 +541,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --subnet-id $SUBNET_ID \
   --security-group-ids $SG_ID \
   --iam-instance-profile Name=kyros-ec2-profile \
-  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
+  --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3","Encrypted":true,"DeleteOnTermination":true}}]' \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=kyros-backend-prod}]' \
   --metadata-options 'HttpTokens=required' \
   --query 'Instances[0].InstanceId' --output text)
@@ -595,8 +617,12 @@ clone the repo and `scp`/SSM-copy the four files:
 - `infra/ec2/docker-compose.prod.yml` → `/etc/kyros/docker-compose.yml`
 - `infra/ec2/kyros-prepare-env.sh` → `/usr/local/bin/kyros-prepare-env.sh`
 - `infra/ec2/kyros-backend.service` → `/etc/systemd/system/kyros-backend.service`
+- `infra/ec2/kyros-db-backup.sh` → `/usr/local/bin/kyros-db-backup.sh`
+- `infra/ec2/kyros-db-backup.service` → `/etc/systemd/system/kyros-db-backup.service`
+- `infra/ec2/kyros-db-backup.timer` → `/etc/systemd/system/kyros-db-backup.timer`
 - `infra/ec2/Caddyfile` → `/etc/kyros/Caddyfile` (after editing the hostname — see Phase 7)
-- `infra/docker/postgres/init.sql` → `/etc/kyros/rds-init.sql` (applied to RDS once, below — not mounted)
+- `infra/docker/postgres/init.sql` → `/etc/kyros/postgres-init.sql` (mounted into the
+  postgres container; runs automatically on first volume creation)
 
 The simplest way without configuring SCP-over-SSM: from CloudShell, since it doesn't
 have the repo, use `aws ssm send-command` with the file contents inlined, or
@@ -628,32 +654,22 @@ print(f'echo {b64} | base64 -d | sudo tee $DEST > /dev/null && sudo chmod $MODE 
 write_remote_file /tmp/repo/infra/ec2/docker-compose.prod.yml /etc/kyros/docker-compose.yml 644
 write_remote_file /tmp/repo/infra/ec2/kyros-prepare-env.sh /usr/local/bin/kyros-prepare-env.sh 755
 write_remote_file /tmp/repo/infra/ec2/kyros-backend.service /etc/systemd/system/kyros-backend.service 644
-write_remote_file /tmp/repo/infra/docker/postgres/init.sql /etc/kyros/rds-init.sql 644
+write_remote_file /tmp/repo/infra/ec2/kyros-db-backup.sh /usr/local/bin/kyros-db-backup.sh 755
+write_remote_file /tmp/repo/infra/ec2/kyros-db-backup.service /etc/systemd/system/kyros-db-backup.service 644
+write_remote_file /tmp/repo/infra/ec2/kyros-db-backup.timer /etc/systemd/system/kyros-db-backup.timer 644
+write_remote_file /tmp/repo/infra/docker/postgres/init.sql /etc/kyros/postgres-init.sql 644
 ```
 
 (Edit `infra/ec2/Caddyfile` to use your real API hostname — e.g. `api.kyrosclinic.com` —
 and the cert paths from Phase 7 before copying it.)
 
-### Initialize the RDS database (one-time)
+No manual database initialization is needed: the postgres container's entrypoint
+runs `/etc/kyros/postgres-init.sql` (extensions + readonly role) automatically the
+first time the `kyros_postgres_data` volume is created, using the `POSTGRES_*`
+credentials from the Phase 4 SSM parameter.
 
-From the EC2 (in the SSM session), apply the extensions + readonly-role script against
-RDS. All three extensions (`pgcrypto`, `pg_trgm`, `btree_gin`) are RDS-supported, and
-the RDS master user has sufficient rights:
-
-```bash
-RDS_ENDPOINT=<from Phase 3b>
-
-sudo docker run --rm -i \
-  -e PGPASSWORD='<RDS_PASSWORD from Phase 3b>' \
-  postgres:16-alpine \
-  psql "host=${RDS_ENDPOINT} port=5432 user=postgres dbname=kyros sslmode=require" \
-  < /etc/kyros/rds-init.sql
-```
-
-You should see `CREATE EXTENSION` ×3 and the role grants. This runs once; re-running
-is harmless (everything is `IF NOT EXISTS`-guarded).
-
-Then on the EC2 (back in the SSM session), seed the image tag and start the stack:
+On the EC2 (back in the SSM session), seed the image tag, start the stack, and
+enable the nightly backup timer:
 
 ```bash
 echo "latest" | sudo tee /etc/kyros/image-tag
@@ -661,6 +677,17 @@ echo "latest" | sudo tee /etc/kyros/image-tag
 sudo systemctl daemon-reload
 sudo systemctl enable --now kyros-backend.service
 sudo systemctl status kyros-backend.service --no-pager
+
+sudo systemctl enable --now kyros-db-backup.timer
+systemctl list-timers kyros-db-backup.timer --no-pager   # next run should be ~22:00 UTC
+```
+
+Once the stack is up, run one backup by hand to prove the whole chain (instance role
+→ pg_dump → S3) works *before* the first real deploy needs it:
+
+```bash
+sudo /usr/local/bin/kyros-db-backup.sh
+aws s3 ls s3://kyros-phi-production/db-backups/nightly/
 ```
 
 `kyros-prepare-env.sh` runs as `ExecStartPre` — it needs the SSM parameter from Phase 4
@@ -724,9 +751,10 @@ uses `environment: production`), add:
 | `AWS_SECRET_ACCESS_KEY` | from Phase 1b |
 | `EC2_HOST` | `$INSTANCE_ID` (e.g. `i-0123456789abcdef0`) — **not** an IP, since deploys tunnel over SSM |
 | `SSH_PRIVATE_KEY` | contents of `/tmp/kyros-prod.pem` from Phase 5 |
-| `RDS_INSTANCE_ID` | `kyros-prod` (Phase 3b) — used for the pre-migration snapshot |
 
-Remove the now-unused `BASTION_HOST` secret if present — this topology has no bastion.
+Remove the now-unused `BASTION_HOST` and `RDS_INSTANCE_ID` secrets if present — this
+topology has no bastion, and the pre-migration backup is a `pg_dump` to S3 (runs on
+the EC2 with its instance role), not an RDS snapshot.
 
 > The workflow and `infra/scripts/deploy-phase1.sh` were updated alongside this guide
 > to tunnel SSH over SSM (`aws ssm start-session` + `AWS-StartSSHSession`) instead of
@@ -736,8 +764,10 @@ Remove the now-unused `BASTION_HOST` secret if present — this topology has no 
 Trigger the first deploy by pushing to `main` (or re-running the workflow). It will:
 1. Run tests.
 2. Build and push the image to ECR.
-3. Snapshot RDS (`kyros-pre-deploy-<timestamp>-<sha>`, pruned after 14 days).
-4. Run `alembic upgrade head` against RDS.
+3. `pg_dump` the database to `s3://…/db-backups/kyros-pre-deploy-<timestamp>-<sha>.sql.gz`
+   (skipped harmlessly on the very first deploy, when the postgres container doesn't
+   exist yet; expired by the S3 lifecycle rule after 14 days).
+4. Run `alembic upgrade head` in a one-off container on the compose network.
 5. `docker compose up -d` with the new image tag.
 6. Health-check `/healthz`.
 
@@ -750,26 +780,43 @@ Trigger the first deploy by pushing to `main` (or re-running the workflow). It w
 - [ ] `curl https://api.kyrosclinic.com/readyz` → `{"db": true, "redis": true}`.
 - [ ] `aws ssm start-session --target $INSTANCE_ID` works without any inbound SG rule
       for port 22.
-- [ ] `sudo docker compose -f /etc/kyros/docker-compose.yml ps` shows redis,
-      backend-api, celery-worker, celery-beat, caddy all healthy/running (Postgres is
-      on RDS, not in compose).
-- [ ] `aws rds describe-db-instances --db-instance-identifier kyros-prod` shows
-      `StorageEncrypted: true`, `PubliclyAccessible: false`,
-      `BackupRetentionPeriod: 7`, `DeletionProtection: true`.
+- [ ] `sudo docker compose -f /etc/kyros/docker-compose.yml ps` shows postgres, redis,
+      backend-api, celery-worker, celery-beat, caddy all healthy/running.
+- [ ] The EC2's EBS volume shows `Encrypted: true`
+      (`aws ec2 describe-volumes --filters Name=attachment.instance-id,Values=$INSTANCE_ID`).
+- [ ] `kyros-phi-production` bucket: public access blocked, SSE-KMS default
+      encryption, lifecycle rule `expire-db-backups` present.
+- [ ] `systemctl list-timers kyros-db-backup.timer` shows the timer active, and a
+      manual `sudo /usr/local/bin/kyros-db-backup.sh` lands an object under
+      `db-backups/nightly/`.
 - [ ] Cloudflare SSL/TLS mode is **Full (strict)**.
 - [ ] GitHub Actions `Deploy Backend` workflow succeeds end-to-end on a push to
-      `main`, including the `kyros-pre-deploy-*` RDS snapshot step.
+      `main`, including the `kyros-pre-deploy-*` pg_dump-to-S3 step.
 
 ## What's deliberately deferred
 
-- **S3 bucket for PHI** (`kyros-phi-production`, SSE-KMS, public access blocked) —
-  needed before lab-report/prescription upload endpoints work.
 - **Razorpay / 100ms / MSG91 / AiSensy / SendGrid / Sentry** credentials — fill into
   the SSM parameter (Phase 4) as you onboard each integration; `aws ssm put-parameter
   ... --overwrite` then restart the stack.
-- **RDS Multi-AZ** — enable once there are paying users
-  (`aws rds modify-db-instance --db-instance-identifier kyros-prod --multi-az`).
+- **Postgres on RDS** — the trigger is the **first real patient record**, not user
+  growth (see Phase 3b note for the migration steps). Until then the nightly +
+  pre-deploy `pg_dump`s are the only recovery story; RPO is up to 24 hours.
 - **ElastiCache / ALB / CloudFront / WAF** — Phase 2, triggered by MRR > ₹50K or
-  >500 concurrent users (`docs/strategy/build-spec.md` §14). `docs/runbook-prod.md`
-  currently documents the Phase 2 topology in places; it should be updated to reflect
-  this Phase 1 reality once this is live.
+  >500 concurrent users (`docs/strategy/build-spec.md` §14).
+
+## Decommissioning the old RDS instance (if you provisioned it)
+
+If the RDS `kyros-prod` instance from the earlier version of this guide exists and
+you've moved its data (or it only holds test data), stop paying for it:
+
+```bash
+# Optional: keep a final snapshot (free within retention, then standard snapshot pricing)
+aws rds modify-db-instance --db-instance-identifier kyros-prod \
+  --no-deletion-protection --apply-immediately
+
+aws rds delete-db-instance --db-instance-identifier kyros-prod \
+  --final-db-snapshot-identifier kyros-prod-final
+
+aws rds delete-db-subnet-group --db-subnet-group-name kyros-db-subnets
+aws ec2 delete-security-group --group-ids <kyros-rds-sg id>   # after the instance is gone
+```

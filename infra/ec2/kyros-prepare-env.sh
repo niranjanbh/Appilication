@@ -41,8 +41,15 @@ install -m 0600 -o root -g root /dev/null "${ENV_FILE}"
 echo "${SECRET_JSON}" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "${ENV_FILE}"
 chmod 0600 "${ENV_FILE}"
 
-# Postgres runs on RDS — KYROS_DATABASE_URL in the SSM JSON already points at the
-# RDS endpoint, so no local postgres.env is needed.
+# Postgres runs in-container on this host. The compose postgres service and the
+# backup scripts read POSTGRES_* from backend.env — fail fast if the SSM JSON is
+# missing them, otherwise the stack comes up with a broken database.
+for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
+    if ! grep -q "^${var}=." "${ENV_FILE}"; then
+        log "ERROR: ${var} missing from ${PARAM_NAME} — required for in-container Postgres"
+        exit 1
+    fi
+done
 
 # Also write image metadata for compose substitution
 ECR_REGISTRY=$(aws ecr describe-registry --region "${REGION}" --query registryId --output text).dkr.ecr.${REGION}.amazonaws.com

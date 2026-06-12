@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Kyros Postgres backup (22:00 UTC = 03:30 IST)
+
+[Timer]
+OnCalendar=*-*-* 22:00:00 UTC
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

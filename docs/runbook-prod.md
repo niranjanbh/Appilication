@@ -1,6 +1,6 @@
 # Kyros Production Runbook
 
-**Last reviewed:** 2026-06-04  
+**Last reviewed:** 2026-06-11  
 **DPO contact:** dpo@kyrosclinic.com  
 **On-call:** See on-call schedule in PagerDuty / Slack #on-call  
 **Incident channel:** Slack #incidents  
@@ -12,8 +12,8 @@
 1. [Phase 1 Topology](#1-phase-1-topology)
 2. [Deployment Procedure](#2-deployment-procedure)
 3. [Rollback Procedure](#3-rollback-procedure)
-4. [Database Failover (Phase 2 Multi-AZ)](#4-database-failover)
-5. [PITR Restore from Backup](#5-pitr-restore-from-backup)
+4. [Database Failure](#4-database-failure)
+5. [Restore from S3 Backup](#5-restore-from-s3-backup)
 6. [Celery Queue Stuck](#6-celery-queue-stuck)
 7. [Payment Reconciliation Mismatch](#7-payment-reconciliation-mismatch)
 8. [Audit Integrity Failure](#8-audit-integrity-failure)
@@ -25,34 +25,40 @@
 ## 1. Phase 1 Topology
 
 ```
-Internet → CloudFront (website static) → S3
-         → AWS WAF → ALB (TLS 1.3)
-                       │
-                   EC2 t3.small (ap-south-1a)
-                   ├── backend-api  (localhost:8000)
-                   ├── celery-worker
-                   └── celery-beat
-                       │
-              ┌────────┴────────┐
-         RDS db.t3.micro    ElastiCache Redis t3.micro
-         (private subnet)   (private subnet)
+Internet → Cloudflare (DNS + proxy, Full-strict TLS)
+              │  ports 80/443 open to Cloudflare IPs only — no port 22
+          EC2 t3.small (ap-south-1a, Elastic IP, encrypted EBS)
+          └── Docker Compose (project: kyros)
+              ├── caddy          (TLS termination, Cloudflare Origin CA cert)
+              ├── backend-api    (localhost:8000)
+              ├── celery-worker
+              ├── celery-beat
+              ├── postgres       (kyros_postgres_data volume — the PHI store)
+              └── redis          (ephemeral only — security rule #13)
+                      │
+          S3 kyros-phi-production (SSE-KMS, public access blocked)
+          └── db-backups/  (nightly + pre-deploy pg_dumps, 14-day lifecycle expiry)
 ```
+
+**Postgres runs in-container on the EC2 — there is no RDS in Phase 1.** Durability
+comes from the encrypted EBS volume plus `pg_dump`s to S3: nightly via
+`kyros-db-backup.timer` (22:00 UTC = 03:30 IST) and before every migration via the
+deploy pipeline. Move to RDS when the first real patient data lands
+(`docs/deploy-phase1-aws-setup.md`, Phase 3b note).
 
 **Key resources**
 
 | Resource | Identifier |
 |---|---|
 | EC2 instance | `i-XXXXXXXXXX` (ap-south-1) |
-| RDS | `kyros-prod-postgres` |
-| ElastiCache | `kyros-prod-redis` |
-| ALB | `kyros-prod-alb` |
+| Postgres | container `kyros-postgres-1`, volume `kyros_postgres_data` |
 | ECR | `ACCOUNT.dkr.ecr.ap-south-1.amazonaws.com/kyros-backend` |
-| S3 uploads | `kyros-prod-uploads` |
-| Secrets Manager | `kyros/production/backend` |
+| S3 (PHI files + DB backups) | `kyros-phi-production` |
+| Secrets | SSM Parameter Store `/kyros/production/backend` (SecureString JSON) |
 
-**SSH access** (via bastion):
+**Shell access** (SSM Session Manager — no bastion, no open port 22):
 ```bash
-ssh -J ec2-user@BASTION_IP ec2-user@EC2_PRIVATE_IP
+aws ssm start-session --target i-XXXXXXXXXX --region ap-south-1
 ```
 
 **Docker Compose on EC2:**
@@ -67,28 +73,30 @@ sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs -
 
 **Normal deploy (CI-triggered):**
 
-CI pipeline runs automatically on merge to `main`. Steps:
-1. Build and push Docker image to ECR with `GIT_SHA` tag.
-2. Create RDS snapshot (`infra/scripts/snapshot-before-deploy.sh`).
-3. Run `alembic upgrade head` against RDS (separate container, same image).
-4. Run `infra/scripts/deploy-phase1.sh GIT_SHA` — pulls image, compose up, health checks.
-5. If health checks fail: automatic rollback triggered (see §3).
+CI pipeline runs automatically on merge to `main`
+(`.github/workflows/deploy-backend.yml`). Steps (all EC2 access tunnels over SSM):
+1. Run tests, then build and push Docker image to ECR with `GIT_SHA` tag.
+2. `pg_dump` the database to S3 (`infra/scripts/snapshot-before-deploy.sh` →
+   `db-backups/kyros-pre-deploy-<timestamp>-<sha>.sql.gz`).
+3. Run `alembic upgrade head` in a one-off container on the `kyros_default` network.
+4. `docker compose up -d` with the new image tag, then health-check `/healthz`.
+5. If health checks fail: see §3 for rollback.
 
-**Manual deploy** (emergency or re-deploy without code change):
+**Manual deploy** (emergency or re-deploy without code change), from any machine
+with the `kyros-ci` AWS credentials and the deploy SSH key:
 ```bash
-export IMAGE_TAG=<git_sha>
 export ECR_REGISTRY=<account>.dkr.ecr.ap-south-1.amazonaws.com
-export EC2_HOST=<ec2_private_ip>
-export BASTION_HOST=<bastion_ip>
-export RDS_INSTANCE_ID=kyros-prod-postgres
-./infra/scripts/deploy-phase1.sh $IMAGE_TAG
+export EC2_HOST=<instance_id>            # i-… — tunnels over SSM, not an IP
+# deploy key at /tmp/deploy_key (mode 0600)
+./infra/scripts/deploy-phase1.sh <git_sha>
 ```
 
-**Migration-only deploy** (schema change without code change, rare):
+**Migration-only deploy** (schema change without code change, rare) — run the
+backup first, then in an SSM session on the EC2:
 ```bash
-ssh -J ec2-user@BASTION ec2-user@EC2 \
-  "docker run --rm --env-file /etc/kyros/backend.env --network host \
-   REGISTRY/kyros-backend:TAG alembic upgrade head"
+sudo docker run --rm --network kyros_default \
+  --env-file /etc/kyros/backend.env \
+  REGISTRY/kyros-backend:TAG alembic upgrade head
 ```
 
 ---
@@ -105,7 +113,7 @@ sudo IMAGE_TAG=<previous_sha> docker compose -f docker-compose.yml up -d
 **Schema rollback** — generally not used. Prefer forward-only migrations.  
 If absolutely necessary:
 1. Verify the migration has a `downgrade()` function.
-2. Restore from RDS pre-deploy snapshot (§5) — faster and safer than running `downgrade`.
+2. Restore from the pre-deploy `pg_dump` in S3 (§5) — safer than running `downgrade`.
 3. Deploy the previous code image after restore completes.
 
 **Checking available images in ECR:**
@@ -118,91 +126,77 @@ aws ecr describe-images --repository-name kyros-backend \
 
 ---
 
-## 4. Database Failover
+## 4. Database Failure
 
-**Phase 1 (single instance):** No automatic failover. On RDS failure, restore from backup (§5).
+**There is no automatic failover in Phase 1.** Postgres is a single container on a
+single EC2 instance.
 
-**Phase 2 (Multi-AZ):** RDS automatically fails over to the standby replica. Typical failover time: 60–120 seconds. The application reconnects via `pool_pre_ping=True` (SQLAlchemy).
-
-**Steps during a Phase 2 failover:**
-1. CloudWatch alarm `kyros-production-rds-connection-failures` will fire — page acknowledged.
-2. Check RDS console for failover event: `Events → DB Instance Events`.
-3. Monitor `DatabaseConnections` CloudWatch metric — should recover within 2 min.
-4. If app containers stuck: restart them.
-   ```bash
-   sudo docker compose -f /etc/kyros/docker-compose.yml restart backend-api
-   ```
-5. Verify `/readyz` returns `{"db": true, "redis": true}`.
-6. Verify Celery worker reconnects:
-   ```bash
-   sudo docker compose -f /etc/kyros/docker-compose.yml logs celery-worker | tail -20
-   ```
-
-**Forcing a Phase 2 failover (maintenance window):**
+**Postgres container crashes:** `restart: unless-stopped` brings it back
+automatically, and the data volume (`kyros_postgres_data`) survives container
+restarts. If it's crash-looping:
 ```bash
-aws rds reboot-db-instance \
-  --db-instance-identifier kyros-prod-postgres \
-  --force-failover \
-  --region ap-south-1
+sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros logs postgres --tail=100
+sudo docker stats --no-stream    # check for memory pressure first — most likely cause on 2 GB
 ```
+
+**EC2 instance or EBS volume lost:** provision a replacement instance per
+`docs/deploy-phase1-aws-setup.md` Phases 5–7 and restore the latest dump from S3
+(§5). **RPO: up to 24 hours** (nightly dump, or the pre-deploy dump if a deploy ran
+more recently). Communicate the data-loss window — this may trigger a DPDP breach
+assessment (`docs/dpdp-breach-runbook.md`).
+
+**Phase 2 (RDS Multi-AZ)** removes this category: automatic failover in 60–120 s,
+PITR with 5-minute granularity. The application already reconnects via
+`pool_pre_ping=True` (SQLAlchemy). Move when the first real patient data lands.
 
 ---
 
-## 5. PITR Restore from Backup
+## 5. Restore from S3 Backup
 
-Use when data corruption is detected or a bad migration is deployed.
+Use when data corruption is detected, a bad migration is deployed, or the host is
+being rebuilt.
 
-**RPO:** 5 minutes (RDS PITR granularity).  
-**RTO:** ~30 minutes for a restore to a new instance + update connection string.
+**RPO:** up to 24 h (nightly dump) or the pre-deploy dump of the offending deploy.  
+**RTO:** ~15 minutes on a healthy host.
 
 ```bash
-# 1. Pick restore point (UTC timestamp, must be within retention window)
-RESTORE_TIME="2026-06-03T14:30:00Z"
+# 1. Pick a backup (nightly/ for scheduled, root of db-backups/ for pre-deploy)
+aws s3 ls s3://kyros-phi-production/db-backups/ --recursive --region ap-south-1
 
-# 2. Restore to a new instance
-aws rds restore-db-instance-to-point-in-time \
-  --source-db-instance-identifier kyros-prod-postgres \
-  --target-db-instance-identifier kyros-prod-postgres-restored \
-  --restore-time "${RESTORE_TIME}" \
-  --db-instance-class db.t3.micro \
-  --region ap-south-1
+# 2. In an SSM session on the EC2: stop all writers, keep postgres up
+sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros \
+  stop backend-api celery-worker celery-beat
 
-# 3. Wait for restore (takes 15–30 min)
-aws rds wait db-instance-available \
-  --db-instance-identifier kyros-prod-postgres-restored \
-  --region ap-south-1
+# 3. Move the corrupt database aside and create a fresh one
+source <(sudo grep -E '^(POSTGRES_USER|POSTGRES_DB)=' /etc/kyros/backend.env)
+sudo docker exec kyros-postgres-1 psql -U "$POSTGRES_USER" -d postgres -c \
+  "ALTER DATABASE \"$POSTGRES_DB\" RENAME TO \"${POSTGRES_DB}_corrupt\";"
+sudo docker exec kyros-postgres-1 psql -U "$POSTGRES_USER" -d postgres -c \
+  "CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\";"
 
-# 4. Get new endpoint
-aws rds describe-db-instances \
-  --db-instance-identifier kyros-prod-postgres-restored \
-  --query 'DBInstances[0].Endpoint.Address' \
-  --output text \
-  --region ap-south-1
+# 4. Re-apply init.sql (extensions + readonly-role grants — the dumps are taken
+#    with --no-acl, so grants don't round-trip)
+sudo docker exec -i kyros-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  < /etc/kyros/postgres-init.sql
 
-# 5. Update DATABASE_URL in Secrets Manager to point at new instance
-aws secretsmanager put-secret-value \
-  --secret-id kyros/production/backend \
-  --secret-string '{"database_url": "postgresql+asyncpg://kyros:PASSWORD@NEW_ENDPOINT:5432/kyros", ...}'
+# 5. Restore the dump
+aws s3 cp "s3://kyros-phi-production/db-backups/<BACKUP>.sql.gz" - --region ap-south-1 \
+  | gunzip \
+  | sudo docker exec -i kyros-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      --set ON_ERROR_STOP=1
 
-# 6. Re-run kyros-prepare-env.sh and restart containers
-sudo /usr/local/bin/kyros-prepare-env.sh
+# 6. Restart the app
 sudo docker compose -f /etc/kyros/docker-compose.yml --project-name kyros up -d
 ```
 
-**Restore from pre-deploy snapshot** (preferred when migration caused corruption):
-```bash
-aws rds restore-db-instance-from-db-snapshot \
-  --db-instance-identifier kyros-prod-postgres-snapshot-restored \
-  --db-snapshot-identifier kyros-pre-deploy-SNAPSHOT_ID \
-  --db-instance-class db.t3.micro \
-  --region ap-south-1
-```
-Then follow steps 3–6 above.
-
 **After any restore:**
-- Run `alembic current` to confirm schema version.
-- Re-apply any migrations that occurred after the restore point.
-- Notify affected users if data was lost (triggers DPDP breach assessment — see `docs/dpdp-breach-runbook.md`).
+- Run `alembic current` (one-off container, as in §2 migration-only deploy) to
+  confirm schema version; re-apply any migrations newer than the restore point.
+- Verify `/readyz` returns `{"db": true, "redis": true}`.
+- Once verified, drop the saved copy:
+  `DROP DATABASE "<db>_corrupt";` — until then it's your undo button.
+- Notify affected users if data was lost (triggers DPDP breach assessment — see
+  `docs/dpdp-breach-runbook.md`).
 
 ---
 
@@ -344,8 +338,8 @@ Follow `docs/dpdp-breach-runbook.md`. Data integrity violation affecting PHI is 
 |---|---|---|---|
 | API 5xx > 1% | P1 | Backend on-call | Engineering lead |
 | ALB unhealthy host | P1 | Backend on-call | Engineering lead |
-| RDS connection failure | P1 | Backend on-call + DBA | CTO |
-| RDS CPU > 80% | P2 | Backend on-call | Engineering lead |
+| Postgres container down / connection failure | P1 | Backend on-call + DBA | CTO |
+| EC2 memory/CPU pressure sustained > 80% | P2 | Backend on-call | Engineering lead |
 | Redis memory > 80% | P2 | Backend on-call | Engineering lead |
 | Celery OCR queue > 200 | P2 | Backend on-call | Engineering lead |
 | Payment webhook failure > 5% | P1 | Backend on-call | Finance lead |
