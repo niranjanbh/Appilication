@@ -11,7 +11,7 @@ __pycache__/
 htmlcov/
 *.egg-info/
 **/.venv/
-
+kyros-prod-new.pem
 # ── Environment / secrets ────────────────────────────────────
 backend/.env
 backend/.env.*
