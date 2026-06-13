@@ -79,7 +79,7 @@
           · {{ inquiry.created_at | ist }}
         </div>
       </div>
-      <span class="chip chip-{{ 'confirmed' if inquiry.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ inquiry.status }}</span>
+      <span class="chip chip-{{ 'confirmed' if inquiry.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ 'not contacted' if inquiry.status == 'new' else inquiry.status }}</span>
     </div>
 
     {% if inquiry.skipped_intake %}
@@ -140,7 +140,7 @@
           · {{ lead.created_at | ist }}
         </div>
       </div>
-      <span class="chip chip-{{ 'confirmed' if lead.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ lead.status }}</span>
+      <span class="chip chip-{{ 'confirmed' if lead.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ 'not contacted' if lead.status == 'new' else lead.status }}</span>
     </div>
 
     <p style="font-size:13px;margin:0 0 12px;white-space:pre-wrap;">{{ lead.message }}</p>
