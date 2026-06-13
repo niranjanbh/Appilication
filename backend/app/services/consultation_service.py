@@ -150,6 +150,128 @@ async def confirm_payment(
     return updated
 
 
+async def admin_cancel_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    reason: str,
+) -> tuple[Consultation, bool]:
+    """Operational cancellation by a super admin (doctor no-show, emergencies).
+
+    Unlike the patient flow there is no refund window: if the consultation was
+    paid, the patient is always refunded in full. Returns (consultation,
+    refund_issued).
+    """
+    from app.models.payment import Payment
+
+    consultation = await db.get(Consultation, consultation_id)
+    if consultation is None or consultation.deleted_at is not None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
+        raise ConsultationError("consultation_not_cancellable")
+
+    refund_issued = False
+    if consultation.payment_id is not None:
+        payment = await db.get(Payment, consultation.payment_id)
+        if payment is not None and payment.status == PaymentStatus.PAID:
+            try:
+                await payment_service.initiate_refund(
+                    db,
+                    payment_id=payment.id,
+                    user_id=payment.user_id,
+                )
+                refund_issued = True
+            except payment_service.PaymentError:
+                # Razorpay hiccup must not block the cancellation; the refund
+                # can be retried from Razorpay's dashboard.
+                refund_issued = False
+
+    await consultations_repo.release_slot(db, consultation_id=consultation.id)
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation.id,
+        status=ConsultationStatus.CANCELLED,
+        cancellation_reason=f"[ADMIN] {reason[:480]}",
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated, refund_issued
+
+
+async def admin_reassign_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    slot_id: uuid.UUID,
+) -> Consultation:
+    """Move a consultation to a new slot — possibly a different doctor.
+
+    For doctor unavailability: payment and status carry over, so the patient
+    is not pushed through a refund + rebook cycle.
+    """
+    consultation = await db.get(Consultation, consultation_id)
+    if consultation is None or consultation.deleted_at is not None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
+        raise ConsultationError("consultation_not_reassignable")
+
+    # Free the old slot first: if claiming the new one fails we raise, and the
+    # transaction rollback restores the old booking.
+    await consultations_repo.release_slot(db, consultation_id=consultation_id)
+
+    slot = await consultations_repo.lock_and_book_slot(
+        db, slot_id=slot_id, consultation_id=consultation_id
+    )
+    if slot is None:
+        raise ConsultationError("slot_not_available")
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation_id,
+        doctor_id=slot.doctor_id,
+        scheduled_start_at=slot.slot_start,
+        scheduled_end_at=slot.slot_end,
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated
+
+
+async def admin_mark_no_show(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> Consultation:
+    """Mark a past consultation as a patient no-show. No refund — the slot was
+    held and the doctor was present. Refund-worthy cases (doctor no-show) go
+    through admin_cancel_consultation instead.
+    """
+    consultation = await db.get(Consultation, consultation_id)
+    if consultation is None or consultation.deleted_at is not None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
+        raise ConsultationError("consultation_not_markable")
+
+    if consultation.scheduled_start_at > datetime.now(UTC):
+        raise ConsultationError("consultation_not_started_yet")
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation_id,
+        status=ConsultationStatus.NO_SHOW,
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated
+
+
 async def cancel_consultation(
     db: AsyncSession,
     *,

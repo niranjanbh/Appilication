@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% block title %}Add Staff — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Add Staff Account</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="card" style="max-width:560px;">
+    <form method="POST" action="/admin/staff">
+      <div class="form-group">
+        <label for="role">Role</label>
+        <select id="role" name="role" required>
+          {% for r in roles %}
+          <option value="{{ r }}" {{ 'selected' if values.role == r else '' }}>{{ r.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+        <small style="color:var(--stone);display:block;margin-top:4px;">
+          Admin = read-only portal · Coordinator = care &amp; support · Doctor starts as
+          &lsquo;applied&rsquo; in the pipeline.
+        </small>
+      </div>
+      <div class="form-group">
+        <label for="name">Full name</label>
+        <input id="name" name="name" type="text" required value="{{ values.name or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required value="{{ values.email or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="phone">Phone (E.164)</label>
+        <input id="phone" name="phone" type="text" placeholder="+919876543210" required value="{{ values.phone or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="password">Initial password (min 12 chars)</label>
+        <input id="password" name="password" type="password" minlength="12" required autocomplete="new-password">
+      </div>
+
+      <fieldset style="border:1px solid #e5e0d8;border-radius:8px;padding:12px;margin:16px 0;">
+        <legend style="font-size:12px;color:var(--stone);padding:0 6px;">Coordinator only</legend>
+        <div class="form-group">
+          <label for="employee_id">Employee ID (optional)</label>
+          <input id="employee_id" name="employee_id" type="text" value="{{ values.employee_id or '' }}">
+        </div>
+      </fieldset>
+
+      <fieldset style="border:1px solid #e5e0d8;border-radius:8px;padding:12px;margin:16px 0;">
+        <legend style="font-size:12px;color:var(--stone);padding:0 6px;">Doctor only</legend>
+        <div class="form-group">
+          <label for="nmc">NMC registration number</label>
+          <input id="nmc" name="nmc" type="text" value="{{ values.nmc or '' }}">
+        </div>
+        <div class="form-group">
+          <label for="state_council">State medical council</label>
+          <input id="state_council" name="state_council" type="text" value="{{ values.state_council or '' }}">
+        </div>
+        <div class="form-group">
+          <label for="specialty">Specialty (comma-separated)</label>
+          <input id="specialty" name="specialty" type="text" placeholder="endocrinologist" value="{{ values.specialty or '' }}">
+        </div>
+        <div class="form-group">
+          <label for="languages">Consultation languages (comma-separated)</label>
+          <input id="languages" name="languages" type="text" value="{{ values.languages or 'en' }}">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:400;">
+            <input type="checkbox" name="activate_doctor" value="1">
+            Skip pipeline — mark verified and active immediately
+          </label>
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn btn-primary">Create account</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

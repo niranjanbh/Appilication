@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+{% block title %}Data Requests — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Data Subject Requests (DPDP)</h2>
+  <div>
+    <a href="/admin/dsr?show=open" class="btn btn-sm {{ 'btn-primary' if show == 'open' else 'btn-secondary' }}">Open</a>
+    <a href="/admin/dsr?show=all" class="btn btn-sm {{ 'btn-primary' if show == 'all' else 'btn-secondary' }}">All</a>
+  </div>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  {% if not requests %}
+  <div class="card">
+    <p style="font-size:14px;color:var(--stone);">
+      {{ 'No open data-subject requests.' if show == 'open' else 'No data-subject requests yet.' }}
+    </p>
+  </div>
+  {% else %}
+  {% for dsr, user_name in requests %}
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <strong style="font-size:15px;">{{ dsr.request_type.value.title() }}</strong>
+        — {{ user_name }}
+        <div style="font-size:12px;color:var(--stone);margin-top:2px;">
+          Received {{ dsr.received_at.strftime('%d %b %Y %H:%M') }} UTC
+          {% if dsr.completed_at %}· Completed {{ dsr.completed_at.strftime('%d %b %Y %H:%M') }} UTC{% endif %}
+          {% if dsr.status.value in ['received', 'in_progress'] %}
+          · open {{ ((now - dsr.received_at).total_seconds() / 3600) | round(1) }} h
+          {% endif %}
+        </div>
+      </div>
+      <span class="chip chip-{{ 'completed' if dsr.status.value == 'completed' else ('cancelled' if dsr.status.value == 'rejected' else 'scheduled') }}">
+        {{ dsr.status.value.replace('_', ' ') }}
+      </span>
+    </div>
+
+    {% if dsr.notes %}
+    <p style="font-size:12px;color:var(--stone);white-space:pre-wrap;margin:0 0 12px;">{{ dsr.notes }}</p>
+    {% endif %}
+
+    {% set allowed_next = transitions[dsr.status.value] %}
+    {% if allowed_next %}
+    <form method="POST" action="/admin/dsr/{{ dsr.id }}/status" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Move to</label>
+        <select name="new_status" required
+                style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 10px;font-size:12px;">
+          {% for s in allowed_next %}
+          <option value="{{ s }}">{{ s.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Note</label>
+        <input type="text" name="note" maxlength="400" placeholder="What was done…"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 10px;font-size:12px;width:280px;">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Update</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

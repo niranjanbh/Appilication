@@ -224,6 +224,169 @@ async def test_doctor_sign_prescription_twice_returns_404(
     assert sign_resp2.status_code == 404
 
 
+# ── Doctor list prescriptions for consultation ─────────────────────────────────
+
+
+async def test_doctor_list_prescriptions_includes_draft(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert create_resp.status_code == 201
+
+    list_resp = await client.get(
+        f"/v1/doctor/consultations/{consult.id}/prescriptions",  # type: ignore[union-attr]
+        headers=make_auth_headers(doctor_user),
+    )
+    assert list_resp.status_code == 200
+    body = list_resp.json()
+    assert len(body) == 1
+    assert body[0]["status"] == "draft"
+    assert len(body[0]["items"]) == 1
+
+
+async def test_doctor_list_prescriptions_other_doctor_sees_empty(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    other_doctor_user, _other = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consult.id}/prescriptions",  # type: ignore[union-attr]
+        headers=make_auth_headers(other_doctor_user),
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+# ── Doctor edit draft prescription ─────────────────────────────────────────────
+
+
+async def test_doctor_update_draft_prescription_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"diagnosis_note": "initial", "items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    rx_id = create_resp.json()["id"]
+
+    new_item = {**ITEM_BODY, "drug_generic_name": "Liothyronine", "dosage": "25mcg"}
+    patch_resp = await client.patch(
+        f"/v1/doctor/prescriptions/{rx_id}",
+        json={"diagnosis_note": "corrected", "items": [new_item, ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    assert body["status"] == "draft"
+    assert body["diagnosis_note"] == "corrected"
+    assert len(body["items"]) == 2
+    assert body["items"][0]["drug_generic_name"] == "Liothyronine"
+
+
+async def test_doctor_update_draft_without_items_keeps_lines(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    rx_id = create_resp.json()["id"]
+
+    patch_resp = await client.patch(
+        f"/v1/doctor/prescriptions/{rx_id}",
+        json={"general_instructions": "Take before breakfast"},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    assert body["general_instructions"] == "Take before breakfast"
+    assert len(body["items"]) == 1
+
+
+async def test_doctor_cannot_edit_signed_prescription(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    rx_id = create_resp.json()["id"]
+
+    with patch("app.tasks.prescription_tasks.generate_prescription_pdf.apply_async"):
+        sign_resp = await client.post(
+            f"/v1/doctor/prescriptions/{rx_id}/sign", headers=make_auth_headers(doctor_user)
+        )
+    assert sign_resp.status_code == 200
+
+    patch_resp = await client.patch(
+        f"/v1/doctor/prescriptions/{rx_id}",
+        json={"diagnosis_note": "tamper attempt"},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert patch_resp.status_code == 404
+
+
+async def test_doctor_cannot_edit_other_doctors_draft(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user, doctor = await _make_doctor_with_profile(db_session)
+    other_doctor_user, _other = await _make_doctor_with_profile(db_session)
+    patient_user = await _make_patient(db_session)
+    patient = await _get_patient_row(db_session, patient_user.id)  # type: ignore[union-attr]
+    consult = await _make_consultation(db_session, doctor.id, patient.id)  # type: ignore[union-attr]
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consult.id}/prescription",  # type: ignore[union-attr]
+        json={"items": [ITEM_BODY]},
+        headers=make_auth_headers(doctor_user),
+    )
+    rx_id = create_resp.json()["id"]
+
+    patch_resp = await client.patch(
+        f"/v1/doctor/prescriptions/{rx_id}",
+        json={"diagnosis_note": "not mine"},
+        headers=make_auth_headers(other_doctor_user),
+    )
+    assert patch_resp.status_code == 404
+
+
 # ── Patient list prescriptions ─────────────────────────────────────────────────
 
 

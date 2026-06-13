@@ -1,0 +1,93 @@
+{% extends "coord/base.html" %}
+{% block title %}Follow-ups — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Follow-ups</h2>
+  <div>
+    <a href="/coord/followups?show=pending" class="btn btn-sm {{ 'btn-primary' if show != 'done' else 'btn-secondary' }}">Pending</a>
+    <a href="/coord/followups?show=done" class="btn btn-sm {{ 'btn-primary' if show == 'done' else 'btn-secondary' }}">Done</a>
+  </div>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+  {% if success == 'created' %}
+  <div class="alert-bar alert-bar-success">Follow-up created.</div>
+  {% elif success == 'invalid_date' %}
+  <div class="alert-bar alert-bar-error">Invalid due date.</div>
+  {% endif %}
+
+  <!-- Create follow-up -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">New follow-up</div>
+    <p style="font-size:11px;color:var(--stone);margin:4px 0 12px;">
+      Operational notes only — never lab values, prescription contents, or doctor-note content.
+    </p>
+    {% if not patients %}
+    <p style="font-size:13px;color:var(--stone);">No assigned patients.</p>
+    {% else %}
+    <form method="POST" action="/coord/followups" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
+        <select name="patient_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="">Select patient…</option>
+          {% for patient, user in patients %}
+          <option value="{{ patient.id }}">{{ user.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Due date</label>
+        <input type="date" name="due_date" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+      </div>
+      <div style="flex:1;min-width:240px;">
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Note</label>
+        <input type="text" name="note" required maxlength="500" placeholder="e.g. Call to schedule follow-up consult"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
+      </div>
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Follow-up list -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Due</th><th>Patient</th><th>Note</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for followup, user in followups %}
+        <tr>
+          <td style="font-size:12px;">
+            {{ followup.due_at.strftime('%d %b %Y') }}
+            {% if followup.status == 'pending' and followup.due_at < now %}
+            <span class="chip chip-suspended" style="margin-left:6px;">overdue</span>
+            {% endif %}
+          </td>
+          <td>{{ user.name }}</td>
+          <td style="font-size:13px;">{{ followup.note }}</td>
+          <td><span class="chip chip-{{ 'confirmed' if followup.status == 'done' else 'scheduled' }}">{{ followup.status }}</span></td>
+          <td>
+            {% if followup.status == 'pending' %}
+            <form method="POST" action="/coord/followups/{{ followup.id }}/complete">
+              <button type="submit" class="btn btn-primary btn-sm">Mark done</button>
+            </form>
+            {% elif followup.completed_at %}
+            <span style="font-size:11px;color:var(--stone);">{{ followup.completed_at.strftime('%d %b %Y') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--stone);padding:20px;">
+          {{ 'No pending follow-ups. All caught up.' if show != 'done' else 'No completed follow-ups yet.' }}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

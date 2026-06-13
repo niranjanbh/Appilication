@@ -1,6 +1,6 @@
 """Re-export all ORM models so Alembic autogenerate sees every table."""
 
-from app.models.admin import Coordinator, DailyMetric
+from app.models.admin import Coordinator, DailyMetric, Followup, PatientInteraction
 from app.models.audit import AuditLog
 from app.models.clinic import (
     Consultation,
@@ -33,6 +33,7 @@ __all__ = [
     "DataSubjectRequest",
     "Doctor",
     "DoctorNote",
+    "Followup",
     "EducationAssignment",
     "EducationContent",
     "HealthDatapoint",
@@ -42,6 +43,7 @@ __all__ = [
     "Lead",
     "Notification",
     "Patient",
+    "PatientInteraction",
     "Payment",
     "PreConsultationReport",
     "Prescription",

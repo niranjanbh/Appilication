@@ -61,6 +61,39 @@ async def create_draft(
     )
 
 
+async def update_draft(
+    db: AsyncSession,
+    *,
+    doctor_user_id: uuid.UUID,
+    prescription_id: uuid.UUID,
+    diagnosis_note: str | None,
+    general_instructions: str | None,
+    items: list[dict[str, Any]] | None,
+) -> Prescription:
+    """Edit a draft prescription. Signed prescriptions never reach this path."""
+    from sqlalchemy import select
+
+    from app.models.doctor import Doctor
+
+    result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise PrescriptionError("doctor_profile_not_found")
+
+    rx = await prescriptions_repo.update_draft(
+        db,
+        prescription_id=prescription_id,
+        doctor_id=doctor.id,
+        diagnosis_note=diagnosis_note,
+        general_instructions=general_instructions,
+        items=items,
+    )
+    if rx is None:
+        raise PrescriptionError("prescription_not_found_or_not_draft")
+
+    return rx
+
+
 async def sign_prescription(
     db: AsyncSession,
     *,

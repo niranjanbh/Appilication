@@ -14,6 +14,12 @@
   {% if request.query_params.get('error') == 'slot_unavailable' %}
   <div class="alert-bar alert-bar-error">Slot is no longer available. Please choose another.</div>
   {% endif %}
+  {% if request.query_params.get('success') == 'rescheduled' %}
+  <div class="alert-bar alert-bar-success">Consultation rescheduled. Payment and confirmation carry over.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'reschedule_failed' %}
+  <div class="alert-bar alert-bar-error">Could not reschedule — the slot may have just been taken. The original booking is unchanged.</div>
+  {% endif %}
 
   <!-- Days ahead filter -->
   <form class="filter-bar" method="GET" action="/coord/scheduling" style="margin-bottom:20px;">
@@ -66,6 +72,60 @@
       </div>
       <button type="submit" class="btn btn-primary">Book</button>
     </form>
+    {% endif %}
+  </div>
+
+  <!-- Upcoming consultations: reschedule or cancel -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Upcoming consultations</div>
+    {% if not upcoming %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No upcoming consultations for your patients.</p>
+    {% else %}
+    <table style="width:100%;font-size:13px;margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">When</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Patient</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Doctor</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Status</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for consultation, patient_user, doctor_user in upcoming %}
+        <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 0;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td style="padding:8px 0;">{{ patient_user.name }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ doctor_user.name if doctor_user else '—' }}</td>
+          <td style="padding:8px 0;"><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
+          <td style="padding:8px 0;">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              {% if slots %}
+              <form method="POST" action="/coord/scheduling/{{ consultation.id }}/reschedule"
+                    style="display:flex;gap:6px;align-items:center;"
+                    onsubmit="return confirm('Move this consultation to the selected slot?')">
+                <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;max-width:230px;">
+                  <option value="">New slot…</option>
+                  {% for slot, doctor, slot_doctor_user in slots %}
+                  <option value="{{ slot.id }}">{{ slot.slot_start.strftime('%d %b %H:%M') }} — Dr {{ slot_doctor_user.name }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-secondary btn-sm">Reschedule</button>
+              </form>
+              {% endif %}
+              <form method="POST" action="/coord/scheduling/{{ consultation.id }}/cancel"
+                    style="display:flex;gap:6px;align-items:center;"
+                    onsubmit="return confirm('Cancel this consultation?')">
+                <input type="text" name="reason" maxlength="200" placeholder="Reason…"
+                       style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:110px;">
+                <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     {% endif %}
   </div>
 

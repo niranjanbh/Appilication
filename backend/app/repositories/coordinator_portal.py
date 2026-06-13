@@ -18,11 +18,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import AvailabilityStatus, ConsultationStatus
-from app.models.admin import Coordinator
+from app.models.admin import Coordinator, Followup, PatientInteraction
 from app.models.clinic import Consultation, Patient
 from app.models.doctor import Availability, Doctor
 from app.models.identity import User
 from app.models.public import BookingInquiry, Lead
+
+# Lead/inquiry pipeline statuses. "new" is set by the public form; the rest
+# are coordinator transitions. "converted" = the person became a patient.
+LEAD_STATUSES = ("new", "contacted", "qualified", "converted", "closed")
 
 # ── Coordinator profile ────────────────────────────────────────────────────────
 
@@ -354,6 +358,261 @@ async def cancel_consultation_for_coordinator(
     return updated.scalar_one_or_none()
 
 
+async def list_upcoming_consultations(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+) -> list[tuple[Consultation, User, User | None]]:
+    """Future scheduled/confirmed consultations for assigned patients.
+
+    Returns (Consultation, patient_user, doctor_user) — scheduling data only.
+    """
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if not assigned:
+        return []
+
+    result = await db.execute(
+        select(Consultation, Patient, User)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .join(User, User.id == Patient.user_id)
+        .where(
+            Consultation.patient_id.in_(assigned),
+            Consultation.status.in_(
+                (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED)
+            ),
+            Consultation.scheduled_start_at >= datetime.now(UTC),
+            Consultation.deleted_at.is_(None),
+        )
+        .order_by(Consultation.scheduled_start_at)
+    )
+    triples = []
+    for row in result:
+        dr_result = await db.execute(
+            select(User).join(Doctor, Doctor.user_id == User.id)
+            .where(Doctor.id == row.Consultation.doctor_id)
+        )
+        triples.append((row.Consultation, row.User, dr_result.scalar_one_or_none()))
+    return triples
+
+
+async def reschedule_consultation_for_coordinator(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    consultation_id: uuid.UUID,
+    slot_id: uuid.UUID,
+) -> Consultation | None:
+    """Move a consultation to a new slot (possibly a different doctor).
+
+    Payment and status are preserved — unlike cancel+rebook, no refund cycle.
+    Returns None when the consultation isn't an assigned patient's, isn't
+    reschedulable, or the new slot is taken (caller's transaction rolls back).
+    """
+    from sqlalchemy import update
+
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if not assigned:
+        return None
+
+    consultation = await db.scalar(
+        select(Consultation).where(
+            Consultation.id == consultation_id,
+            Consultation.patient_id.in_(assigned),
+            Consultation.status.in_(
+                (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED)
+            ),
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    if consultation is None:
+        return None
+
+    # Free the old slot first so the rollback path leaves it booked.
+    await db.execute(
+        update(Availability)
+        .where(Availability.consultation_id == consultation_id)
+        .values(
+            status=AvailabilityStatus.AVAILABLE,
+            consultation_id=None,
+            updated_at=datetime.now(UTC),
+        )
+    )
+
+    slot = await db.scalar(
+        select(Availability)
+        .where(
+            Availability.id == slot_id,
+            Availability.status == AvailabilityStatus.AVAILABLE,
+        )
+        .with_for_update(skip_locked=True)
+    )
+    if slot is None:
+        return None
+
+    await db.execute(
+        update(Availability)
+        .where(Availability.id == slot_id)
+        .values(
+            status=AvailabilityStatus.BOOKED,
+            consultation_id=consultation_id,
+            updated_at=datetime.now(UTC),
+        )
+    )
+    updated = await db.execute(
+        update(Consultation)
+        .where(Consultation.id == consultation_id)
+        .values(
+            doctor_id=slot.doctor_id,
+            scheduled_start_at=slot.slot_start,
+            scheduled_end_at=slot.slot_end,
+            updated_at=datetime.now(UTC),
+        )
+        .returning(Consultation)
+    )
+    return updated.scalar_one_or_none()
+
+
+# ── Follow-ups ──────────────────────────────────────────────────────────────────
+
+
+async def create_followup(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    note: str,
+    due_at: datetime,
+) -> Followup | None:
+    """Create a follow-up for an assigned patient. None = patient not assigned."""
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if patient_id not in assigned:
+        return None
+
+    followup = Followup(
+        coordinator_id=coordinator_id,
+        patient_id=patient_id,
+        note=note[:500],
+        due_at=due_at,
+    )
+    db.add(followup)
+    await db.flush()
+    return followup
+
+
+async def list_followups(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    status: str = "pending",
+    limit: int = 200,
+) -> list[tuple[Followup, User]]:
+    """Return (Followup, patient_user) for this coordinator, due-date order."""
+    result = await db.execute(
+        select(Followup, User)
+        .join(Patient, Patient.id == Followup.patient_id)
+        .join(User, User.id == Patient.user_id)
+        .where(
+            Followup.coordinator_id == coordinator_id,
+            Followup.status == status,
+        )
+        .order_by(Followup.due_at)
+        .limit(limit)
+    )
+    return [(row.Followup, row.User) for row in result]
+
+
+async def complete_followup(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    followup_id: uuid.UUID,
+) -> Followup | None:
+    """Mark a follow-up done. None = not found or not this coordinator's."""
+    from sqlalchemy import update
+
+    result = await db.execute(
+        update(Followup)
+        .where(
+            Followup.id == followup_id,
+            Followup.coordinator_id == coordinator_id,
+            Followup.status == "pending",
+        )
+        .values(
+            status="done",
+            completed_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        .returning(Followup)
+    )
+    return result.scalar_one_or_none()
+
+
+async def count_pending_followups(db: AsyncSession, coordinator_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(Followup)
+        .where(
+            Followup.coordinator_id == coordinator_id,
+            Followup.status == "pending",
+        )
+    )
+    return result.scalar_one()
+
+
+# ── Patient interactions ────────────────────────────────────────────────────────
+
+
+async def create_interaction(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    channel: str,
+    summary: str,
+) -> PatientInteraction | None:
+    """Log a contact with an assigned patient. None = patient not assigned."""
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if patient_id not in assigned:
+        return None
+
+    interaction = PatientInteraction(
+        coordinator_id=coordinator_id,
+        patient_id=patient_id,
+        channel=channel[:20],
+        summary=summary[:1000],
+    )
+    db.add(interaction)
+    await db.flush()
+    return interaction
+
+
+async def list_interactions_for_patient(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    limit: int = 50,
+) -> list[tuple[PatientInteraction, str | None]]:
+    """Return (interaction, coordinator_name) newest first, assigned patients only.
+
+    All coordinators' interactions with the patient are shown (handovers need
+    the full operational history), but access requires current assignment.
+    """
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if patient_id not in assigned:
+        return []
+
+    result = await db.execute(
+        select(PatientInteraction, User.name)
+        .join(Coordinator, Coordinator.id == PatientInteraction.coordinator_id)
+        .join(User, User.id == Coordinator.user_id)
+        .where(PatientInteraction.patient_id == patient_id)
+        .order_by(PatientInteraction.created_at.desc())
+        .limit(limit)
+    )
+    return [(row.PatientInteraction, row.name) for row in result]
+
+
 # ── Dashboard stats ─────────────────────────────────────────────────────────────
 
 
@@ -427,6 +686,103 @@ async def mark_inquiry_contacted(
             contacted_at=datetime.now(UTC),
         )
         .returning(BookingInquiry.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def create_manual_inquiry(
+    db: AsyncSession,
+    *,
+    created_by_user_id: uuid.UUID,
+    name: str,
+    phone: str,
+    gender: str | None,
+    condition_category: str,
+    note: str | None,
+) -> BookingInquiry:
+    """Coordinator-entered lead (walk-in call, referral). Counts as contacted —
+    the coordinator is already on the phone with them."""
+    inquiry = BookingInquiry(
+        name=name[:255],
+        gender=gender,
+        phone=phone[:20],
+        condition_category=condition_category,
+        intake_responses={"coordinator_note": note} if note else {},
+        skipped_intake=True,
+        status="contacted",
+        contacted_by_user_id=created_by_user_id,
+        contacted_at=datetime.now(UTC),
+    )
+    db.add(inquiry)
+    await db.flush()
+    return inquiry
+
+
+async def set_inquiry_status(
+    db: AsyncSession,
+    *,
+    inquiry_id: uuid.UUID,
+    user_id: uuid.UUID,
+    new_status: str,
+) -> bool:
+    """Move an inquiry along the pipeline. Invalid status or missing row = False."""
+    from sqlalchemy import update
+
+    if new_status not in LEAD_STATUSES:
+        return False
+
+    values: dict[str, object] = {"status": new_status}
+    # First transition out of "new" stamps who reached out.
+    if new_status != "new":
+        inquiry = await db.scalar(
+            select(BookingInquiry).where(
+                BookingInquiry.id == inquiry_id, BookingInquiry.deleted_at.is_(None)
+            )
+        )
+        if inquiry is None:
+            return False
+        if inquiry.contacted_at is None:
+            values["contacted_by_user_id"] = user_id
+            values["contacted_at"] = datetime.now(UTC)
+
+    result = await db.execute(
+        update(BookingInquiry)
+        .where(BookingInquiry.id == inquiry_id, BookingInquiry.deleted_at.is_(None))
+        .values(**values)
+        .returning(BookingInquiry.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def set_lead_status(
+    db: AsyncSession,
+    *,
+    lead_id: uuid.UUID,
+    user_id: uuid.UUID,
+    new_status: str,
+) -> bool:
+    """Move a help query along the pipeline. Invalid status or missing row = False."""
+    from sqlalchemy import update
+
+    if new_status not in LEAD_STATUSES:
+        return False
+
+    values: dict[str, object] = {"status": new_status}
+    if new_status != "new":
+        lead = await db.scalar(
+            select(Lead).where(Lead.id == lead_id, Lead.deleted_at.is_(None))
+        )
+        if lead is None:
+            return False
+        if lead.contacted_at is None:
+            values["contacted_by_user_id"] = user_id
+            values["contacted_at"] = datetime.now(UTC)
+
+    result = await db.execute(
+        update(Lead)
+        .where(Lead.id == lead_id, Lead.deleted_at.is_(None))
+        .values(**values)
+        .returning(Lead.id)
     )
     return result.scalar_one_or_none() is not None
 

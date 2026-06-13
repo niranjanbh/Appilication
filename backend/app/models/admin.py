@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Date, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -37,6 +46,67 @@ class Coordinator(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     employee_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class Followup(Base, UUIDMixin, TimestampMixin):
+    """Coordinator follow-up task for an assigned patient.
+
+    The note is operational ("call to check on consult #2 booking"), never
+    clinical. Lab values, prescription contents, and doctor-note content must
+    not be written here — coordinators are schema-blocked from those fields.
+    """
+
+    __tablename__ = "ad_followups"
+
+    coordinator_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ad_coordinators.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_patients.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'pending'")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_ad_followups_coord_status_due", "coordinator_id", "status", "due_at"),
+    )
+
+
+class PatientInteraction(Base, UUIDMixin, TimestampMixin):
+    """Operational log of a coordinator's contact with a patient.
+
+    Replaces ad-hoc WhatsApp/Excel notes (a PHI-leak vector). Summary is
+    operational, never clinical.
+    """
+
+    __tablename__ = "ad_patient_interactions"
+
+    coordinator_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ad_coordinators.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_patients.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    summary: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+    __table_args__ = (
+        Index("ix_ad_patient_interactions_patient", "patient_id", "created_at"),
+    )
 
 
 class DailyMetric(Base, UUIDMixin, TimestampMixin):

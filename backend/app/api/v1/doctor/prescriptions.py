@@ -1,7 +1,9 @@
 """Doctor-facing prescription endpoints.
 
-POST /v1/doctor/consultations/{consultation_id}/prescription  — create draft
-POST /v1/doctor/prescriptions/{id}/sign                      — sign + enqueue PDF
+GET   /v1/doctor/consultations/{consultation_id}/prescriptions — list (drafts incl.)
+POST  /v1/doctor/consultations/{consultation_id}/prescription  — create draft
+PATCH /v1/doctor/prescriptions/{id}                            — edit draft
+POST  /v1/doctor/prescriptions/{id}/sign                       — sign + enqueue PDF
 """
 
 from __future__ import annotations
@@ -57,6 +59,23 @@ class CreatePrescriptionRequest(BaseModel):
     def _validate_items(cls, v: list[PrescriptionItemCreate]) -> list[PrescriptionItemCreate]:
         if not v:
             raise ValueError("at least one medication item is required")
+        return v
+
+
+class UpdatePrescriptionRequest(BaseModel):
+    """Draft edit. items omitted/None keeps existing lines; a list replaces them."""
+
+    diagnosis_note: str | None = None
+    general_instructions: str | None = None
+    items: list[PrescriptionItemCreate] | None = None
+
+    @field_validator("items")
+    @classmethod
+    def _validate_items(
+        cls, v: list[PrescriptionItemCreate] | None
+    ) -> list[PrescriptionItemCreate] | None:
+        if v is not None and not v:
+            raise ValueError("items must contain at least one medication when provided")
         return v
 
 
@@ -137,6 +156,56 @@ async def _read_with_items(db: DbSession, rx: Prescription) -> PrescriptionRead:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
+@router.get(
+    "/consultations/{consultation_id}/prescriptions",
+    response_model=list[PrescriptionRead],
+)
+async def list_consultation_prescriptions(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> list[PrescriptionRead]:
+    """All prescriptions this doctor wrote for the consultation, drafts included.
+
+    Doctor-scoped at the SQL layer: another doctor's consultation yields [].
+    """
+    from sqlalchemy import select
+
+    from app.models.doctor import Doctor
+    from app.models.identity import User as UserModel
+    from app.repositories import prescriptions as rx_repo
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    result = await db.execute(select(Doctor).where(Doctor.user_id == user.id))
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        await write_audit(
+            db, ctx,
+            action="list_prescriptions",
+            resource_type="consultation",
+            resource_id=consultation_id,
+            allowed=False,
+            reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    prescriptions = await rx_repo.list_for_consultation_for_doctor(
+        db, consultation_id=consultation_id, doctor_id=doctor.id
+    )
+    await write_audit(
+        db, ctx,
+        action="list_prescriptions",
+        resource_type="consultation",
+        resource_id=consultation_id,
+        allowed=True,
+    )
+    return [await _read_with_items(db, rx) for rx in prescriptions]
+
+
 @router.post(
     "/consultations/{consultation_id}/prescription",
     response_model=PrescriptionRead,
@@ -186,6 +255,59 @@ async def create_prescription(
 
     result = await _read_with_items(db, rx)
     return result
+
+
+@router.patch(
+    "/prescriptions/{prescription_id}",
+    response_model=PrescriptionRead,
+)
+async def update_prescription(
+    prescription_id: uuid.UUID,
+    body: UpdatePrescriptionRequest,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> PrescriptionRead:
+    """Edit a draft prescription. Signed prescriptions are immutable — 404."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    try:
+        rx = await prescription_service.update_draft(
+            db,
+            doctor_user_id=user.id,
+            prescription_id=prescription_id,
+            diagnosis_note=body.diagnosis_note,
+            general_instructions=body.general_instructions,
+            items=(
+                [item.model_dump() for item in body.items]
+                if body.items is not None
+                else None
+            ),
+        )
+    except prescription_service.PrescriptionError as exc:
+        await write_audit(
+            db, ctx,
+            action="update_prescription",
+            resource_type="prescription",
+            resource_id=prescription_id,
+            allowed=False,
+            reason=str(exc),
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+
+    await write_audit(
+        db, ctx,
+        action="update_prescription",
+        resource_type="prescription",
+        resource_id=prescription_id,
+        allowed=True,
+    )
+
+    return await _read_with_items(db, rx)
 
 
 @router.post(

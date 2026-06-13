@@ -10,8 +10,8 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +97,9 @@ async def patient_detail(
     consults = await coord_repo.list_patient_consultations_restricted(
         db, coordinator_id=coordinator.id, patient_id=patient_id
     )
+    interactions = await coord_repo.list_interactions_for_patient(
+        db, coordinator_id=coordinator.id, patient_id=patient_id
+    )
     await write_audit(
         db, ctx, action="coord_view_patient", resource_type="patient",
         resource_id=patient_id, allowed=True,
@@ -109,5 +112,57 @@ async def patient_detail(
             "patient": patient,
             "user": user,
             "consultations": consults,
+            "interactions": interactions,
+            "interaction_channels": _INTERACTION_CHANNELS,
+            "success": request.query_params.get("success"),
         },
+    )
+
+
+_INTERACTION_CHANNELS = ["call", "whatsapp", "email", "other"]
+
+
+@router.post("/patients/{patient_id}/interactions")
+async def add_interaction(
+    patient_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    channel: str = Form(...),
+    summary: str = Form(...),
+) -> RedirectResponse:
+    """Log a patient contact. Operational summary only — never clinical content."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    if channel not in _INTERACTION_CHANNELS or not summary.strip():
+        return RedirectResponse(
+            url=f"/coord/patients/{patient_id}", status_code=status.HTTP_302_FOUND
+        )
+
+    interaction = await coord_repo.create_interaction(
+        db,
+        coordinator_id=coordinator.id,
+        patient_id=patient_id,
+        channel=channel,
+        summary=summary.strip(),
+    )
+    allowed = interaction is not None
+    await write_audit(
+        db, ctx, action="coord_log_interaction", resource_type="patient",
+        resource_id=patient_id, allowed=allowed,
+        reason=None if allowed else "not_assigned_or_not_found",
+    )
+    if not allowed:
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    return RedirectResponse(
+        url=f"/coord/patients/{patient_id}?success=interaction_logged",
+        status_code=status.HTTP_302_FOUND,
     )

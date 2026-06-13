@@ -1,8 +1,9 @@
 """Admin-portal repository — platform-wide aggregation queries for super admin.
 
-All functions are read-only except update_doctor_status and update_doctor_revenue_share.
-No patient PHI is returned in aggregated views — individual patient access is scoped
-to detail pages and always audit-logged by the caller.
+Read queries plus the super-admin state changes (doctor status, user contact,
+password reset, coordinator assignment). No patient PHI is returned in
+aggregated views — individual patient access is scoped to detail pages and
+always audit-logged by the caller.
 """
 
 from __future__ import annotations
@@ -15,10 +16,19 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import ConsultationStatus, DoctorStatus, LabReportStatus, UserRole
+from app.db.enums import (
+    ConsultationStatus,
+    CoordinatorStatus,
+    DoctorStatus,
+    LabReportStatus,
+    PaymentStatus,
+    UserRole,
+)
+from app.models.admin import Coordinator
 from app.models.clinic import Consultation, LabReport, Patient
 from app.models.doctor import Doctor
 from app.models.identity import User
+from app.models.payment import Payment
 
 # ── Dashboard stats ────────────────────────────────────────────────────────────
 
@@ -165,6 +175,138 @@ async def reactivate_user(
     return result.scalar_one_or_none()
 
 
+async def update_user_contact(
+    db: AsyncSession, user_id: uuid.UUID, *, name: str, email: str
+) -> User | None:
+    """Edit name/email. Phone is deliberately not editable here — it is the
+    login key and OTP target; changing it requires a re-verification flow.
+    Returns None when the user doesn't exist or the email belongs to another
+    account."""
+    from sqlalchemy import update
+
+    email_owner = await db.scalar(select(User).where(User.email == email))
+    if email_owner is not None and email_owner.id != user_id:
+        return None
+
+    result = await db.execute(
+        update(User)
+        .where(User.id == user_id, User.deleted_at.is_(None))
+        .values(name=name, email=email)
+        .returning(User)
+    )
+    return result.scalar_one_or_none()
+
+
+# ── Coordinator assignment ─────────────────────────────────────────────────────
+
+
+async def list_active_coordinators(
+    db: AsyncSession,
+) -> list[tuple[Coordinator, User]]:
+    result = await db.execute(
+        select(Coordinator, User)
+        .join(User, User.id == Coordinator.user_id)
+        .where(
+            Coordinator.status == CoordinatorStatus.ACTIVE,
+            Coordinator.deleted_at.is_(None),
+            User.deleted_at.is_(None),
+        )
+        .order_by(User.name)
+    )
+    return [(row.Coordinator, row.User) for row in result]
+
+
+async def assign_patient_coordinator(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    coordinator_id: uuid.UUID | None,
+) -> Patient | None:
+    """Assign (or unassign, coordinator_id=None) a patient's care coordinator.
+
+    Keeps both sides in sync: kc_patients.assigned_coordinator_id and the
+    coordinator's assigned_patient_ids JSONB list (the coordinator portal
+    scopes by the latter). Returns None when patient or coordinator is missing.
+    """
+    patient = await db.scalar(
+        select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
+    )
+    if patient is None:
+        return None
+
+    target: Coordinator | None = None
+    if coordinator_id is not None:
+        target = await db.scalar(
+            select(Coordinator).where(
+                Coordinator.id == coordinator_id,
+                Coordinator.deleted_at.is_(None),
+            )
+        )
+        if target is None:
+            return None
+
+    # Remove the patient from every coordinator list that currently holds it.
+    pid = str(patient_id)
+    holders = await db.scalars(
+        select(Coordinator).where(Coordinator.assigned_patient_ids.contains([pid]))
+    )
+    for holder in holders:
+        holder.assigned_patient_ids = [p for p in holder.assigned_patient_ids if p != pid]
+
+    if target is not None and pid not in target.assigned_patient_ids:
+        target.assigned_patient_ids = [*target.assigned_patient_ids, pid]
+
+    patient.assigned_coordinator_id = coordinator_id
+    await db.flush()
+    return patient
+
+
+# ── Payments ───────────────────────────────────────────────────────────────────
+
+
+async def list_payments(
+    db: AsyncSession,
+    *,
+    status_filter: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 30,
+) -> tuple[list[tuple[Payment, User]], int]:
+    """Return (Payment, paying_user) pairs, newest first."""
+    base = (
+        select(Payment, User)
+        .join(User, User.id == Payment.user_id)
+    )
+    if status_filter:
+        try:
+            base = base.where(Payment.status == PaymentStatus(status_filter))
+        except ValueError:
+            pass
+    if search:
+        term = f"%{search.lower()}%"
+        base = base.where(
+            or_(
+                func.lower(User.name).like(term),
+                User.phone.like(term),
+                Payment.razorpay_order_id.like(term),
+                func.coalesce(Payment.razorpay_payment_id, "").like(term),
+            )
+        )
+
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
+    total: int = count_result.scalar_one()
+
+    offset = (page - 1) * page_size
+    rows = await db.execute(
+        base.order_by(Payment.created_at.desc()).offset(offset).limit(page_size)
+    )
+    return [(row.Payment, row.User) for row in rows], total
+
+
+async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> Payment | None:
+    return await db.scalar(select(Payment).where(Payment.id == payment_id))
+
+
 # ── Doctor management ──────────────────────────────────────────────────────────
 
 
@@ -253,6 +395,34 @@ async def update_doctor_revenue_share(
     return result.scalar_one_or_none()
 
 
+async def update_doctor_profile(
+    db: AsyncSession,
+    doctor_id: uuid.UUID,
+    *,
+    bio_short: str | None,
+    bio_long: str | None,
+    specialty: list[str],
+    conditions_treated: list[str],
+    consultation_languages: list[str],
+) -> Doctor | None:
+    from sqlalchemy import update
+
+    result = await db.execute(
+        update(Doctor)
+        .where(Doctor.id == doctor_id, Doctor.deleted_at.is_(None))
+        .values(
+            bio_short=bio_short,
+            bio_long=bio_long,
+            specialty=specialty,
+            conditions_treated=conditions_treated,
+            consultation_languages=consultation_languages,
+            updated_at=datetime.now(UTC),
+        )
+        .returning(Doctor)
+    )
+    return result.scalar_one_or_none()
+
+
 async def count_doctors_by_status(db: AsyncSession) -> dict[str, int]:
     result = await db.execute(
         select(Doctor.status, func.count().label("n"))
@@ -311,6 +481,27 @@ async def list_all_consultations(
         doctor_user = dr_row.User if dr_row else None
         triples.append((row.Consultation, row.User, doctor_user))  # type: ignore[arg-type]
     return triples, total
+
+
+async def get_consultation_detail(
+    db: AsyncSession, consultation_id: uuid.UUID
+) -> tuple[Consultation, User, User | None] | None:
+    """Return (Consultation, patient_user, doctor_user) for one consultation."""
+    result = await db.execute(
+        select(Consultation, User)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .join(User, User.id == Patient.user_id)
+        .where(Consultation.id == consultation_id, Consultation.deleted_at.is_(None))
+    )
+    row = result.first()
+    if row is None:
+        return None
+    dr_result = await db.execute(
+        select(User)
+        .join(Doctor, Doctor.user_id == User.id)
+        .where(Doctor.id == row.Consultation.doctor_id)
+    )
+    return row.Consultation, row.User, dr_result.scalar_one_or_none()
 
 
 # ── Audit log ──────────────────────────────────────────────────────────────────

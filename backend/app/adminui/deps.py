@@ -28,6 +28,10 @@ _SESSION_TTL = 14_400  # 4 hours in seconds
 _SESSION_KEY_PREFIX = "session:admin:"
 _CSRF_COOKIE = "kyros_admin_csrf"
 _SESSION_COOKIE = "kyros_admin_session"
+# Money-mover / identity actions require authentication within the last 10
+# minutes (admin-ui rules). Login and /admin/reauth refresh this key.
+_FRESH_TTL = 600
+_FRESH_KEY_PREFIX = "sessionfresh:admin:"
 
 
 # ── Redis helpers ──────────────────────────────────────────────────────────────
@@ -45,6 +49,27 @@ def _session_key(session_id: str) -> str:
     return f"{_SESSION_KEY_PREFIX}{session_id}"
 
 
+def _fresh_key(session_id: str) -> str:
+    return f"{_FRESH_KEY_PREFIX}{session_id}"
+
+
+def mark_session_fresh(session_id: str) -> None:
+    """Record that this session re-authenticated just now (10-minute window)."""
+    try:
+        _redis().setex(_fresh_key(session_id), _FRESH_TTL, "1")
+    except Exception:
+        logger.warning("admin_session.mark_fresh_failed")
+
+
+def is_session_fresh(session_id: str) -> bool:
+    try:
+        return bool(_redis().exists(_fresh_key(session_id)))
+    except Exception:
+        # Redis down: fail closed for money movers — re-auth will also fail,
+        # but a degraded Redis already means sessions are broken anyway.
+        return False
+
+
 def create_admin_session(response: Response, user_id: uuid.UUID) -> str:
     """Create a Redis session entry and set the session cookie."""
     session_id = secrets.token_urlsafe(32)
@@ -53,6 +78,7 @@ def create_admin_session(response: Response, user_id: uuid.UUID) -> str:
     try:
         r = _redis()
         r.setex(_session_key(session_id), _SESSION_TTL, str(user_id))
+        r.setex(_fresh_key(session_id), _FRESH_TTL, "1")  # login counts as fresh
     except Exception as exc:
         logger.exception("admin_session.create_failed")
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "session_error") from exc
@@ -110,8 +136,10 @@ async def require_admin_session(
     db: AsyncSession = Depends(get_db),
     kyros_admin_session: str | None = Cookie(default=None),
 ) -> object:
-    """Dependency: return the authenticated super-admin User.
+    """Dependency: return the authenticated admin-portal User.
 
+    Accepts both tiers — super_admin (full) and admin (read-only). Views that
+    change state must depend on require_super_admin_session instead.
     Raises a 302 redirect to /admin/login if the session is missing or invalid.
     """
     from app.db.enums import UserRole
@@ -126,10 +154,49 @@ async def require_admin_session(
 
     user = await users_repo.get_by_id(db, user_id)
     from app.models.identity import User as UserModel
-    if user is None or not isinstance(user, UserModel) or user.role != UserRole.SUPER_ADMIN:
+    if (
+        user is None
+        or not isinstance(user, UserModel)
+        or user.role not in (UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ):
         raise _login_redirect(request)
 
     return user
+
+
+async def require_super_admin_session(
+    admin: object = Depends(require_admin_session),
+) -> object:
+    """State-changing admin views: full super_admin tier only.
+
+    A logged-in read-only admin gets 403, not a login redirect — they are
+    authenticated, just not allowed.
+    """
+    from app.db.enums import UserRole
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    if admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "super_admin_required")
+    return admin
+
+
+async def require_fresh_super_admin(
+    request: Request,
+    admin: object = Depends(require_super_admin_session),
+    kyros_admin_session: str | None = Cookie(default=None),
+) -> object:
+    """Money-mover / identity actions: super admin authenticated <10 min ago.
+
+    Stale sessions are redirected to /admin/reauth, which re-verifies the
+    password and returns to the original page.
+    """
+    if not kyros_admin_session or not is_session_fresh(kyros_admin_session):
+        raise HTTPException(
+            status_code=status.HTTP_302_FOUND,
+            headers={"Location": f"/admin/reauth?next={request.headers.get('referer') or '/admin/'}"},
+        )
+    return admin
 
 
 def _login_redirect(request: Request) -> HTTPException:

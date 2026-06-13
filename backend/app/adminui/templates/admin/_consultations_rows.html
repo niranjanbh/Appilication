@@ -6,7 +6,27 @@
   <td style="color:var(--stone);">{{ consultation.consultation_type.value }}</td>
   <td><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
   <td style="color:var(--stone);">₹{{ (consultation.consultation_fee_paise / 100) | int }}</td>
+  <td>
+    {% if admin and admin.role.value == 'super_admin' and consultation.status.value in ['scheduled', 'confirmed'] %}
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <form method="POST" action="/admin/consultations/{{ consultation.id }}/cancel"
+            style="display:flex;gap:6px;align-items:center;"
+            onsubmit="return confirm('Cancel this consultation? If paid, a full refund is issued.')">
+        <input type="text" name="reason" required maxlength="200" placeholder="Reason…"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:140px;">
+        <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+      </form>
+      <a href="/admin/consultations/{{ consultation.id }}/reassign" class="btn btn-secondary btn-sm">Reassign</a>
+      {% if consultation.scheduled_start_at and consultation.scheduled_start_at < now %}
+      <form method="POST" action="/admin/consultations/{{ consultation.id }}/no-show"
+            onsubmit="return confirm('Mark as patient no-show? No refund is issued.')">
+        <button type="submit" class="btn btn-secondary btn-sm">No-show</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </td>
 </tr>
 {% else %}
-<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No consultations found.</td></tr>
+<tr><td colspan="7" style="text-align:center;color:var(--stone);padding:20px;">No consultations found.</td></tr>
 {% endfor %}

@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block title %}Reassign consultation — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Reassign consultation</h2>
+</div>
+<div class="page-body">
+  {% if error == 'slot_unavailable' %}
+  <div class="alert-bar alert-bar-error">That slot was taken in the meantime. Pick another.</div>
+  {% endif %}
+
+  <div class="detail-grid">
+    <div class="detail-section">
+      <h3>Current booking</h3>
+      <div class="detail-row"><span class="detail-label">Patient</span><span class="detail-value">{{ patient_user.name if patient_user else '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Doctor</span><span class="detail-value">{{ doctor_user.name if doctor_user else '—' }}</span></div>
+      <div class="detail-row"><span class="detail-label">Scheduled</span><span class="detail-value">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M UTC') }}</span></div>
+      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></span></div>
+      <div class="detail-row"><span class="detail-label">Fee</span><span class="detail-value">₹{{ (consultation.consultation_fee_paise / 100) | int }}</span></div>
+    </div>
+    <div class="detail-section">
+      <h3>Move to new slot</h3>
+      <p style="font-size:12px;color:var(--stone);margin:0 0 10px;">
+        Payment and confirmation status carry over. The old slot is released.
+      </p>
+      {% if not slots %}
+      <p style="font-size:13px;color:var(--stone);">No available slots in the next 14 days.</p>
+      {% else %}
+      <form method="POST" action="/admin/consultations/{{ consultation.id }}/reassign"
+            style="display:flex;gap:8px;align-items:flex-end;"
+            onsubmit="return confirm('Move this consultation to the selected slot?')">
+        <div>
+          <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">New slot</label>
+          <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:300px;">
+            <option value="">Select slot…</option>
+            {% for slot, doctor, doctor_user in slots %}
+            <option value="{{ slot.id }}">
+              {{ slot.slot_start.strftime('%d %b %Y %H:%M') }} — Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Reassign</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="action-bar" style="margin-top:20px;">
+    <a href="/admin/consultations" class="btn btn-secondary">← Back to consultations</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "admin/base.html" %}
+{% block title %}Payments — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Payments <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+</div>
+
+{% if request.query_params.get('success') == 'refunded' %}
+<div class="alert-bar alert-bar-success">Refund initiated. Razorpay settles it to the patient in 5–7 working days.</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="alert-bar alert-bar-error">Refund failed: {{ request.query_params.get('error') }}. Retry or use the Razorpay dashboard.</div>
+{% endif %}
+
+<form class="filter-bar"
+      hx-get="/admin/payments"
+      hx-target="#payments-tbody"
+      hx-trigger="change, submit"
+      hx-push-url="true">
+  <div>
+    <label>Status</label>
+    <select name="status_filter">
+      <option value="">All statuses</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>Search</label>
+    <input type="text" name="search" value="{{ search }}" placeholder="Name, phone, order ID…">
+  </div>
+  <input type="hidden" name="page" value="1">
+  <button type="submit" class="btn btn-primary">Filter</button>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th><th>Payer</th><th>Amount</th><th>Status</th><th>Razorpay order</th><th>Invoice</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="payments-tbody">
+      {% include "admin/_payments_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="/admin/payments?status_filter={{ status_filter }}&search={{ search }}&page={{ page - 1 }}">← Prev</a>
+  {% endif %}
+  <span>Page {{ page }} of {{ ((total - 1) // page_size) + 1 }}</span>
+  {% if page * page_size < total %}
+    <a href="/admin/payments?status_filter={{ status_filter }}&search={{ search }}&page={{ page + 1 }}">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

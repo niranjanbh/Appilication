@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kyros Admin — Confirm identity</title>
+  <link rel="stylesheet" href="/admin/static/css/admin.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>Confirm it&rsquo;s you</h1>
+    <p>This action moves money or changes identities. Re-enter your password to continue.</p>
+
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/reauth">
+      <input type="hidden" name="next_url" value="{{ next }}">
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">Confirm</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

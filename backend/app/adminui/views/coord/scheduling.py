@@ -60,6 +60,9 @@ async def scheduling_view(
     date_to = now + timedelta(days=max(1, min(days_ahead, 30)))
     slots = await coord_repo.list_available_slots(db, date_from=now, date_to=date_to)
     patients = await coord_repo.list_assigned_patients(db, coordinator_id=coordinator.id)
+    upcoming = await coord_repo.list_upcoming_consultations(
+        db, coordinator_id=coordinator.id
+    )
 
     return templates.TemplateResponse(
         request,
@@ -69,6 +72,7 @@ async def scheduling_view(
             "coordinator": coordinator,
             "slots": slots,
             "patients": patients,
+            "upcoming": upcoming,
             "conditions": _CONDITIONS,
             "days_ahead": days_ahead,
             "error": None,
@@ -157,6 +161,57 @@ async def cancel_consultation(
     )
 
     return RedirectResponse(url="/coord/scheduling", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/scheduling/{consultation_id}/reschedule")
+async def reschedule_consultation(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    slot_id: uuid.UUID = Form(...),
+) -> RedirectResponse:
+    """Move a consultation to a new slot. Payment and status carry over —
+    no cancel/refund/rebook cycle for the patient."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    rescheduled = await coord_repo.reschedule_consultation_for_coordinator(
+        db,
+        coordinator_id=coordinator.id,
+        consultation_id=consultation_id,
+        slot_id=slot_id,
+    )
+    allowed = rescheduled is not None
+
+    if not allowed:
+        # Undo the released-slot update so the original booking stays intact,
+        # then record the denial (audit rows must survive the rollback).
+        await db.rollback()
+        await write_audit(
+            db, ctx, action="coord_reschedule_consultation", resource_type="consultation",
+            resource_id=consultation_id, allowed=False,
+            reason="not_assigned_or_slot_unavailable",
+        )
+        await db.commit()
+        return RedirectResponse(
+            url="/coord/scheduling?error=reschedule_failed",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await write_audit(
+        db, ctx, action="coord_reschedule_consultation", resource_type="consultation",
+        resource_id=consultation_id, allowed=True,
+        log_metadata={"slot_id": str(slot_id)},
+    )
+    return RedirectResponse(
+        url="/coord/scheduling?success=rescheduled", status_code=status.HTTP_302_FOUND
+    )
 
 
 def _notify_patient_booked(consultation: object, db: object) -> None:

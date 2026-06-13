@@ -54,6 +54,60 @@
     {% endif %}
   </div>
 
+  <!-- Interaction log -->
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Interaction log</div>
+    {% if success == 'interaction_logged' %}
+    <div class="alert-bar alert-bar-success" style="margin-top:8px;">Interaction logged.</div>
+    {% endif %}
+    <p style="font-size:11px;color:var(--stone);margin:4px 0 12px;">
+      Operational notes only — never lab values, prescription contents, or doctor-note content.
+    </p>
+    <form method="POST" action="/coord/patients/{{ patient.id }}/interactions"
+          style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Channel</label>
+        <select name="channel" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          {% for c in interaction_channels %}
+          <option value="{{ c }}">{{ c.title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="flex:1;min-width:240px;">
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Summary</label>
+        <input type="text" name="summary" required maxlength="1000"
+               placeholder="e.g. Called to remind about tomorrow's consult — confirmed attendance"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Log</button>
+    </form>
+
+    {% if interactions %}
+    <table style="width:100%;font-size:13px;">
+      <thead>
+        <tr>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">When</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Channel</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">By</th>
+          <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Summary</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for interaction, coordinator_name in interactions %}
+        <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 0;white-space:nowrap;">{{ interaction.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ interaction.channel }}</td>
+          <td style="padding:8px 0;color:var(--stone);">{{ coordinator_name or '—' }}</td>
+          <td style="padding:8px 0;">{{ interaction.summary }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:13px;color:var(--stone);">No interactions logged yet.</p>
+    {% endif %}
+  </div>
+
   <!-- Quick actions -->
   <div class="action-bar" style="margin-top:20px;">
     <a href="/coord/scheduling?patient_id={{ patient.id }}" class="btn btn-primary">Book consultation</a>

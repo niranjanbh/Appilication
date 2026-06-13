@@ -89,6 +89,25 @@ async def get_for_doctor(
     return result.scalar_one_or_none()
 
 
+async def list_for_consultation_for_doctor(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> list[Prescription]:
+    """All prescriptions this doctor wrote for one consultation, drafts included,
+    newest first. Scoped by doctor_id — another doctor's consultation yields []."""
+    result = await db.execute(
+        select(Prescription)
+        .where(
+            Prescription.consultation_id == consultation_id,
+            Prescription.doctor_id == doctor_id,
+        )
+        .order_by(Prescription.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def get_for_patient(
     db: AsyncSession,
     *,
@@ -145,6 +164,58 @@ async def list_items(
         .order_by(PrescriptionItem.order_index)
     )
     return list(result.scalars().all())
+
+
+async def update_draft(
+    db: AsyncSession,
+    *,
+    prescription_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+    diagnosis_note: str | None,
+    general_instructions: str | None,
+    items: list[dict[str, Any]] | None,
+) -> Prescription | None:
+    """Edit a DRAFT prescription in place. Signed prescriptions are immutable —
+    corrections after signing go through the supersede-version flow, never here.
+
+    items=None leaves the medication lines untouched; a list replaces them all.
+    Returns None when not owned by this doctor or no longer a draft.
+    """
+    rx = await get_for_doctor(db, prescription_id=prescription_id, doctor_id=doctor_id)
+    if rx is None or rx.status != PrescriptionStatus.DRAFT:
+        return None
+
+    rx.diagnosis_note = diagnosis_note
+    rx.general_instructions = general_instructions
+    rx.updated_at = datetime.now(UTC)
+
+    if items is not None:
+        from sqlalchemy import delete
+
+        from app.db.enums import DrugForm
+
+        await db.execute(
+            delete(PrescriptionItem).where(
+                PrescriptionItem.prescription_id == prescription_id
+            )
+        )
+        for idx, item in enumerate(items):
+            db.add(
+                PrescriptionItem(
+                    prescription_id=rx.id,
+                    drug_generic_name=item["drug_generic_name"],
+                    drug_form=DrugForm(item["drug_form"]),
+                    dosage=item["dosage"],
+                    frequency=item["frequency"],
+                    duration_days=item.get("duration_days"),
+                    instructions=item.get("instructions"),
+                    refill_allowed=bool(item.get("refill_allowed", False)),
+                    order_index=idx,
+                )
+            )
+
+    await db.flush()
+    return rx
 
 
 async def sign(

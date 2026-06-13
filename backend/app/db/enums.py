@@ -18,6 +18,8 @@ class UserRole(enum.StrEnum):
     PATIENT = "patient"
     DOCTOR = "doctor"
     COORDINATOR = "coordinator"
+    # Read-only tier of the admin portal: can view, cannot change state.
+    ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
 
 
@@ -57,6 +59,7 @@ class ActorRole(enum.StrEnum):
     PATIENT = "patient"
     DOCTOR = "doctor"
     COORDINATOR = "coordinator"
+    ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
     SYSTEM = "system"
 

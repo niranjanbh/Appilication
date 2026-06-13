@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_admin_session
+from app.core.audit import AuditContext, write_audit
+from app.db.enums import ActorRole
 from app.db.session import get_db
 from app.services import analytics_service
 
@@ -80,6 +82,46 @@ async def analytics_dashboard(
         return templates.TemplateResponse(request, template, ctx)
 
     return templates.TemplateResponse(request, "admin/analytics.html", ctx)
+
+
+@router.get("/analytics/export")
+async def analytics_export(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_admin_session)],
+    report: Literal[
+        "funnel", "retention", "revenue", "condition_mix", "doctor_utilization"
+    ] = Query(default="funnel"),
+    start_date: str = "",
+    end_date: str = "",
+) -> StreamingResponse:
+    """Session-cookie CSV export. The JWT twin at /v1/admin/analytics/export
+    serves API clients; browsers can't send a Bearer token from an <a> link."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    ctx = AuditContext(
+        actor_user_id=admin.id,
+        actor_role=ActorRole(admin.role.value),
+        ip_address=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", ""),
+        request_id=getattr(request.state, "request_id", ""),
+    )
+    await write_audit(
+        db, ctx, action="export_analytics", resource_type="analytics",
+        allowed=True, log_metadata={"report": report},
+    )
+    # commit audit before streaming so it's recorded even if the client disconnects
+    await db.commit()
+
+    filename = f"kyros_analytics_{report}.csv"
+    return StreamingResponse(
+        analytics_service.csv_stream(
+            db, report=report, start_date=_parse_date(start_date), end_date=_parse_date(end_date)
+        ),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _parse_date(value: str) -> date | None:

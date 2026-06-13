@@ -11,9 +11,52 @@
   </div>
 </div>
 <div class="page-body">
-  {% if error %}
+  {% if error == 'invalid_lead' %}
+  <div class="alert-bar alert-bar-error">Could not save the lead — check the name and phone (E.164, e.g. +919876543210).</div>
+  {% elif error %}
   <div class="alert-bar alert-bar-error">{{ error }}</div>
   {% endif %}
+  {% if success == 'lead_created' %}
+  <div class="alert-bar alert-bar-success">Lead logged.</div>
+  {% endif %}
+
+  <!-- Manual lead entry: phone call / referral -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-title">Log a lead manually</div>
+    <p style="font-size:11px;color:var(--stone);margin:4px 0 12px;">For phone calls and referrals that didn't come through the website.</p>
+    <form method="POST" action="/coord/inquiries/new" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Name</label>
+        <input type="text" name="name" required maxlength="255" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Phone (E.164)</label>
+        <input type="text" name="phone" required placeholder="+919876543210" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Gender</label>
+        <select name="gender" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="">—</option>
+          <option value="female">Female</option>
+          <option value="male">Male</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Condition</label>
+        <select name="condition_category" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          {% for c in conditions %}
+          <option value="{{ c }}">{{ c.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Note</label>
+        <input type="text" name="note" maxlength="500" placeholder="How they found us, what they asked…" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
+      </div>
+      <button type="submit" class="btn btn-primary">Log lead</button>
+    </form>
+  </div>
 
   <h3 style="margin:0 0 12px;">Consultation requests</h3>
   {% if not inquiries %}
@@ -36,11 +79,7 @@
           · {{ inquiry.created_at | ist }}
         </div>
       </div>
-      {% if inquiry.contacted_at %}
-      <span class="chip chip-confirmed">contacted</span>
-      {% else %}
-      <span class="chip chip-scheduled">not contacted</span>
-      {% endif %}
+      <span class="chip chip-{{ 'confirmed' if inquiry.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ inquiry.status }}</span>
     </div>
 
     {% if inquiry.skipped_intake %}
@@ -58,16 +97,26 @@
     </details>
     {% endif %}
 
-    {% if inquiry.contacted_at %}
-    <p style="font-size:12px;color:var(--stone);margin:0;">
-      Contacted by {{ contacted_by_name or '—' }} on {{ inquiry.contacted_at | ist }}.
-    </p>
-    {% else %}
-    <form method="POST" action="/coord/inquiries/{{ inquiry.id }}/contacted">
-      <button type="submit" class="btn btn-primary btn-sm"
-              onclick="return confirm('Confirm you have called this patient?')">Mark contacted</button>
-    </form>
-    {% endif %}
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      {% if inquiry.contacted_at %}
+      <p style="font-size:12px;color:var(--stone);margin:0;">
+        Contacted by {{ contacted_by_name or '—' }} on {{ inquiry.contacted_at | ist }}.
+      </p>
+      {% else %}
+      <form method="POST" action="/coord/inquiries/{{ inquiry.id }}/contacted">
+        <button type="submit" class="btn btn-primary btn-sm"
+                onclick="return confirm('Confirm you have called this patient?')">Mark contacted</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="/coord/inquiries/{{ inquiry.id }}/status" style="display:flex;gap:6px;align-items:center;">
+        <select name="new_status" style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;">
+          {% for s in statuses %}
+          <option value="{{ s }}" {% if s == inquiry.status %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Update</button>
+      </form>
+    </div>
   </div>
   {% endfor %}
   {% endif %}
@@ -91,25 +140,31 @@
           · {{ lead.created_at | ist }}
         </div>
       </div>
-      {% if lead.contacted_at %}
-      <span class="chip chip-confirmed">contacted</span>
-      {% else %}
-      <span class="chip chip-scheduled">not contacted</span>
-      {% endif %}
+      <span class="chip chip-{{ 'confirmed' if lead.status in ['contacted', 'qualified', 'converted'] else 'scheduled' }}">{{ lead.status }}</span>
     </div>
 
     <p style="font-size:13px;margin:0 0 12px;white-space:pre-wrap;">{{ lead.message }}</p>
 
-    {% if lead.contacted_at %}
-    <p style="font-size:12px;color:var(--stone);margin:0;">
-      Contacted by {{ contacted_by_name or '—' }} on {{ lead.contacted_at | ist }}.
-    </p>
-    {% else %}
-    <form method="POST" action="/coord/inquiries/queries/{{ lead.id }}/contacted">
-      <button type="submit" class="btn btn-primary btn-sm"
-              onclick="return confirm('Confirm you have replied to this query?')">Mark contacted</button>
-    </form>
-    {% endif %}
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      {% if lead.contacted_at %}
+      <p style="font-size:12px;color:var(--stone);margin:0;">
+        Contacted by {{ contacted_by_name or '—' }} on {{ lead.contacted_at | ist }}.
+      </p>
+      {% else %}
+      <form method="POST" action="/coord/inquiries/queries/{{ lead.id }}/contacted">
+        <button type="submit" class="btn btn-primary btn-sm"
+                onclick="return confirm('Confirm you have replied to this query?')">Mark contacted</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="/coord/inquiries/queries/{{ lead.id }}/status" style="display:flex;gap:6px;align-items:center;">
+        <select name="new_status" style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;">
+          {% for s in statuses %}
+          <option value="{{ s }}" {% if s == lead.status %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">Update</button>
+      </form>
+    </div>
   </div>
   {% endfor %}
   {% endif %}

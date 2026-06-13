@@ -7,16 +7,20 @@ to reach out marks the item contacted (visible to everyone else).
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_coord_session
+
+# Same vocabulary as website-submitted inquiries (public booking flow slugs).
+from app.api.v1.public.schemas import CONDITION_CATEGORIES
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole
 from app.db.session import get_db
@@ -78,9 +82,119 @@ async def inquiries_queue(
             "inquiries": inquiries,
             "leads": leads,
             "show": "all" if not only_new else "new",
-            "error": None,
+            "statuses": list(coord_repo.LEAD_STATUSES),
+            "conditions": _CONDITIONS,
+            "error": request.query_params.get("error"),
+            "success": request.query_params.get("success"),
         },
     )
+
+
+_CONDITIONS = sorted(CONDITION_CATEGORIES)
+_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+
+
+@router.post("/inquiries/new")
+async def create_inquiry(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    name: str = Form(...),
+    phone: str = Form(...),
+    gender: str = Form(default=""),
+    condition_category: str = Form(...),
+    note: str = Form(default=""),
+) -> RedirectResponse:
+    """Manually log a lead that came in by phone call or referral."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+
+    if len(name.strip()) < 2 or not _E164_RE.match(phone.strip()):
+        return RedirectResponse(
+            url="/coord/inquiries?error=invalid_lead", status_code=status.HTTP_302_FOUND
+        )
+    if condition_category not in _CONDITIONS:
+        return RedirectResponse(
+            url="/coord/inquiries?error=invalid_lead", status_code=status.HTTP_302_FOUND
+        )
+
+    inquiry = await coord_repo.create_manual_inquiry(
+        db,
+        created_by_user_id=coord.id,
+        name=name.strip(),
+        phone=phone.strip(),
+        gender=gender or None,
+        condition_category=condition_category,
+        note=note.strip() or None,
+    )
+    await write_audit(
+        db, ctx, action="coord_create_inquiry", resource_type="booking_inquiry",
+        resource_id=inquiry.id, allowed=True,
+    )
+    return RedirectResponse(
+        url="/coord/inquiries?show=all&success=lead_created",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.post("/inquiries/{inquiry_id}/status")
+async def update_inquiry_status(
+    inquiry_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    new_status: str = Form(...),
+) -> RedirectResponse:
+    """Move a booking inquiry along the pipeline (contacted → qualified → converted/closed)."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    moved = await coord_repo.set_inquiry_status(
+        db, inquiry_id=inquiry_id, user_id=coord.id, new_status=new_status
+    )
+    await write_audit(
+        db, ctx, action="coord_update_inquiry_status", resource_type="booking_inquiry",
+        resource_id=inquiry_id, allowed=moved,
+        reason=None if moved else "invalid_status_or_not_found",
+        log_metadata={"new_status": new_status},
+    )
+    if not moved:
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    return RedirectResponse(url="/coord/inquiries?show=all", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/inquiries/queries/{lead_id}/status")
+async def update_lead_status(
+    lead_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    new_status: str = Form(...),
+) -> RedirectResponse:
+    """Move a help query along the pipeline."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    moved = await coord_repo.set_lead_status(
+        db, lead_id=lead_id, user_id=coord.id, new_status=new_status
+    )
+    await write_audit(
+        db, ctx, action="coord_update_lead_status", resource_type="lead",
+        resource_id=lead_id, allowed=moved,
+        reason=None if moved else "invalid_status_or_not_found",
+        log_metadata={"new_status": new_status},
+    )
+    if not moved:
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    return RedirectResponse(url="/coord/inquiries?show=all", status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/inquiries/{inquiry_id}/contacted")

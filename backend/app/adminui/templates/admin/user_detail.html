@@ -5,6 +5,15 @@
   <h2>{{ user.name }}</h2>
 </div>
 <div class="page-body">
+  {% if reset_success %}
+  <div class="alert-bar alert-bar-success">Password updated.</div>
+  {% endif %}
+  {% if reset_error %}
+  <div class="alert-bar alert-bar-error">{{ reset_error }}</div>
+  {% endif %}
+  {% if assign_success %}
+  <div class="alert-bar alert-bar-success">Coordinator assignment updated.</div>
+  {% endif %}
   <div class="detail-grid">
     <!-- Identity -->
     <div class="detail-section">
@@ -42,6 +51,44 @@
       <div class="detail-row"><span class="detail-label">Kyros ID</span><span class="detail-value">{{ patient.kyros_patient_id }}</span></div>
       <div class="detail-row"><span class="detail-label">Conditions</span><span class="detail-value">{{ patient.primary_conditions | join(', ') or '—' }}</span></div>
       <div class="detail-row"><span class="detail-label">Intake complete</span><span class="detail-value">{{ patient.intake_complete_at.strftime('%d %b %Y') if patient.intake_complete_at else 'No' }}</span></div>
+
+      {% if admin and admin.role.value == 'super_admin' %}
+      <form method="POST" action="/admin/users/{{ user.id }}/assign-coordinator"
+            style="display:flex;gap:8px;align-items:flex-end;margin-top:14px;">
+        <div>
+          <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Care coordinator</label>
+          <select name="coordinator_id" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:200px;">
+            <option value="">— Unassigned —</option>
+            {% for coordinator, coord_user in coordinators %}
+            <option value="{{ coordinator.id }}"
+                    {% if patient.assigned_coordinator_id == coordinator.id %}selected{% endif %}>
+              {{ coord_user.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Assign</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if admin and admin.role.value == 'super_admin' and user.role.value != 'patient' %}
+    <div class="detail-section">
+      <h3>Reset password</h3>
+      <p style="font-size:12px;color:var(--stone);margin:0 0 10px;">
+        Sets a new password for this staff account. Requires re-authentication within 10 minutes.
+      </p>
+      <form method="POST" action="/admin/users/{{ user.id }}/reset-password"
+            style="display:flex;gap:8px;align-items:flex-end;"
+            onsubmit="return confirm('Reset the password for {{ user.name }}?')">
+        <div>
+          <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">New password</label>
+          <input type="password" name="password" required minlength="12" autocomplete="new-password"
+                 style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:220px;">
+        </div>
+        <button type="submit" class="btn btn-danger btn-sm">Reset password</button>
+      </form>
     </div>
     {% endif %}
   </div>

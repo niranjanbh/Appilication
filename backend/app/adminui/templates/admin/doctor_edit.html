@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}Edit Doctor Profile — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Edit Doctor Profile</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="card" style="max-width:640px;">
+    <p style="font-size:12px;color:var(--stone);margin:0 0 16px;">
+      {{ doctor_user.name }} · NMC {{ doctor.nmc_registration_number }} —
+      NMC number and verification status change through the pipeline, not here.
+    </p>
+    <form method="POST" action="/admin/doctors/{{ doctor.id }}/edit">
+      <div class="form-group">
+        <label for="bio_short">Short bio (max 500 chars)</label>
+        <input id="bio_short" name="bio_short" type="text" maxlength="500" value="{{ doctor.bio_short or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="bio_long">Full bio</label>
+        <textarea id="bio_long" name="bio_long" rows="5">{{ doctor.bio_long or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="specialty">Specialty (comma-separated)</label>
+        <input id="specialty" name="specialty" type="text" value="{{ doctor.specialty | join(', ') }}">
+      </div>
+      <div class="form-group">
+        <label for="conditions_treated">Conditions treated (comma-separated)</label>
+        <input id="conditions_treated" name="conditions_treated" type="text" value="{{ doctor.conditions_treated | join(', ') }}">
+      </div>
+      <div class="form-group">
+        <label for="consultation_languages">Consultation languages (comma-separated)</label>
+        <input id="consultation_languages" name="consultation_languages" type="text" value="{{ doctor.consultation_languages | join(', ') }}">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a href="/admin/doctors/{{ doctor.id }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

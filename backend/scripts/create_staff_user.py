@@ -15,7 +15,10 @@ The password is prompted interactively (never a CLI argument — it must not
 land in shell history). For non-interactive use set KYROS_STAFF_PASSWORD.
 
 Roles:
-    super_admin  → logs in at /admin/login
+    super_admin  → logs in at /admin/login (full access)
+    admin        → logs in at /admin/login (read-only: can view every page,
+                   cannot suspend users, verify/activate doctors, set revenue
+                   share, or publish/archive content)
     coordinator  → logs in at /coord/login (Coordinator profile row created)
     doctor       → logs in via the doctor portal (/v1/auth/login).
                    Requires --nmc. Created with status 'applied' unless
@@ -45,6 +48,7 @@ _MIN_PASSWORD_LENGTH = 12
 
 _LOGIN_HINT = {
     "super_admin": "Log in at https://api.kyrosclinic.com/admin/login",
+    "admin": "Log in at https://api.kyrosclinic.com/admin/login (read-only tier)",
     "coordinator": "Log in at https://api.kyrosclinic.com/coord/login",
     "doctor": "Log in at https://doctor.kyrosclinic.com",
 }
@@ -53,7 +57,9 @@ _LOGIN_HINT = {
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--role", required=True, choices=["super_admin", "coordinator", "doctor"]
+        "--role",
+        required=True,
+        choices=["super_admin", "admin", "coordinator", "doctor"],
     )
     parser.add_argument("--name", required=True)
     parser.add_argument("--email", required=True)
@@ -101,113 +107,48 @@ def _validate(args: argparse.Namespace) -> None:
 
 
 async def _run(args: argparse.Namespace, password: str) -> None:
-    from datetime import UTC, datetime
-
-    from sqlalchemy import select
-
-    from app.core.audit import AuditContext, write_audit
-    from app.core.security import hash_password
-    from app.db.enums import ActorRole, CoordinatorStatus, DoctorStatus, UserRole
+    from app.core.audit import AuditContext
+    from app.db.enums import ActorRole, UserRole
     from app.db.session import AsyncSessionLocal
-    from app.models.admin import Coordinator
-    from app.models.doctor import Doctor
-    from app.models.identity import User
+    from app.services.staff_service import StaffServiceError, create_staff_user
 
     role = UserRole(args.role)
+    ctx = AuditContext(
+        actor_user_id=None,
+        actor_role=ActorRole.SYSTEM,
+        ip_address="127.0.0.1",  # CLI run; audit ip column is INET
+        user_agent="scripts/create_staff_user.py",
+        request_id="",
+    )
 
     async with AsyncSessionLocal() as db:
-        user = await db.scalar(select(User).where(User.phone == args.phone))
-
-        if user is not None and user.role != role:
-            sys.exit(
-                f"ERROR: {args.phone} already belongs to a user with role "
-                f"'{user.role.value}'. This script never changes an existing "
-                f"account's role — use a different phone number."
-            )
-
-        created = user is None
-        if created:
-            user = User(
-                name=args.name,
+        try:
+            result = await create_staff_user(
+                db,
+                ctx,
                 role=role,
-                phone=args.phone,
+                name=args.name,
                 email=args.email,
-                password_hash=hash_password(password),
-                phone_verified=True,  # staff skip the patient OTP flow
+                phone=args.phone,
+                password=password,
+                employee_id=args.employee_id,
+                nmc=args.nmc,
+                state_council=args.state_council,
+                specialty=[s.strip() for s in args.specialty.split(",") if s.strip()],
+                languages=[
+                    lang.strip() for lang in args.languages.split(",") if lang.strip()
+                ],
+                activate_doctor=args.activate,
             )
-            db.add(user)
-            await db.flush()
-        else:
-            user.name = args.name
-            user.email = args.email
-            user.password_hash = hash_password(password)
-            user.phone_verified = True
-            await db.flush()
-
-        profile_note = ""
-        if role == UserRole.COORDINATOR:
-            coordinator = await db.scalar(
-                select(Coordinator).where(Coordinator.user_id == user.id)
-            )
-            if coordinator is None:
-                db.add(
-                    Coordinator(
-                        user_id=user.id,
-                        status=CoordinatorStatus.ACTIVE,
-                        employee_id=args.employee_id or f"COORD-{args.phone[-4:]}",
-                    )
-                )
-                await db.flush()
-                profile_note = "Coordinator profile created."
-            else:
-                profile_note = "Coordinator profile already exists."
-
-        elif role == UserRole.DOCTOR:
-            doctor = await db.scalar(select(Doctor).where(Doctor.user_id == user.id))
-            if doctor is None:
-                doctor = Doctor(
-                    user_id=user.id,
-                    nmc_registration_number=args.nmc,
-                    nmc_state_council=args.state_council,
-                    specialty=[s.strip() for s in args.specialty.split(",") if s.strip()],
-                    consultation_languages=[
-                        lang.strip() for lang in args.languages.split(",") if lang.strip()
-                    ],
-                    status=DoctorStatus.ACTIVE if args.activate else DoctorStatus.APPLIED,
-                    verified_at=datetime.now(UTC) if args.activate else None,
-                )
-                db.add(doctor)
-                await db.flush()
-                profile_note = (
-                    "Doctor profile created "
-                    + ("(active)." if args.activate else
-                       "(status 'applied' — verify and activate via /admin/doctors).")
-                )
-            else:
-                profile_note = "Doctor profile already exists (status unchanged)."
-
-        await write_audit(
-            db,
-            AuditContext(
-                actor_user_id=None,
-                actor_role=ActorRole.SYSTEM,
-                ip_address="127.0.0.1",  # CLI run; audit ip column is INET
-                user_agent="scripts/create_staff_user.py",
-                request_id="",
-            ),
-            action="staff_user_created" if created else "staff_user_updated",
-            resource_type="user",
-            resource_id=user.id,
-            allowed=True,
-            log_metadata={"role": role.value},
-        )
+        except StaffServiceError as exc:
+            sys.exit(f"ERROR: {exc}")
 
         await db.commit()
 
-        verb = "Created" if created else "Updated"
+        verb = "Created" if result.created else "Updated"
         print(f"{verb} {role.value} account for {args.name} ({args.phone}).")
-        if profile_note:
-            print(profile_note)
+        if result.profile_note:
+            print(result.profile_note)
         print(_LOGIN_HINT[args.role])
 
 

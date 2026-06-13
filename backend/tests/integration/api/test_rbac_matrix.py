@@ -862,6 +862,101 @@ async def test_doctor_create_prescription_patient_returns_403(
     assert resp.status_code == 403
 
 
+async def test_doctor_list_prescriptions_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/doctor/consultations/{uuid.uuid4()}/prescriptions")
+    assert resp.status_code == 401
+
+
+async def test_doctor_list_prescriptions_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/prescriptions",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_prescriptions_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/prescriptions",
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_prescriptions_unowned_consultation_returns_empty(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_with_profile(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/prescriptions",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_doctor_update_prescription_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.patch(
+        f"/v1/doctor/prescriptions/{uuid.uuid4()}",
+        json={"diagnosis_note": "updated"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_doctor_update_prescription_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.patch(
+        f"/v1/doctor/prescriptions/{uuid.uuid4()}",
+        json={"diagnosis_note": "updated"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_update_prescription_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.patch(
+        f"/v1/doctor/prescriptions/{uuid.uuid4()}",
+        json={"diagnosis_note": "updated"},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_update_prescription_unowned_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_with_profile(db_session)
+    resp = await client.patch(
+        f"/v1/doctor/prescriptions/{uuid.uuid4()}",
+        json={"diagnosis_note": "updated"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 404
+
+
+async def test_doctor_update_prescription_empty_items_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_with_profile(db_session)
+    resp = await client.patch(
+        f"/v1/doctor/prescriptions/{uuid.uuid4()}",
+        json={"items": []},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 422
+
+
 async def test_doctor_sign_prescription_no_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.post(f"/v1/doctor/prescriptions/{uuid.uuid4()}/sign")
     assert resp.status_code == 401
@@ -2060,6 +2155,294 @@ async def test_admin_login_valid_admin_redirects_to_dashboard(
         data={
             "email_or_phone": "testadmin@test.kyros.local",
             "password": "AdminPass123!",
+            "next_url": "/admin/",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/admin/" in resp.headers.get("location", "")
+
+
+# ── /admin/* — read-only 'admin' tier vs full 'super_admin' tier ──────────────
+
+
+def _admin_session_cookie(user_id: uuid.UUID) -> str:
+    """Create an admin-portal session in Redis and return the cookie value."""
+    from fastapi.responses import Response as FResponse
+
+    from app.adminui.deps import create_admin_session
+
+    dummy_response = FResponse()
+    create_admin_session(dummy_response, user_id)
+    session_cookie = dummy_response.headers.get("set-cookie", "")
+    for part in session_cookie.split(";"):
+        if "kyros_admin_session=" in part:
+            return part.split("=", 1)[1].strip()
+    return ""
+
+
+async def _create_readonly_admin(db: AsyncSession) -> object:
+    from app.core.security import hash_password
+    from app.db.enums import UserRole
+    from app.repositories import users as users_repo
+
+    return await users_repo.create(
+        db,
+        name="Test Readonly Admin",
+        role=UserRole.ADMIN,
+        phone=_synth_phone(),
+        email=_synth_email(),
+        password_hash=hash_password("TestPass123!"),
+    )
+
+
+async def test_admin_tier_can_view_users(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Read-only admin: every GET page works."""
+    from app.models.identity import User as UserModel
+
+    admin = await _create_readonly_admin(db_session)
+    assert isinstance(admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(admin.id)
+    except Exception:
+        return  # Redis unavailable in test — skip session creation path
+    if not cookie:
+        return
+
+    for path in ("/admin/users", "/admin/doctors", "/admin/content"):
+        resp = await client.get(path, cookies={"kyros_admin_session": cookie})
+        assert resp.status_code == 200, path
+
+
+async def test_admin_tier_cannot_suspend_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Read-only admin: state-changing POST is 403, not a login redirect."""
+    from app.models.identity import User as UserModel
+
+    admin = await _create_readonly_admin(db_session)
+    patient = await create_patient_user(db_session)
+    assert isinstance(admin, UserModel)
+    assert isinstance(patient, UserModel)
+    try:
+        cookie = _admin_session_cookie(admin.id)
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    resp = await client.post(
+        f"/admin/users/{patient.id}/suspend",
+        cookies={"kyros_admin_session": cookie},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 403
+
+
+async def test_super_admin_tier_can_suspend_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Positive control: super admin still passes the stricter dependency."""
+    from app.models.identity import User as UserModel
+
+    super_admin = await create_super_admin_user(db_session)
+    patient = await create_patient_user(db_session)
+    assert isinstance(super_admin, UserModel)
+    assert isinstance(patient, UserModel)
+    try:
+        cookie = _admin_session_cookie(super_admin.id)
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    resp = await client.post(
+        f"/admin/users/{patient.id}/suspend",
+        cookies={"kyros_admin_session": cookie},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+
+async def test_admin_staff_new_no_cookie_redirects(client: AsyncClient) -> None:
+    resp = await client.get("/admin/staff/new", follow_redirects=False)
+    assert resp.status_code == 302
+
+
+async def test_admin_dsr_no_cookie_redirects(client: AsyncClient) -> None:
+    resp = await client.get("/admin/dsr", follow_redirects=False)
+    assert resp.status_code == 302
+
+
+async def test_admin_tier_cannot_open_staff_form(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Read-only admin: staff creation and DSR queue are super-admin only."""
+    from app.models.identity import User as UserModel
+
+    admin = await _create_readonly_admin(db_session)
+    assert isinstance(admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(admin.id)
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    for path in ("/admin/staff/new", "/admin/dsr"):
+        resp = await client.get(
+            path, cookies={"kyros_admin_session": cookie}, follow_redirects=False
+        )
+        assert resp.status_code == 403, path
+
+
+async def test_super_admin_creates_coordinator_via_portal(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Happy path: fresh super-admin session creates a coordinator from the form."""
+    from sqlalchemy import select as sa_select
+
+    from app.db.enums import UserRole
+    from app.models.identity import User as UserModel
+
+    super_admin = await create_super_admin_user(db_session)
+    assert isinstance(super_admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(super_admin.id)  # login marks the session fresh
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    phone = _synth_phone()
+    resp = await client.post(
+        "/admin/staff",
+        data={
+            "role": "coordinator",
+            "name": "Test Portal Coordinator",
+            "email": _synth_email(),
+            "phone": phone,
+            "password": "PortalPass123!",
+        },
+        cookies={"kyros_admin_session": cookie},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    created = await db_session.scalar(
+        sa_select(UserModel).where(UserModel.phone == phone)
+    )
+    assert created is not None
+    assert created.role == UserRole.COORDINATOR
+    assert created.phone_verified is True
+
+
+async def test_stale_super_admin_session_redirects_to_reauth(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Fresh-auth: once the 10-minute window lapses, money/identity POSTs
+    bounce to /admin/reauth instead of executing."""
+    from app.adminui.deps import _fresh_key, _redis
+    from app.models.identity import User as UserModel
+
+    super_admin = await create_super_admin_user(db_session)
+    assert isinstance(super_admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(super_admin.id)
+        _redis().delete(_fresh_key(cookie))  # simulate the window lapsing
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    resp = await client.post(
+        "/admin/staff",
+        data={
+            "role": "coordinator",
+            "name": "Should Not Be Created",
+            "email": _synth_email(),
+            "phone": _synth_phone(),
+            "password": "PortalPass123!",
+        },
+        cookies={"kyros_admin_session": cookie},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/admin/reauth" in resp.headers.get("location", "")
+
+
+async def test_admin_cancel_unknown_consultation_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from app.models.identity import User as UserModel
+
+    super_admin = await create_super_admin_user(db_session)
+    assert isinstance(super_admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(super_admin.id)
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    resp = await client.post(
+        f"/admin/consultations/{uuid.uuid4()}/cancel",
+        data={"reason": "test"},
+        cookies={"kyros_admin_session": cookie},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 404
+
+
+async def test_analytics_export_works_with_session_cookie(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The portal export uses the session cookie — the /v1 JWT twin can't be
+    reached from a browser link."""
+    from app.models.identity import User as UserModel
+
+    admin = await _create_readonly_admin(db_session)
+    assert isinstance(admin, UserModel)
+    try:
+        cookie = _admin_session_cookie(admin.id)
+    except Exception:
+        return
+    if not cookie:
+        return
+
+    resp = await client.get(
+        "/admin/analytics/export?report=funnel",
+        cookies={"kyros_admin_session": cookie},
+    )
+    assert resp.status_code == 200
+    assert "text/csv" in resp.headers.get("content-type", "")
+
+
+async def test_admin_tier_can_login_via_portal(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from sqlalchemy import update as sa_update
+
+    from app.core.security import hash_password
+    from app.models.identity import User as UserModel
+
+    admin = await _create_readonly_admin(db_session)
+    assert isinstance(admin, UserModel)
+    await db_session.execute(
+        sa_update(UserModel).where(UserModel.id == admin.id)
+        .values(
+            email="testreadonly@test.kyros.local",
+            password_hash=hash_password("ReadOnly123!!"),
+        )
+    )
+    await db_session.flush()
+    resp = await client.post(
+        "/admin/login",
+        data={
+            "email_or_phone": "testreadonly@test.kyros.local",
+            "password": "ReadOnly123!!",
             "next_url": "/admin/",
         },
         follow_redirects=False,

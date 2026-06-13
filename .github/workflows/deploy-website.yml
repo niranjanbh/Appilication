@@ -39,6 +39,11 @@ jobs:
         run: pnpm --filter @kyros/website run build
         env:
           NEXT_PUBLIC_RAZORPAY_KEY_ID: ${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}
+          # Must pair with the worker's TURNSTILE_SECRET_KEY (wrangler secret).
+          # Missing here = no widget in the static build = every form submit 403s.
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          # Must pair with the backend's KYROS_BOOKING_OTP_ENABLED (default off).
+          NEXT_PUBLIC_BOOKING_OTP_ENABLED: ${{ vars.NEXT_PUBLIC_BOOKING_OTP_ENABLED }}
 
       - name: Deploy to Cloudflare Workers
         working-directory: website
