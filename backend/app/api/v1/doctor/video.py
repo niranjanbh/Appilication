@@ -48,6 +48,7 @@ async def doctor_join_consultation(
     from app.integrations import hms
     from app.models.identity import User as UserModel
     from app.repositories import consultations as consultations_repo
+    from app.services import consultation_service
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
@@ -73,6 +74,22 @@ async def doctor_join_consultation(
         )
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    # TPG hard gate: the doctor cannot "open" the consult without a verified
+    # patient identity and active telemedicine consent. Takes precedence over
+    # video-room readiness.
+    try:
+        consultation = await consultation_service.open_consultation(
+            db, consultation_id=consultation_id, doctor_id=doctor.id
+        )
+    except consultation_service.ConsultationError as exc:
+        await write_audit(
+            db, ctx, action="join_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.code) from exc
 
     if consultation.video_room_id is None:
         await write_audit(

@@ -14,6 +14,12 @@
   {% if assign_success %}
   <div class="alert-bar alert-bar-success">Coordinator assignment updated.</div>
   {% endif %}
+  {% if revoke_success %}
+  <div class="alert-bar alert-bar-success">All sessions revoked.</div>
+  {% endif %}
+  {% if revoke_error %}
+  <div class="alert-bar alert-bar-error">{{ revoke_error }}</div>
+  {% endif %}
   <div class="detail-grid">
     <!-- Identity -->
     <div class="detail-section">
@@ -88,6 +94,18 @@
                  style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:220px;">
         </div>
         <button type="submit" class="btn btn-danger btn-sm">Reset password</button>
+      </form>
+    </div>
+
+    <div class="detail-section">
+      <h3>Sessions</h3>
+      <p style="font-size:12px;color:var(--stone);margin:0 0 10px;">
+        Signs this account out everywhere — revokes all active API sessions and any open
+        admin/coordinator portal sessions. Requires re-authentication within 10 minutes.
+      </p>
+      <form method="POST" action="/admin/users/{{ user.id }}/revoke-sessions"
+            onsubmit="return confirm('Revoke all sessions for {{ user.name }}? They will be signed out everywhere.')">
+        <button type="submit" class="btn btn-danger btn-sm">Revoke all sessions</button>
       </form>
     </div>
     {% endif %}

@@ -8,6 +8,7 @@ import { apiFetch } from './lib/api';
 
 // Route-split chunks
 const Login = lazy(() => import('./routes/Login').then(m => ({ default: m.Login })));
+const ForgotPassword = lazy(() => import('./routes/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
 const Dashboard = lazy(() => import('./routes/Dashboard').then(m => ({ default: m.Dashboard })));
 const PatientList = lazy(() => import('./routes/patients/PatientList').then(m => ({ default: m.PatientList })));
 const PatientDetail = lazy(() => import('./routes/patients/PatientDetail').then(m => ({ default: m.PatientDetail })));
@@ -56,6 +57,7 @@ export default function App() {
         <Suspense fallback={null}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
 
             <Route path="/" element={<ProtectedShell><Dashboard /></ProtectedShell>} />
             <Route path="/dashboard" element={<ProtectedShell><Dashboard /></ProtectedShell>} />

@@ -33,6 +33,31 @@ export async function login(emailOrPhone: string, password: string): Promise<voi
   localStorage.setItem(REFRESH_KEY, data.refresh_token);
 }
 
+export async function requestPasswordReset(identifier: string): Promise<void> {
+  // Response is deliberately generic (no account enumeration); we ignore the body.
+  await fetch(`${API_BASE}/v1/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier }),
+  });
+}
+
+export async function confirmPasswordReset(
+  identifier: string,
+  otp: string,
+  newPassword: string,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/v1/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier, otp, new_password: newPassword }),
+  });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({})) as Record<string, unknown>;
+    throw new Error((body['detail'] as string | undefined) ?? 'reset_failed');
+  }
+}
+
 export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);

@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block title %}Platform Settings — Kyros Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Platform Settings</h2>
+</div>
+<div class="page-body">
+  {% if saved %}
+  <div class="alert-bar alert-bar-success">Settings saved.</div>
+  {% endif %}
+
+  {% set readonly = admin.role.value != 'super_admin' %}
+  {% if readonly %}
+  <div class="alert-bar">You have read-only access. Only a super admin can change these settings.</div>
+  {% endif %}
+
+  <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <h3 style="margin:0 0 4px;">Sign in with Google</h3>
+    <p style="font-size:13px;color:var(--stone);margin:0 0 16px;">
+      Patient-only. When off, the app hides the Google button and the backend rejects Google sign-in.
+      {% if not google_client_ids_configured %}
+      <br><strong>No client IDs are configured</strong> (KYROS_GOOGLE_OAUTH_CLIENT_IDS) — enabling has no effect until they are set.
+      {% endif %}
+    </p>
+    <form method="POST" action="/admin/settings/google-oauth">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" name="enabled" value="1" {{ 'checked' if google_enabled else '' }} {{ 'disabled' if readonly else '' }}>
+        Google Sign-In is {{ 'enabled' if google_enabled else 'disabled' }}
+      </label>
+      {% if not readonly %}
+      <div style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="card" style="max-width:560px;">
+    <h3 style="margin:0 0 4px;">Default password-reset OTP channel</h3>
+    <p style="font-size:13px;color:var(--stone);margin:0 0 16px;">
+      Used when a user has no per-user channel set. Per-user overrides live on each user's edit page.
+    </p>
+    <form method="POST" action="/admin/settings/reset-channel">
+      <div class="form-group">
+        <label for="channel">Channel</label>
+        <select id="channel" name="channel" {{ 'disabled' if readonly else '' }}>
+          <option value="sms" {{ 'selected' if default_channel == 'sms' else '' }}>SMS (mobile)</option>
+          <option value="email" {{ 'selected' if default_channel == 'email' else '' }}>Email</option>
+        </select>
+      </div>
+      {% if not readonly %}
+      <button type="submit" class="btn btn-primary">Save</button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

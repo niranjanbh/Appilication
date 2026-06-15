@@ -80,5 +80,71 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class MfaChallengeResponse(BaseModel):
+    """Returned from /login in place of TokenResponse when staff MFA is enabled."""
+
+    mfa_required: bool = True
+    challenge_token: str
+    expires_in: int
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    # Email or E.164 phone. Works for every role.
+    identifier: str
+
+
+class PasswordResetRequestResponse(BaseModel):
+    # Deliberately generic — never reveals whether the identifier exists.
+    message: str
+    otp_hint: str | None = None
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    identifier: str
+    otp: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return v
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    message: str
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
+class AuthConfigResponse(BaseModel):
+    google_oauth_enabled: bool
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaConfirmRequest(BaseModel):
+    code: str
+
+
+class MfaConfirmResponse(BaseModel):
+    recovery_codes: list[str]
+
+
+class MfaDisableRequest(BaseModel):
+    password: str
+
+
+class MfaVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str

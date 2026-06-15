@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.enums import AvailabilityStatus, ConsultationStatus
 from app.models.clinic import Consultation, PreConsultationReport
 from app.models.doctor import Availability, Doctor
+from app.models.identity import User
 
 
 async def get_consultation_for_patient(
@@ -226,6 +227,22 @@ async def get_doctor_record(
     """Return the dr_doctors row for a user, or None if not found."""
     result = await db.execute(
         select(Doctor).where(Doctor.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_patient_user_for_consultation(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+) -> User | None:
+    """Return the users row for the patient on a consultation (joins kc_patients -> users)."""
+    from app.models.clinic import Patient
+
+    result = await db.execute(
+        select(User)
+        .join(Patient, Patient.user_id == User.id)
+        .where(Patient.id == patient_id)
     )
     return result.scalar_one_or_none()
 

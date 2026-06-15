@@ -75,6 +75,27 @@ async def test_refresh_invalid_token_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+async def test_password_reset_request_missing_body_returns_422(client: AsyncClient) -> None:
+    resp = await client.post("/v1/auth/password-reset/request", json={})
+    assert resp.status_code == 422
+
+
+async def test_password_reset_confirm_missing_body_returns_422(client: AsyncClient) -> None:
+    resp = await client.post("/v1/auth/password-reset/confirm", json={})
+    assert resp.status_code == 422
+
+
+async def test_google_login_missing_body_returns_422(client: AsyncClient) -> None:
+    resp = await client.post("/v1/auth/google", json={})
+    assert resp.status_code == 422
+
+
+async def test_auth_config_public_returns_200(client: AsyncClient) -> None:
+    resp = await client.get("/v1/auth/config")
+    assert resp.status_code == 200
+    assert "google_oauth_enabled" in resp.json()
+
+
 # ── /v1/users/me — patient-scoped endpoints ───────────────────────────────────
 # Role matrix: patient=200/202, no-auth=401, doctor/coordinator=403.
 # Full cross-role and task tests live in test_users_me.py.
@@ -1130,6 +1151,48 @@ async def test_doctor_join_coordinator_returns_403(
         headers=make_auth_headers(coord),
     )
     assert resp.status_code == 403
+
+
+# ── /v1/doctor/consultations/{id}/complete — doctor only ─────────────────────
+# Role matrix: doctor=200/404/409, no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_complete_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/doctor/consultations/{uuid.uuid4()}/complete")
+    assert resp.status_code == 401
+
+
+async def test_doctor_complete_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/complete",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_complete_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/complete",
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_complete_unowned_consultation_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/complete",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 404
 
 
 # ── /v1/doctor/me — doctor only ──────────────────────────────────────────────

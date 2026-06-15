@@ -73,6 +73,26 @@ async def _create_patient_profile(db: AsyncSession, user_id: uuid.UUID) -> Patie
     return patient
 
 
+async def _grant_telemedicine_consent(db: AsyncSession, *, user_id: uuid.UUID) -> None:
+    """Grant an active TELEMEDICINE consent — satisfies the TPG hard gate on doctor join."""
+    import hashlib
+
+    from app.db.enums import ConsentType
+    from app.models.consent import ConsentRecord
+
+    db.add(
+        ConsentRecord(
+            user_id=user_id,
+            consent_type=ConsentType.TELEMEDICINE,
+            version="1.0",
+            granted=True,
+            granted_at=datetime.now(UTC),
+            consent_text_hash=hashlib.sha256(b"telemedicine-consent-test").hexdigest(),
+        )
+    )
+    await db.flush()
+
+
 async def _create_consultation(
     db: AsyncSession,
     *,
@@ -351,6 +371,7 @@ async def test_doctor_join_provisioned_returns_token(
 
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
     room_id = f"stub-room-dr-{uuid.uuid4()}"
     consultation = await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=room_id
@@ -365,6 +386,150 @@ async def test_doctor_join_provisioned_returns_token(
     assert data["room_id"] == room_id
     assert "token" in data
     assert "endpoint" in data
+
+
+async def test_doctor_join_transitions_confirmed_to_in_progress_and_is_idempotent(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """TPG gate satisfied: CONFIRMED -> IN_PROGRESS with actual_start_at stamped.
+
+    A second join (now IN_PROGRESS) is an idempotent reconnect — 200, no change to
+    actual_start_at.
+    """
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
+    room_id = f"stub-room-dr-{uuid.uuid4()}"
+    consultation = await _create_consultation(
+        db_session, patient=patient, doctor=doctor, video_room_id=room_id
+    )
+    assert consultation.actual_start_at is None
+
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 200, resp.text
+
+    await db_session.refresh(consultation)
+    assert consultation.status == ConsultationStatus.IN_PROGRESS
+    assert consultation.actual_start_at is not None
+    first_start = consultation.actual_start_at
+
+    # Re-join: idempotent, no duplicate transition or actual_start_at change.
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 200, resp.text
+
+    await db_session.refresh(consultation)
+    assert consultation.status == ConsultationStatus.IN_PROGRESS
+    assert consultation.actual_start_at == first_start
+
+
+async def test_doctor_join_identity_not_verified_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """TPG identity-verification gate: patient with phone_verified=False blocks open."""
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session, phone_verified=False)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
+    consultation = await _create_consultation(
+        db_session, patient=patient, doctor=doctor, video_room_id="stub-room-unverified"
+    )
+
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "identity_not_verified"
+
+    await db_session.refresh(consultation)
+    assert consultation.status == ConsultationStatus.CONFIRMED
+
+    audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.actor_user_id == doctor_user.id,
+            AuditLog.action == "join_consultation",
+            AuditLog.allowed == False,  # noqa: E712
+        )
+    )
+    assert audit is not None
+    assert audit.reason == "identity_not_verified"
+
+
+async def test_doctor_join_missing_telemedicine_consent_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """TPG consent gate: phone verified but no active TELEMEDICINE consent blocks open."""
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    consultation = await _create_consultation(
+        db_session, patient=patient, doctor=doctor, video_room_id="stub-room-no-consent"
+    )
+
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "telemedicine_consent_missing"
+
+    await db_session.refresh(consultation)
+    assert consultation.status == ConsultationStatus.CONFIRMED
+
+
+async def test_doctor_join_scheduled_consult_returns_409_not_open_eligible(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A SCHEDULED (unpaid) consult cannot be opened — wrong lifecycle stage."""
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
+    consultation = await _create_consultation(
+        db_session,
+        patient=patient,
+        doctor=doctor,
+        video_room_id="stub-room-scheduled",
+        status=ConsultationStatus.SCHEDULED,
+    )
+
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "consultation_not_open_eligible"
 
 
 async def test_doctor_join_cross_doctor_returns_404_and_audit_logs_denial(
@@ -420,6 +585,7 @@ async def test_doctor_join_room_not_provisioned_returns_503(
 
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
     await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=None
     )

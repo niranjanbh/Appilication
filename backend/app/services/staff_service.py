@@ -82,6 +82,61 @@ async def reset_staff_password(
     return user
 
 
+async def revoke_staff_sessions(
+    db: AsyncSession,
+    ctx: AuditContext,
+    *,
+    user_id: uuid.UUID,
+) -> dict[str, int]:
+    """Force-kill every live session for a staff account (super-admin action).
+
+    Revokes both JWT refresh-token families and admin/coordinator portal session
+    cookies (staff-rbac-spec §1).
+
+    Raises StaffServiceError:
+      user_not_found    — no active user with this id
+      not_a_staff_role  — target is a patient
+    """
+    from app.adminui.deps import revoke_all_portal_sessions_for_user
+    from app.repositories import auth as auth_repo
+
+    user = await db.scalar(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    if user is None:
+        raise StaffServiceError("user_not_found")
+    if user.role not in STAFF_ROLES:
+        raise StaffServiceError("not_a_staff_role")
+
+    jwt_sessions_revoked = await auth_repo.revoke_all_for_user(db, user.id)
+    portal_sessions_revoked = revoke_all_portal_sessions_for_user(user.id)
+
+    await write_audit(
+        db,
+        ctx,
+        action="force_session_revoke",
+        resource_type="user",
+        resource_id=user.id,
+        allowed=True,
+        log_metadata={
+            "role": user.role.value,
+            "jwt_sessions_revoked": jwt_sessions_revoked,
+            "portal_sessions_revoked": portal_sessions_revoked,
+        },
+    )
+    logger.info(
+        "force_session_revoke",
+        role=user.role.value,
+        user_id=str(user.id),
+        jwt_sessions_revoked=jwt_sessions_revoked,
+        portal_sessions_revoked=portal_sessions_revoked,
+    )
+    return {
+        "jwt_sessions_revoked": jwt_sessions_revoked,
+        "portal_sessions_revoked": portal_sessions_revoked,
+    }
+
+
 async def create_staff_user(
     db: AsyncSession,
     ctx: AuditContext,

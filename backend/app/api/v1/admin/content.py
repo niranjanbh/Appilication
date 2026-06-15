@@ -21,7 +21,8 @@ from pydantic import BaseModel
 
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
-from app.core.rbac import get_admin_user
+from app.core.permissions import Permission
+from app.core.rbac import get_admin_user, permission_audit_fields, require_permission
 from app.db.enums import ActorRole, ContentStatus
 from app.repositories import education as edu_repo
 
@@ -73,12 +74,15 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
+    role_context, permission = permission_audit_fields(request)
     return AuditContext(
         actor_user_id=user.id,
         actor_role=ActorRole(user.role.value),
         ip_address=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent", ""),
         request_id=getattr(request.state, "request_id", ""),
+        role_context=role_context,
+        permission=permission,
     )
 
 
@@ -146,7 +150,7 @@ async def approve_content(
     content_id: uuid.UUID,
     request: Request,
     db: DbSession,
-    user: Annotated[object, Depends(get_admin_user)],
+    user: Annotated[object, Depends(require_permission(Permission.CONTENT_PUBLISH))],
 ) -> ContentAdminRead:
     """Publish content with doctor approval.
 

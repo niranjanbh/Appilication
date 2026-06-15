@@ -32,6 +32,10 @@ _SESSION_COOKIE = "kyros_admin_session"
 # minutes (admin-ui rules). Login and /admin/reauth refresh this key.
 _FRESH_TTL = 600
 _FRESH_KEY_PREFIX = "sessionfresh:admin:"
+# Reverse index of every live portal session (admin or coordinator) for a staff
+# user, so an admin-forced session-kill can find and delete them by user id
+# (staff-rbac-spec §1).
+_STAFF_SESSIONS_PREFIX = "staff_sessions:"
 
 
 # ── Redis helpers ──────────────────────────────────────────────────────────────
@@ -82,6 +86,13 @@ def create_admin_session(response: Response, user_id: uuid.UUID) -> str:
     except Exception as exc:
         logger.exception("admin_session.create_failed")
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "session_error") from exc
+
+    try:
+        r = _redis()
+        r.sadd(f"{_STAFF_SESSIONS_PREFIX}{user_id}", session_id)
+        r.expire(f"{_STAFF_SESSIONS_PREFIX}{user_id}", _SESSION_TTL)
+    except Exception:
+        logger.warning("admin_session.index_failed")
 
     response.set_cookie(
         _SESSION_COOKIE,
@@ -161,10 +172,17 @@ async def require_admin_session(
     ):
         raise _login_redirect(request)
 
+    # Stamp actor identity for the PHI-access audit middleware (P33) — covers the
+    # downstream require_super_admin_session denial.
+    from app.db.enums import ActorRole
+
+    request.state.actor_user_id = user.id
+    request.state.actor_role = ActorRole(user.role.value)
     return user
 
 
 async def require_super_admin_session(
+    request: Request,
     admin: object = Depends(require_admin_session),
 ) -> object:
     """State-changing admin views: full super_admin tier only.
@@ -177,6 +195,7 @@ async def require_super_admin_session(
 
     assert isinstance(admin, UserModel)
     if admin.role != UserRole.SUPER_ADMIN:
+        request.state.deny_reason = "super_admin_required"
         raise HTTPException(status.HTTP_403_FORBIDDEN, "super_admin_required")
     return admin
 
@@ -236,6 +255,13 @@ def create_coord_session(response: Response, user_id: uuid.UUID) -> str:
     except Exception as exc:
         logger.exception("coord_session.create_failed")
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "session_error") from exc
+
+    try:
+        r = _redis()
+        r.sadd(f"{_STAFF_SESSIONS_PREFIX}{user_id}", session_id)
+        r.expire(f"{_STAFF_SESSIONS_PREFIX}{user_id}", _SESSION_TTL)
+    except Exception:
+        logger.warning("coord_session.index_failed")
 
     response.set_cookie(
         _COORD_SESSION_COOKIE,
@@ -310,3 +336,25 @@ def _coord_login_redirect(request: Request) -> HTTPException:
         status_code=status.HTTP_302_FOUND,
         headers={"Location": f"/coord/login?next={request.url.path}"},
     )
+
+
+def revoke_all_portal_sessions_for_user(user_id: uuid.UUID) -> int:
+    """Delete every live admin/coordinator portal session for a user.
+
+    Used by admin-forced session-kill (staff-rbac-spec §1) alongside JWT
+    refresh-token revocation. Fails open (returns 0) on Redis errors — same
+    posture as is_session_fresh, since a degraded Redis already breaks sessions.
+    """
+    try:
+        r = _redis()
+        index_key = f"{_STAFF_SESSIONS_PREFIX}{user_id}"
+        session_ids: set[str] = r.smembers(index_key)
+        for session_id in session_ids:
+            r.delete(_session_key(session_id))
+            r.delete(_fresh_key(session_id))
+            r.delete(_coord_session_key(session_id))
+        r.delete(index_key)
+        return len(session_ids)
+    except Exception:
+        logger.warning("portal_sessions.revoke_failed")
+        return 0

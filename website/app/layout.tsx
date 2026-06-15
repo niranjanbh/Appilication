@@ -23,7 +23,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Kyros Clinic — Doctor-first hormonal health',
+    default: '',
     template: '%s — Kyros Clinic',
   },
   icons: {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     siteName: 'Kyros Clinic',
     type: 'website',
     locale: 'en_IN',
-    images: [{ url: '/opengraph-image.png', width: 1200, height: 630, alt: 'Kyros Clinic — Doctor-first hormonal health' }],
+    images: [{ url: '/opengraph-image.png', width: 1200, height: 630, alt: 'Kyros Clinic | Doctor-first care for hormonal, metabolic, and preventive health.' }],
   },
   twitter: {
     card: 'summary_large_image',

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { login } from '../lib/auth';
 
 export function Login() {
@@ -85,6 +85,12 @@ export function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          <p className="text-center font-body text-caption text-stone mt-5">
+            <Link to="/forgot-password" className="text-forest hover:underline">
+              Forgot your password?
+            </Link>
+          </p>
         </div>
 
         <p className="text-center font-body text-caption text-stone mt-6">

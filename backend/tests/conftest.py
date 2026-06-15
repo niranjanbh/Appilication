@@ -206,6 +206,26 @@ async def create_super_admin_user(
     )
 
 
+async def create_admin_user(
+    db: AsyncSession,
+    *,
+    phone: str | None = None,
+    email: str | None = None,
+) -> object:
+    """Create a User with role=admin — the read-only admin-portal tier (below super_admin)."""
+    from app.core.security import hash_password
+    from app.repositories import users as users_repo
+
+    return await users_repo.create(
+        db,
+        name=fake.name(),
+        role=UserRole.ADMIN,
+        phone=phone or _synth_phone(),
+        email=email or _synth_email(),
+        password_hash=hash_password("TestPass123!"),
+    )
+
+
 async def create_doctor_with_profile(
     db: AsyncSession,
     *,

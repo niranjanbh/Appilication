@@ -23,6 +23,14 @@ class UserRole(enum.StrEnum):
     SUPER_ADMIN = "super_admin"
 
 
+class OtpResetChannel(enum.StrEnum):
+    """Channel used to deliver a password-reset OTP. Admin-controlled per user;
+    falls back to the platform default when unset on the user record."""
+
+    EMAIL = "email"
+    SMS = "sms"
+
+
 class UserGender(enum.StrEnum):
     FEMALE = "female"
     MALE = "male"

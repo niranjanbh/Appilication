@@ -21,6 +21,7 @@ dependencies = [
     "boto3>=1.34.0",
     "google-cloud-documentai>=2.29.0",
     "weasyprint>=62.0",
+    "pyotp>=2.9.0",
 ]
 
 [dependency-groups]
@@ -79,6 +80,7 @@ module = [
     "botocore.*",
     "google.*",
     "cryptography.*",
+    "pyotp.*",
 ]
 ignore_missing_imports = true
 

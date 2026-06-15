@@ -25,7 +25,7 @@ class ConsultationBookRequest(BaseModel):
         pattern="^(thyroid|weight|pcos|skin_hair|mens_intimate|hormones_trt|longevity)$",
     )
     consultation_type: ConsultationType = ConsultationType.INITIAL
-    consultation_fee_paise: int = Field(..., gt=0)
+    # Fee is resolved server-side from pricing config — never supplied by the client.
     idempotency_key: uuid.UUID | None = Field(default=None)
 
 

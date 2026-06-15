@@ -13,12 +13,12 @@ import { DashboardSection } from '../components/dashboard/DashboardSection';
 import { HomeFAQ } from '../components/marketing/HomeFAQ';
 
 export const metadata: Metadata = {
-  title: 'Kyros Clinic — Doctor-first hormonal health',
+  title: 'Kyros Clinic | Doctor-first care for hormonal, metabolic, and preventive health.',
   description:
     'Consult specialist doctors for thyroid, PCOS, weight management, skin & hair, sexual health, hormones, diabetes, and longevity. Track labs, follow a plan, stay with one doctor.',
   alternates: { canonical: 'https://kyrosclinic.com' },
   openGraph: {
-    title: 'Kyros Clinic — Doctor-first hormonal health',
+    title: 'Kyros Clinic | Doctor-first care for hormonal, metabolic, and preventive health.',
     description:
       'India-first telemedicine clinic. One doctor. One place. A platform where privacy is the point.',
     url: 'https://kyrosclinic.com',

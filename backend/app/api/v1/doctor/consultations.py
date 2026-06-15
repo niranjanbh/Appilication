@@ -72,6 +72,12 @@ class DoctorConsultationListResponse(BaseModel):
     pages: int
 
 
+class ConsultationCompleteResponse(BaseModel):
+    id: uuid.UUID
+    status: str
+    actual_end_at: datetime | None
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -205,6 +211,66 @@ async def get_my_consultation(
         cancellation_reason=c.cancellation_reason,
         recording_consent=c.recording_consent,
         created_at=c.created_at,
+    )
+
+
+@router.post(
+    "/consultations/{consultation_id}/complete",
+    response_model=ConsultationCompleteResponse,
+)
+async def complete_consultation(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> ConsultationCompleteResponse:
+    from app.models.identity import User as UserModel
+    from app.services import consultation_service
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dr_row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
+    if dr_row is None:
+        await write_audit(
+            db, ctx, action="complete_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    doctor, _ = dr_row
+
+    try:
+        consultation = await consultation_service.complete_consultation(
+            db, consultation_id=consultation_id, doctor_id=doctor.id
+        )
+    except consultation_service.ConsultationError as exc:
+        if exc.code == "consultation_not_found":
+            await write_audit(
+                db, ctx, action="complete_consultation",
+                resource_type="consultation", resource_id=consultation_id,
+                allowed=False, reason="not_own_or_not_found",
+            )
+            await db.commit()
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+        await write_audit(
+            db, ctx, action="complete_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.code) from exc
+
+    await write_audit(
+        db, ctx, action="complete_consultation",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+    )
+    return ConsultationCompleteResponse(
+        id=consultation.id,
+        status=consultation.status.value,
+        actual_end_at=consultation.actual_end_at,
     )
 
 

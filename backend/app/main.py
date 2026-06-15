@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.observability.middleware import (
     AccessLogMiddleware,
+    PHIAuditMiddleware,
     RequestIDMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(AccessLogMiddleware)
+    app.add_middleware(PHIAuditMiddleware)
     app.add_middleware(
         SecurityHeadersMiddleware, production=settings.app_env == "production"
     )

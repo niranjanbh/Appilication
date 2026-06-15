@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import UserRole
+from app.db.enums import OtpResetChannel, UserRole
 from app.models.identity import User
 
 
@@ -91,6 +91,51 @@ async def update_phone_verified(db: AsyncSession, user_id: uuid.UUID) -> None:
         update(User)
         .where(User.id == user_id)
         .values(phone_verified=True, updated_at=datetime.now(UTC))
+    )
+
+
+async def get_by_google_sub(db: AsyncSession, google_sub: str) -> User | None:
+    result = await db.execute(
+        select(User).where(User.google_sub == google_sub, User.deleted_at.is_(None))
+    )
+    return result.scalar_one_or_none()
+
+
+async def set_google_sub(
+    db: AsyncSession, user_id: uuid.UUID, google_sub: str
+) -> None:
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(google_sub=google_sub, updated_at=datetime.now(UTC))
+    )
+
+
+async def update_password(
+    db: AsyncSession, user_id: uuid.UUID, password_hash: str
+) -> None:
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(password_hash=password_hash, updated_at=datetime.now(UTC))
+    )
+
+
+async def update_reset_otp_channel(
+    db: AsyncSession, user_id: uuid.UUID, channel: OtpResetChannel | None
+) -> None:
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(reset_otp_channel=channel, updated_at=datetime.now(UTC))
+    )
+
+
+async def mark_email_verified(db: AsyncSession, user_id: uuid.UUID) -> None:
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(email_verified=True, updated_at=datetime.now(UTC))
     )
 
 

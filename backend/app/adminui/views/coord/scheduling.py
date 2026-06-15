@@ -103,12 +103,18 @@ async def book_consultation(
             status_code=status.HTTP_302_FOUND,
         )
 
+    from app.db.enums import ConsultationType
+    from app.services import pricing_service
+
     consultation = await coord_repo.book_consultation_for_patient(
         db,
         coordinator_id=coordinator.id,
         patient_id=patient_id,
         slot_id=slot_id,
         condition_category=condition_category,
+        consultation_fee_paise=pricing_service.get_consultation_fee_paise(
+            ConsultationType.INITIAL
+        ),
     )
 
     allowed = consultation is not None

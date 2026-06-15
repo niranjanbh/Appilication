@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.db.enums import UserGender, UserRole, enum_values
+from app.db.enums import OtpResetChannel, UserGender, UserRole, enum_values
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
@@ -29,6 +29,19 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         Boolean, server_default=text("false"), nullable=False
     )
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Admin-controlled per-user channel for password-reset OTP delivery.
+    # NULL → fall back to the platform default (ad_platform_settings).
+    reset_otp_channel: Mapped[OtpResetChannel | None] = mapped_column(
+        SAEnum(
+            OtpResetChannel,
+            name="otp_reset_channel",
+            create_type=False,
+            values_callable=enum_values,
+        ),
+        nullable=True,
+    )
+    # Google subject id for accounts linked via Sign in with Google (patients only).
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[UserGender | None] = mapped_column(
@@ -77,5 +90,10 @@ class RefreshToken(Base, UUIDMixin, TimestampMixin):
     )
     ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Carried forward across /refresh rotations within a session: True once the staff user has
+    # completed an MFA challenge for this session (staff-rbac-spec §1).
+    mfa_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
 
     user: Mapped[User] = relationship("User", back_populates="refresh_tokens")

@@ -16,6 +16,10 @@ class AuditContext:
     ip_address: str
     user_agent: str
     request_id: str
+    # Set when the action was authorized via require_permission: the role-context
+    # the action was taken under, and the resource:action permission exercised.
+    role_context: str | None = None
+    permission: str | None = None
 
 
 async def write_audit(
@@ -43,4 +47,6 @@ async def write_audit(
         ip_address=ctx.ip_address,
         user_agent=ctx.user_agent,
         log_metadata=log_metadata,
+        role_context=ctx.role_context,
+        permission=ctx.permission,
     )

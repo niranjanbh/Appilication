@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import AvailabilityStatus, ConsultationStatus
+from app.db.enums import AvailabilityStatus, ConsultationStatus, DoctorStatus
 from app.models.admin import Coordinator, Followup, PatientInteraction
 from app.models.clinic import Consultation, Patient
 from app.models.doctor import Availability, Doctor
@@ -258,7 +258,7 @@ async def book_consultation_for_patient(
     patient_id: uuid.UUID,
     slot_id: uuid.UUID,
     condition_category: str,
-    consultation_fee_paise: int = 50000,
+    consultation_fee_paise: int,
 ) -> Consultation | None:
     """Book a consultation on behalf of an assigned patient.
 
@@ -283,6 +283,10 @@ async def book_consultation_for_patient(
     )
     slot = slot_result.scalar_one_or_none()
     if slot is None:
+        return None
+
+    doctor = await db.get(Doctor, slot.doctor_id)
+    if doctor is None or doctor.status != DoctorStatus.ACTIVE:
         return None
 
     consultation = Consultation(

@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.enums import AvailabilityStatus, ConsultationStatus, DoctorStatus, PaymentStatus
 from app.models.audit import AuditLog
 from app.models.clinic import Consultation, Patient
@@ -25,7 +26,9 @@ from tests.conftest import (
 
 _STUB_ORDER_ID = "order_TESTSTUB_CONSULT1"
 _STUB_PAYMENT_ID = "pay_TESTSTUB_CONSULT1"
-_FEE_PAISE = 60000  # ₹600
+# Server-authoritative fee (initial consult). The booking endpoint resolves this
+# from config; the client cannot influence it.
+_FEE_PAISE = settings.consultation_fee_initial_paise
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -219,7 +222,8 @@ async def test_book_consultation_happy_path(
                 "doctor_id": str(doctor.id),
                 "slot_id": str(slot.id),
                 "condition_category": "thyroid",
-                "consultation_fee_paise": _FEE_PAISE,
+                # Client attempts to set a bogus fee — must be ignored server-side.
+                "consultation_fee_paise": 1,
             },
             headers=make_auth_headers(patient_user),
         )
@@ -228,6 +232,7 @@ async def test_book_consultation_happy_path(
     data = resp.json()
     assert data["status"] == "scheduled"
     assert data["condition_category"] == "thyroid"
+    # Fee is the server-authoritative value, not the client's "1".
     assert data["consultation_fee_paise"] == _FEE_PAISE
     assert data["payment"]["razorpay_order_id"] == _STUB_ORDER_ID
 
@@ -272,6 +277,38 @@ async def test_book_consultation_unavailable_slot_returns_409(
         )
 
     assert resp.status_code == 409
+
+
+async def test_book_consultation_inactive_doctor_returns_409_doctor_not_available(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """An unverified/inactive doctor cannot be assigned a consult — state precondition."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    doctor.status = DoctorStatus.INACTIVE
+    await db_session.flush()
+    slot = await _create_slot(db_session, doctor)
+
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={
+            "doctor_id": str(doctor.id),
+            "slot_id": str(slot.id),
+            "condition_category": "thyroid",
+            "consultation_fee_paise": _FEE_PAISE,
+        },
+        headers=make_auth_headers(patient_user),
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "doctor_not_available"
 
 
 async def test_book_consultation_without_patient_profile_returns_422(

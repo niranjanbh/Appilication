@@ -52,6 +52,50 @@ export function loginApi(payload: LoginPayload): Promise<AuthTokens> {
   });
 }
 
+export interface PasswordResetRequestResult {
+  message: string;
+  otp_hint?: string | null;
+}
+
+export interface PasswordResetConfirmPayload {
+  identifier: string;
+  otp: string;
+  new_password: string;
+}
+
+export interface AuthConfig {
+  google_oauth_enabled: boolean;
+}
+
+export function requestPasswordResetApi(
+  identifier: string,
+): Promise<PasswordResetRequestResult> {
+  return publicFetch('/v1/auth/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+  });
+}
+
+export function confirmPasswordResetApi(
+  payload: PasswordResetConfirmPayload,
+): Promise<{ message: string }> {
+  return publicFetch('/v1/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function googleLoginApi(idToken: string): Promise<AuthTokens> {
+  return publicFetch('/v1/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ id_token: idToken }),
+  });
+}
+
+export function getAuthConfigApi(): Promise<AuthConfig> {
+  return publicFetch('/v1/auth/config', { method: 'GET' });
+}
+
 export function getMeApi(): Promise<UserMe> {
   return apiFetch('/v1/users/me');
 }

@@ -228,5 +228,53 @@ async def test_access_token_contains_user_id_and_role(
     assert "sub" in payload
     assert payload["role"] == "patient"
     assert payload["v"] == 1
+    assert payload["aud"] == "patient"
+    assert payload["mfa"] is False
     # Validate sub is a valid UUID
     uuid.UUID(payload["sub"])
+
+
+# ── Staff idle-timeout (staff-rbac-spec §1) ─────────────────────────────────────
+
+
+async def test_staff_refresh_after_idle_timeout_revokes_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.config import settings as cfg
+    from app.core.security import hash_refresh_token
+    from app.models.identity import RefreshToken
+    from app.models.identity import User as UserModel
+    from app.repositories import users as users_repo
+    from tests.conftest import create_doctor_user
+
+    doctor = await create_doctor_user(db_session)
+    assert isinstance(doctor, UserModel)
+    await users_repo.update_phone_verified(db_session, doctor.id)
+
+    resp = await client.post(
+        "/v1/auth/login",
+        json={"email_or_phone": doctor.email, "password": "TestPass123!"},
+    )
+    assert resp.status_code == 200, resp.text
+    refresh_token = resp.json()["refresh_token"]
+
+    token_hash = hash_refresh_token(refresh_token)
+    result = await db_session.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    row = result.scalar_one()
+    row.updated_at = datetime.now(UTC) - timedelta(
+        minutes=cfg.jwt_staff_idle_timeout_minutes + 5
+    )
+    await db_session.flush()
+
+    resp = await client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert resp.status_code == 401, resp.text
+    assert resp.json()["detail"] == "session_idle_timeout"
+
+    await db_session.refresh(row)
+    assert row.revoked_at is not None
+    await _assert_audit(db_session, actor_user_id=doctor.id, action="token_refresh", allowed=False)

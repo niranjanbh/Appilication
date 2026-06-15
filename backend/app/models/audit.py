@@ -40,6 +40,12 @@ class AuditLog(Base):
     resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The role-context the action was taken under (staff-rbac-spec §1): a
+    # doctor-admin signs a prescription *as the RMP*. Nullable — populated by
+    # require_permission; legacy/role-gated paths leave it NULL.
+    role_context: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The resource:action permission exercised, when authorized via require_permission.
+    permission: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     log_metadata: Mapped[dict[str, Any] | None] = mapped_column(

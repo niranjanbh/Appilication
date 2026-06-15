@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 30
+    # Staff plane (doctor/coordinator/admin/super_admin): shorter access-token TTL and an
+    # idle timeout enforced on /refresh (staff-rbac-spec §1).
+    jwt_staff_access_token_expire_minutes: int = 15
+    jwt_staff_idle_timeout_minutes: int = 60
     otp_secret: str = "CHANGEME_minimum_32_chars_yyyyyyyyyyyyyyyy"
     otp_ttl_seconds: int = 300
     otp_resend_cooldown_seconds: int = 60
@@ -43,8 +47,22 @@ class Settings(BaseSettings):
     # Off by default; the website must set NEXT_PUBLIC_BOOKING_OTP_ENABLED to match.
     booking_otp_enabled: bool = False
 
+    # Staff MFA (TOTP) — secret used to encrypt enrolled TOTP secrets at rest.
+    mfa_encryption_key: str = "CHANGEME_minimum_32_chars_zzzzzzzzzzzzzzzz"
+    mfa_challenge_ttl_seconds: int = 300
+    mfa_recovery_codes_count: int = 8
+
+    # Consultation pricing (paise, server-authoritative — never client-supplied).
+    # Spec ranges: 500-700 initial, 400-600 follow-up (rupees). Config-driven so pricing
+    # is never hardcoded at the call site. Full per-vertical pricing lands later.
+    consultation_fee_initial_paise: int = 70000
+    consultation_fee_followup_paise: int = 50000
+
     # Abuse protection — per-IP fixed-window limits on auth endpoints
     rate_limit_enabled: bool = True
+
+    # Ops kill-switch for PHIAuditMiddleware's denial-side audit writes (P33)
+    phi_audit_middleware_enabled: bool = True
 
     # Startup safety — refuse to serve traffic against an outdated schema
     startup_schema_check: bool = True
@@ -72,6 +90,13 @@ class Settings(BaseSettings):
     google_document_ai_secret_name: str = ""
     google_document_ai_processor_id: str = ""  # full resource name: projects/.../processors/...
     google_document_ai_location: str = "asia-south1"
+
+    # Google Sign-In (patient role) — accepted OAuth client IDs (audiences) for
+    # ID-token verification, comma-separated (one per platform: web/iOS/Android).
+    # Activation is gated by the admin toggle in ad_platform_settings; configuring
+    # IDs here does nothing until an admin enables it. No client secret is needed
+    # for ID-token verification, so none is stored.
+    google_oauth_client_ids: str = ""
 
     # Sentry
     sentry_dsn: str = ""
@@ -139,7 +164,11 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",") if o.strip()]
         return ["http://localhost:3000", "http://localhost:5173", "http://localhost:8081"]
 
-    @field_validator("jwt_secret", "otp_secret")
+    @property
+    def google_oauth_client_id_list(self) -> list[str]:
+        return [c.strip() for c in self.google_oauth_client_ids.split(",") if c.strip()]
+
+    @field_validator("jwt_secret", "otp_secret", "mfa_encryption_key")
     @classmethod
     def _require_32_chars(cls, v: str) -> str:
         if len(v) < 32:
@@ -156,6 +185,8 @@ class Settings(BaseSettings):
             problems.append("KYROS_JWT_SECRET is still the placeholder value")
         if self.otp_secret.startswith("CHANGEME"):
             problems.append("KYROS_OTP_SECRET is still the placeholder value")
+        if self.mfa_encryption_key.startswith("CHANGEME"):
+            problems.append("KYROS_MFA_ENCRYPTION_KEY is still the placeholder value")
         if self.debug:
             problems.append("KYROS_DEBUG must be false in production")
         origins = self.cors_allowed_origins

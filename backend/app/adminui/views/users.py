@@ -16,10 +16,15 @@ from app.adminui.deps import (
     require_super_admin_session,
 )
 from app.core.audit import AuditContext, write_audit
-from app.db.enums import ActorRole
+from app.db.enums import ActorRole, OtpResetChannel
 from app.db.session import get_db
 from app.repositories import admin_portal as admin_repo
-from app.services.staff_service import StaffServiceError, reset_staff_password
+from app.repositories import users as users_repo
+from app.services.staff_service import (
+    StaffServiceError,
+    reset_staff_password,
+    revoke_staff_sessions,
+)
 
 _MIN_PASSWORD_LENGTH = 12
 
@@ -100,6 +105,11 @@ async def user_detail(
         "not_a_staff_role": "Patients sign in with OTP — passwords cannot be set for them.",
         "failed": "Could not reset the password.",
     }
+    revoke_errors = {
+        "user_not_found": "User not found.",
+        "not_a_staff_role": "Patients don't have staff sessions to revoke.",
+        "failed": "Could not revoke sessions.",
+    }
     return templates.TemplateResponse(
         request,
         "admin/user_detail.html",
@@ -112,6 +122,8 @@ async def user_detail(
             "reset_error": reset_errors.get(request.query_params.get("reset_error", "")),
             "reset_success": request.query_params.get("reset") == "ok",
             "assign_success": request.query_params.get("assign") == "ok",
+            "revoke_error": revoke_errors.get(request.query_params.get("revoke_error", "")),
+            "revoke_success": request.query_params.get("revoke") == "ok",
         },
     )
 
@@ -188,6 +200,35 @@ async def reset_password(
     )
 
 
+@router.post("/users/{user_id}/revoke-sessions")
+async def revoke_sessions(
+    user_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_fresh_super_admin)],
+) -> RedirectResponse:
+    """Force-kill every live session for a staff account. Identity action: fresh auth required."""
+    ctx = _ctx(request, admin)
+
+    try:
+        await revoke_staff_sessions(db, ctx, user_id=user_id)
+    except StaffServiceError as exc:
+        await write_audit(
+            db, ctx, action="force_session_revoke", resource_type="user",
+            resource_id=user_id, allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        code = exc.code if exc.code in ("user_not_found", "not_a_staff_role") else "failed"
+        return RedirectResponse(
+            url=f"/admin/users/{user_id}?revoke_error={code}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    return RedirectResponse(
+        url=f"/admin/users/{user_id}?revoke=ok", status_code=status.HTTP_302_FOUND
+    )
+
+
 @router.post("/users/{user_id}/assign-coordinator")
 async def assign_coordinator(
     user_id: uuid.UUID,
@@ -260,6 +301,7 @@ async def user_edit_submit(
     admin: Annotated[object, Depends(require_super_admin_session)],
     name: str = Form(...),
     email: str = Form(...),
+    reset_otp_channel: str = Form(default=""),
 ) -> Response:
     ctx = _ctx(request, admin)
     name = name.strip()
@@ -270,17 +312,23 @@ async def user_edit_submit(
         error = "Please enter the user's full name."
     elif "@" not in email or "." not in email.rsplit("@", 1)[-1]:
         error = "That email address does not look valid."
+    elif reset_otp_channel not in ("", "email", "sms"):
+        error = "Invalid reset OTP channel."
 
     updated = None
     if error is None:
         updated = await admin_repo.update_user_contact(db, user_id, name=name, email=email)
         if updated is None:
             error = "Could not update — user not found or email belongs to another account."
+        else:
+            channel = OtpResetChannel(reset_otp_channel) if reset_otp_channel else None
+            await users_repo.update_reset_otp_channel(db, user_id, channel)
 
     await write_audit(
         db, ctx, action="admin_edit_user_contact", resource_type="user",
         resource_id=user_id, allowed=updated is not None,
         reason=None if updated is not None else "not_found_or_email_conflict",
+        log_metadata={"reset_otp_channel": reset_otp_channel or None},
     )
 
     if error is not None:

@@ -149,7 +149,6 @@ async def book_consultation(
             slot_id=body.slot_id,
             condition_category=body.condition_category,
             consultation_type=body.consultation_type.value,
-            consultation_fee_paise=body.consultation_fee_paise,
         )
     except consultation_service.ConsultationError as exc:
         await write_audit(
@@ -158,8 +157,8 @@ async def book_consultation(
         )
         await db.commit()
         code = exc.code
-        if code == "slot_not_available":
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="slot_not_available") from exc
+        if code in ("slot_not_available", "doctor_not_available"):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=code) from exc
         if code == "patient_profile_not_found":
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="patient_profile_not_found") from exc
         if code in ("slot_not_found",):

@@ -22,6 +22,8 @@ async def write(
     ip_address: str | None = None,
     user_agent: str | None = None,
     log_metadata: dict[str, Any] | None = None,
+    role_context: str | None = None,
+    permission: str | None = None,
 ) -> AuditLog:
     entry = AuditLog(
         actor_user_id=actor_user_id,
@@ -34,6 +36,8 @@ async def write(
         ip_address=ip_address,
         user_agent=user_agent,
         log_metadata=log_metadata,
+        role_context=role_context,
+        permission=permission,
     )
     db.add(entry)
     await db.flush()

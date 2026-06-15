@@ -19,6 +19,7 @@ async def create_refresh_token(
     ip_address: str | None = None,
     user_agent: str | None = None,
     parent_id: uuid.UUID | None = None,
+    mfa_verified: bool = False,
 ) -> RefreshToken:
     token = RefreshToken(
         user_id=user_id,
@@ -28,6 +29,7 @@ async def create_refresh_token(
         ip_address=ip_address,
         user_agent=user_agent,
         parent_id=parent_id,
+        mfa_verified=mfa_verified,
     )
     db.add(token)
     await db.flush()
@@ -47,6 +49,22 @@ async def revoke_token(db: AsyncSession, token_id: uuid.UUID) -> None:
         .where(RefreshToken.id == token_id)
         .values(revoked_at=datetime.now(UTC))
     )
+
+
+async def revoke_all_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Revoke every live refresh token for a user. Returns rows updated.
+
+    Used after a password reset so all existing sessions are forced to re-auth.
+    """
+    result = await db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
+    return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
 
 async def revoke_session_family(db: AsyncSession, session_id: uuid.UUID) -> int:

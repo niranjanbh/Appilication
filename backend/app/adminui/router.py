@@ -16,6 +16,7 @@ from app.adminui.views.dashboard import router as dashboard_router
 from app.adminui.views.doctors import router as doctors_router
 from app.adminui.views.dsr import router as dsr_router
 from app.adminui.views.payments import router as payments_router
+from app.adminui.views.settings import router as settings_router
 from app.adminui.views.staff import router as staff_router
 from app.adminui.views.users import router as users_router
 
@@ -35,6 +36,7 @@ admin_router.include_router(content_router)
 admin_router.include_router(dsr_router)
 admin_router.include_router(audit_log_router)
 admin_router.include_router(analytics_router)
+admin_router.include_router(settings_router)
 
 # Static files (CSS, HTMX, Alpine.js) — shared with coordinator portal
 _static_dir = Path(__file__).parent / "static"

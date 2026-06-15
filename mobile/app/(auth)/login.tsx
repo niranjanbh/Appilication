@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
@@ -16,11 +16,12 @@ import {
 } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
-import { loginApi } from '../../lib/api/auth';
+import { getAuthConfigApi, googleLoginApi, loginApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
 import { useAuth } from '../../lib/auth/context';
 import { AuthBackdrop } from '../../components/ui/AuthBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { GoogleSignInButton } from '../../components/ui/GoogleSignInButton';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
@@ -84,7 +85,38 @@ export default function LoginScreen() {
   const { signIn } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const isDark = useThemePreference().colorScheme === 'dark';
+
+  // Whether to show the Google button is admin-controlled (server config).
+  useEffect(() => {
+    let active = true;
+    getAuthConfigApi()
+      .then((cfg) => {
+        if (active) setGoogleEnabled(cfg.google_oauth_enabled);
+      })
+      .catch(() => {
+        // Config unreachable → leave Google hidden; password sign-in still works.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleGoogleToken = async (idToken: string) => {
+    setApiError(null);
+    setGoogleBusy(true);
+    try {
+      const tokens = await googleLoginApi(idToken);
+      await signIn(tokens);
+      router.replace('/');
+    } catch {
+      setApiError('Google sign-in is unavailable right now. Please try again.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -232,6 +264,25 @@ export default function LoginScreen() {
               )}
             </HapticPressable>
 
+            <Link href="/(auth)/forgot-password" style={[styles.signupLink, { color: textSub }]}>
+              Forgot your password?
+            </Link>
+
+            {googleEnabled ? (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: inputBdr }]} />
+                  <Text style={[styles.dividerText, { color: textSub }]}>or</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: inputBdr }]} />
+                </View>
+                <GoogleSignInButton
+                  onToken={handleGoogleToken}
+                  onError={setApiError}
+                  busy={googleBusy}
+                />
+              </>
+            ) : null}
+
             <Link href="/(auth)/signup" style={[styles.signupLink, { color: textSub }]}>
               New to Kyros? Create an account
             </Link>
@@ -332,5 +383,16 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: 'center',
     paddingVertical: spacing[2],
+  },
+
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
   },
 });

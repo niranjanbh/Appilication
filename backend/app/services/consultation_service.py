@@ -5,9 +5,17 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import ConsultationStatus, PaymentStatus
+from app.db.enums import (
+    ConsentType,
+    ConsultationStatus,
+    ConsultationType,
+    DoctorStatus,
+    PaymentStatus,
+)
 from app.models.clinic import Consultation
+from app.models.doctor import Doctor
 from app.models.payment import Payment
+from app.repositories import consent as consent_repo
 from app.repositories import consultations as consultations_repo
 from app.repositories import payments as payments_repo
 from app.services import payment_service
@@ -21,6 +29,34 @@ class ConsultationError(Exception):
         super().__init__(message or code)
 
 
+# Canonical consultation lifecycle (staff-rbac-spec.md §5). Only the open/complete
+# transitions added in P34 consult this table; the longer-standing transitions in
+# confirm_payment/admin_cancel_consultation/cancel_consultation/admin_mark_no_show encode
+# equivalent checks ad-hoc and are consistent with it.
+_ALLOWED_TRANSITIONS: dict[ConsultationStatus, frozenset[ConsultationStatus]] = {
+    ConsultationStatus.SCHEDULED: frozenset(
+        {ConsultationStatus.CONFIRMED, ConsultationStatus.CANCELLED, ConsultationStatus.NO_SHOW}
+    ),
+    ConsultationStatus.CONFIRMED: frozenset(
+        {ConsultationStatus.IN_PROGRESS, ConsultationStatus.CANCELLED, ConsultationStatus.NO_SHOW}
+    ),
+    ConsultationStatus.IN_PROGRESS: frozenset({ConsultationStatus.COMPLETED}),
+    ConsultationStatus.COMPLETED: frozenset(),
+    ConsultationStatus.CANCELLED: frozenset(),
+    ConsultationStatus.NO_SHOW: frozenset(),
+}
+
+
+def _assert_transition(
+    current: ConsultationStatus,
+    new: ConsultationStatus,
+    *,
+    error_code: str = "invalid_transition",
+) -> None:
+    if new not in _ALLOWED_TRANSITIONS.get(current, frozenset()):
+        raise ConsultationError(error_code)
+
+
 async def book_consultation(
     db: AsyncSession,
     *,
@@ -29,17 +65,27 @@ async def book_consultation(
     slot_id: uuid.UUID,
     condition_category: str,
     consultation_type: str,
-    consultation_fee_paise: int,
     notes: dict[str, object] | None = None,
 ) -> tuple[Consultation, Payment]:
     """Lock slot → create consultation → create Razorpay order.
 
+    The fee is resolved server-side from pricing config (never client-supplied).
     Returns (consultation, payment) within the same transaction.
     The caller commits after this returns.
     """
+    from app.services import pricing_service
+
     patient = await consultations_repo.get_patient_record(db, user_id=patient_user_id)
     if patient is None:
         raise ConsultationError("patient_profile_not_found")
+
+    doctor = await db.get(Doctor, doctor_id)
+    if doctor is None or doctor.status != DoctorStatus.ACTIVE:
+        raise ConsultationError("doctor_not_available")
+
+    consultation_fee_paise = pricing_service.get_consultation_fee_paise(
+        ConsultationType(consultation_type)
+    )
 
     # Fetch slot metadata before locking (to get scheduled times)
     from sqlalchemy import select
@@ -329,3 +375,86 @@ async def cancel_consultation(
         raise ConsultationError("consultation_update_failed")
 
     return updated, refund_issued
+
+
+async def open_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> Consultation:
+    """TPG hard gate: doctor "opens" a consult (CONFIRMED -> IN_PROGRESS).
+
+    Verifies the patient's identity-verification status and an active TELEMEDICINE
+    consent before transitioning, per the Telemedicine Practice Guidelines 2020
+    (the RMP bears this obligation). Idempotent if the consult is already IN_PROGRESS
+    (doctor reconnect).
+    """
+    consultation = await consultations_repo.get_consultation_for_doctor(
+        db, consultation_id=consultation_id, doctor_id=doctor_id
+    )
+    if consultation is None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status == ConsultationStatus.IN_PROGRESS:
+        return consultation
+
+    _assert_transition(
+        consultation.status,
+        ConsultationStatus.IN_PROGRESS,
+        error_code="consultation_not_open_eligible",
+    )
+
+    patient_user = await consultations_repo.get_patient_user_for_consultation(
+        db, patient_id=consultation.patient_id
+    )
+    if patient_user is None or not patient_user.phone_verified:
+        raise ConsultationError("identity_not_verified")
+
+    consent = await consent_repo.get_active_consent(
+        db, user_id=patient_user.id, consent_type=ConsentType.TELEMEDICINE
+    )
+    if consent is None:
+        raise ConsultationError("telemedicine_consent_missing")
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation.id,
+        status=ConsultationStatus.IN_PROGRESS,
+        actual_start_at=datetime.now(UTC),
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated
+
+
+async def complete_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> Consultation:
+    """IN_PROGRESS -> COMPLETED, stamping actual_end_at."""
+    consultation = await consultations_repo.get_consultation_for_doctor(
+        db, consultation_id=consultation_id, doctor_id=doctor_id
+    )
+    if consultation is None:
+        raise ConsultationError("consultation_not_found")
+
+    _assert_transition(
+        consultation.status,
+        ConsultationStatus.COMPLETED,
+        error_code="consultation_not_in_progress",
+    )
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation.id,
+        status=ConsultationStatus.COMPLETED,
+        actual_end_at=datetime.now(UTC),
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated
