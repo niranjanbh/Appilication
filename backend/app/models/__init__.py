@@ -26,7 +26,9 @@ from app.models.education import EducationAssignment, EducationContent
 from app.models.identity import RefreshToken, User
 from app.models.notifications import Notification
 from app.models.payment import Payment
+from app.models.pricing import Coupon, PricingConfig
 from app.models.public import BookingInquiry, Lead
+from app.models.sign_off import SignOffRecord
 from app.models.wellness import HealthDatapoint, HealthSyncSession, Reminder, ReminderLog
 
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
     "ConsentRecord",
     "Consultation",
     "Coordinator",
+    "Coupon",
     "Credential",
     "DailyMetric",
     "DataSubjectRequest",
@@ -57,9 +60,11 @@ __all__ = [
     "PreConsultationReport",
     "Prescription",
     "PrescriptionItem",
+    "PricingConfig",
     "RefreshToken",
     "Reminder",
     "ReminderLog",
+    "SignOffRecord",
     "StaffMfa",
     "StaffRole",
     "User",

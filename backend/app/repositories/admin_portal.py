@@ -304,7 +304,8 @@ async def list_payments(
 
 
 async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> Payment | None:
-    return await db.scalar(select(Payment).where(Payment.id == payment_id))
+    result: Payment | None = await db.scalar(select(Payment).where(Payment.id == payment_id))
+    return result
 
 
 # ── Doctor management ──────────────────────────────────────────────────────────
@@ -481,6 +482,41 @@ async def list_all_consultations(
         doctor_user = dr_row.User if dr_row else None
         triples.append((row.Consultation, row.User, doctor_user))  # type: ignore[arg-type]
     return triples, total
+
+
+# ── Doctor credential management ───────────────────────────────────────────────
+
+
+async def get_credentials_for_doctor(
+    db: AsyncSession, *, doctor_id: uuid.UUID
+) -> list[Any]:
+    from app.models.doctor import Credential
+
+    result = await db.execute(
+        select(Credential)
+        .where(Credential.doctor_id == doctor_id)
+        .order_by(Credential.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def verify_credential(
+    db: AsyncSession,
+    *,
+    credential_id: uuid.UUID,
+    admin_user_id: uuid.UUID,
+) -> Any | None:
+    from sqlalchemy import update as sa_update
+
+    from app.models.doctor import Credential
+
+    result = await db.execute(
+        sa_update(Credential)
+        .where(Credential.id == credential_id)
+        .values(verified_by_admin_id=admin_user_id, updated_at=datetime.now(UTC))
+        .returning(Credential)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_consultation_detail(

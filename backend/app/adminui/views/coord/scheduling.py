@@ -106,15 +106,18 @@ async def book_consultation(
     from app.db.enums import ConsultationType
     from app.services import pricing_service
 
+    consultation_fee_paise = await pricing_service.get_consultation_fee_paise(
+        db,
+        condition_category=condition_category,
+        consultation_type=ConsultationType.INITIAL,
+    )
     consultation = await coord_repo.book_consultation_for_patient(
         db,
         coordinator_id=coordinator.id,
         patient_id=patient_id,
         slot_id=slot_id,
         condition_category=condition_category,
-        consultation_fee_paise=pricing_service.get_consultation_fee_paise(
-            ConsultationType.INITIAL
-        ),
+        consultation_fee_paise=consultation_fee_paise,
     )
 
     allowed = consultation is not None

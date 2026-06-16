@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import AvailabilityStatus, ConsultationStatus
@@ -168,6 +168,8 @@ async def create_consultation(
     scheduled_end_at: datetime,
     consultation_fee_paise: int,
     coordinator_id: uuid.UUID | None = None,
+    coupon_id: uuid.UUID | None = None,
+    discount_paise: int = 0,
 ) -> Consultation:
     consultation = Consultation(
         patient_id=patient_id,
@@ -178,6 +180,8 @@ async def create_consultation(
         scheduled_start_at=scheduled_start_at,
         scheduled_end_at=scheduled_end_at,
         consultation_fee_paise=consultation_fee_paise,
+        coupon_id=coupon_id,
+        discount_paise=discount_paise,
         status=ConsultationStatus.SCHEDULED,
     )
     db.add(consultation)
@@ -298,3 +302,23 @@ async def get_pre_consult_report_for_patient(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def has_prior_completed_consultation(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    exclude_consultation_id: uuid.UUID,
+) -> bool:
+    """Return True if the patient has at least one COMPLETED consultation other than
+    the current one. Used to gate refill_allowed on prescriptions."""
+    result = await db.execute(
+        select(
+            exists().where(
+                Consultation.patient_id == patient_id,
+                Consultation.status == ConsultationStatus.COMPLETED,
+                Consultation.id != exclude_consultation_id,
+            )
+        )
+    )
+    return bool(result.scalar())

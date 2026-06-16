@@ -8,11 +8,93 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinic import Prescription, PrescriptionItem
+from app.repositories import drug_catalogue as dc_repo
 from app.repositories import prescriptions as prescriptions_repo
 
 
 class PrescriptionError(Exception):
-    pass
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+# ── Drug schedule rule checker (pure — no async/DB, directly unit-testable) ──
+
+_OWNERSHIP_CODES: frozenset[str] = frozenset(
+    {
+        "consultation_not_found_or_not_owned",
+        "doctor_profile_not_found",
+        "prescription_not_found_or_not_draft",
+        "prescription_not_found_or_not_signable",
+    }
+)
+
+
+def check_drug_entry(
+    *,
+    drug_generic_name: str,
+    entry: Any,  # DrugCatalogue or duck-typed stand-in; None = not in catalogue
+    doctor_verticals: list[str],
+) -> str | None:
+    """Return the resolved schedule string or None (drug not in catalogue → passes through).
+
+    Raises PrescriptionError for blocked drugs:
+      - drug_prohibited            — CDSCO-banned
+      - schedule_x_not_prescribable
+      - schedule_h1_not_prescribable_via_telemedicine
+      - drug_requires_specialist_vertical
+    """
+    if entry is None:
+        return None
+    if entry.is_prohibited:
+        raise PrescriptionError("drug_prohibited")
+    if entry.drug_schedule == "X":
+        raise PrescriptionError("schedule_x_not_prescribable")
+    if entry.drug_schedule == "H1":
+        raise PrescriptionError("schedule_h1_not_prescribable_via_telemedicine")
+    if entry.requires_vertical and entry.requires_vertical not in doctor_verticals:
+        raise PrescriptionError("drug_requires_specialist_vertical")
+    return str(entry.drug_schedule)
+
+
+async def _check_drug_items(
+    db: AsyncSession,
+    items: list[dict[str, Any]],
+    doctor_verticals: list[str],
+) -> None:
+    """Look up each item in the catalogue and enforce schedule rules.
+
+    Mutates each item dict in-place to add 'drug_schedule' for the repo to store.
+    Raises PrescriptionError on the first violation found.
+    """
+    for item in items:
+        entry = await dc_repo.lookup_drug(db, name=item["drug_generic_name"])
+        resolved = check_drug_entry(
+            drug_generic_name=item["drug_generic_name"],
+            entry=entry,
+            doctor_verticals=doctor_verticals,
+        )
+        item["drug_schedule"] = resolved
+
+
+async def _check_refill_gate(
+    db: AsyncSession,
+    items: list[dict[str, Any]],
+    *,
+    patient_id: uuid.UUID,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Raise PrescriptionError if any item requests a refill but the patient has
+    no prior completed consultation (re-evaluation gate)."""
+    if not any(item.get("refill_allowed") for item in items):
+        return
+    from app.repositories import consultations as consultations_repo
+
+    has_prior = await consultations_repo.has_prior_completed_consultation(
+        db, patient_id=patient_id, exclude_consultation_id=consultation_id
+    )
+    if not has_prior:
+        raise PrescriptionError("refill_requires_prior_consultation")
 
 
 async def create_draft(
@@ -50,6 +132,12 @@ async def create_draft(
     if consultation is None:
         raise PrescriptionError("consultation_not_found_or_not_owned")
 
+    # Schedule and refill enforcement
+    await _check_drug_items(db, items, doctor.conditions_treated or [])
+    await _check_refill_gate(
+        db, items, patient_id=consultation.patient_id, consultation_id=consultation_id
+    )
+
     return await prescriptions_repo.create_draft(
         db,
         consultation_id=consultation_id,
@@ -73,12 +161,29 @@ async def update_draft(
     """Edit a draft prescription. Signed prescriptions never reach this path."""
     from sqlalchemy import select
 
+    from app.db.enums import PrescriptionStatus
     from app.models.doctor import Doctor
 
     result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
     doctor = result.scalar_one_or_none()
     if doctor is None:
         raise PrescriptionError("doctor_profile_not_found")
+
+    # Pre-fetch to get patient/consultation context for schedule + refill checks.
+    existing_rx = await prescriptions_repo.get_for_doctor(
+        db, prescription_id=prescription_id, doctor_id=doctor.id
+    )
+    if existing_rx is None or existing_rx.status != PrescriptionStatus.DRAFT:
+        raise PrescriptionError("prescription_not_found_or_not_draft")
+
+    if items is not None:
+        await _check_drug_items(db, items, doctor.conditions_treated or [])
+        await _check_refill_gate(
+            db,
+            items,
+            patient_id=existing_rx.patient_id,
+            consultation_id=existing_rx.consultation_id,
+        )
 
     rx = await prescriptions_repo.update_draft(
         db,

@@ -67,6 +67,7 @@ async def create_draft(
                 instructions=item.get("instructions"),
                 refill_allowed=bool(item.get("refill_allowed", False)),
                 order_index=idx,
+                drug_schedule=item.get("drug_schedule"),
             )
         )
 
@@ -211,6 +212,7 @@ async def update_draft(
                     instructions=item.get("instructions"),
                     refill_allowed=bool(item.get("refill_allowed", False)),
                     order_index=idx,
+                    drug_schedule=item.get("drug_schedule"),
                 )
             )
 

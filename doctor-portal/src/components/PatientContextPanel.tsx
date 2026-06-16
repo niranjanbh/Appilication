@@ -17,10 +17,11 @@ interface LabReport {
   created_at: string;
 }
 
-type Tab = 'notes' | 'prescriptions' | 'labs' | 'wearables';
+type Tab = 'notes' | 'patient-notes' | 'prescriptions' | 'labs' | 'wearables';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'notes', label: 'Notes' },
+  { id: 'patient-notes', label: 'Patient Notes' },
   { id: 'prescriptions', label: 'Prescriptions' },
   { id: 'labs', label: 'Labs' },
   { id: 'wearables', label: 'Wearables' },
@@ -123,6 +124,40 @@ function LabsTab({ patientId }: { patientId: string }) {
   );
 }
 
+interface PatientNoteRead {
+  id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function PatientNotesTab({ patientUserId }: { patientUserId: string }) {
+  const { data: notes = [], isLoading } = useQuery<PatientNoteRead[]>({
+    queryKey: ['doctor-patient-notes', patientUserId],
+    queryFn: () => apiFetch<PatientNoteRead[]>(`/v1/doctor/patients/${patientUserId}/notes`),
+  });
+
+  if (isLoading) return <p className="font-body text-caption text-stone">Loading…</p>;
+  if (notes.length === 0) {
+    return (
+      <p className="font-body text-caption text-stone">
+        No patient notes yet. The patient can add notes from their app before the consultation.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {notes.map(note => (
+        <li key={note.id} className="border border-stone/15 rounded p-2.5">
+          <p className="font-body text-caption text-ink leading-relaxed">{note.body}</p>
+          <p className="font-body text-caption text-stone/60 mt-1">{formatDate(note.created_at)}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function WearablesTab({ patientId }: { patientId: string }) {
   return (
     <div className="bg-sage/10 rounded p-3">
@@ -139,10 +174,11 @@ function WearablesTab({ patientId }: { patientId: string }) {
 interface PatientContextPanelProps {
   consultationId: string;
   patientId: string;
+  patientUserId: string;
   patientName: string;
 }
 
-export function PatientContextPanel({ consultationId, patientId, patientName }: PatientContextPanelProps) {
+export function PatientContextPanel({ consultationId, patientId, patientUserId, patientName }: PatientContextPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('notes');
 
   return (
@@ -173,6 +209,7 @@ export function PatientContextPanel({ consultationId, patientId, patientName }: 
 
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === 'notes' && <NotesTab consultationId={consultationId} />}
+        {activeTab === 'patient-notes' && <PatientNotesTab patientUserId={patientUserId} />}
         {activeTab === 'prescriptions' && <PrescriptionsTab patientId={patientId} />}
         {activeTab === 'labs' && <LabsTab patientId={patientId} />}
         {activeTab === 'wearables' && <WearablesTab patientId={patientId} />}

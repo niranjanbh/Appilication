@@ -66,6 +66,7 @@ async def book_consultation(
     condition_category: str,
     consultation_type: str,
     notes: dict[str, object] | None = None,
+    coupon_code: str | None = None,
 ) -> tuple[Consultation, Payment]:
     """Lock slot → create consultation → create Razorpay order.
 
@@ -73,7 +74,8 @@ async def book_consultation(
     Returns (consultation, payment) within the same transaction.
     The caller commits after this returns.
     """
-    from app.services import pricing_service
+    from app.services import coupon_service, pricing_service
+    from app.services.coupon_service import CouponError
 
     patient = await consultations_repo.get_patient_record(db, user_id=patient_user_id)
     if patient is None:
@@ -83,9 +85,24 @@ async def book_consultation(
     if doctor is None or doctor.status != DoctorStatus.ACTIVE:
         raise ConsultationError("doctor_not_available")
 
-    consultation_fee_paise = pricing_service.get_consultation_fee_paise(
-        ConsultationType(consultation_type)
+    consultation_fee_paise = await pricing_service.get_consultation_fee_paise(
+        db,
+        condition_category=condition_category,
+        consultation_type=ConsultationType(consultation_type),
     )
+
+    coupon_id: uuid.UUID | None = None
+    discount_paise = 0
+    if coupon_code is not None:
+        try:
+            coupon, discount_paise = await coupon_service.validate_and_apply_coupon(
+                db, code=coupon_code, fee_paise=consultation_fee_paise
+            )
+            coupon_id = coupon.id
+        except CouponError as exc:
+            raise ConsultationError(exc.code) from exc
+
+    net_amount_paise = consultation_fee_paise - discount_paise
 
     # Fetch slot metadata before locking (to get scheduled times)
     from sqlalchemy import select
@@ -108,6 +125,8 @@ async def book_consultation(
         scheduled_start_at=slot_ref.slot_start,
         scheduled_end_at=slot_ref.slot_end,
         consultation_fee_paise=consultation_fee_paise,
+        coupon_id=coupon_id,
+        discount_paise=discount_paise,
     )
 
     # Lock and claim the slot — must happen after consultation row exists
@@ -121,7 +140,7 @@ async def book_consultation(
     payment = await payment_service.create_order(
         db,
         user_id=patient_user_id,
-        amount_paise=consultation_fee_paise,
+        amount_paise=net_amount_paise,
         consultation_id=consultation.id,
         notes=notes or {"consultation_id": str(consultation.id)},
     )

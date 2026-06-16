@@ -9,6 +9,7 @@ import { PrescriptionPanel } from './PrescriptionPanel';
 interface ConsultationDetail {
   id: string;
   patient_id: string;
+  patient_user_id: string;
   patient_name: string;
   kyros_patient_id: string;
   condition_category: string;
@@ -137,6 +138,7 @@ export function ConsultationVideoLayout({ consultation }: ConsultationVideoLayou
             <PatientContextPanel
               consultationId={consultation.id}
               patientId={consultation.patient_id}
+              patientUserId={consultation.patient_user_id}
               patientName={consultation.patient_name}
             />
           )}

@@ -1,13 +1,13 @@
 """Admin education content endpoints.
 
-GET  /v1/admin/content                  — paginated content library (all statuses)
-POST /v1/admin/content                  — create draft content
-POST /v1/admin/content/{id}/approve     — doctor approves and publishes
+GET  /v1/admin/content                          — paginated content library (all statuses)
+POST /v1/admin/content                          — create draft content
+POST /v1/admin/content/{id}/submit-for-review   — DRAFT → PENDING_REVIEW (any admin level)
+POST /v1/admin/content/{id}/publish             — APPROVED → PUBLISHED (CONTENT_PUBLISH)
 
-Clinical compliance: every published article must have reviewed_by_doctor_id +
-reviewed_at set. The approve endpoint enforces this by recording the approving
-doctor's ID at publish time — satisfying the NMC TPG requirement that every
-clinical asset traces back to a qualified RMP.
+Clinical compliance: every published article must have reviewed_by_doctor_id + reviewed_at set
+(set at doctor-review time). The NMC TPG requirement that every clinical asset traces back to a
+qualified RMP is enforced in the doctor review step (POST /v1/doctor/content/{id}/review), not here.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from app.core.permissions import Permission
 from app.core.rbac import get_admin_user, permission_audit_fields, require_permission
 from app.db.enums import ActorRole, ContentStatus
 from app.repositories import education as edu_repo
+from app.services import sign_off_service
+from app.services.sign_off_service import SignOffError
 
 router = APIRouter(tags=["admin-content"])
 
@@ -145,59 +147,70 @@ async def create_content(
     return ContentAdminRead.model_validate(content)
 
 
-@router.post("/content/{content_id}/approve", response_model=ContentAdminRead)
-async def approve_content(
+@router.post(
+    "/content/{content_id}/submit-for-review",
+    response_model=ContentAdminRead,
+)
+async def submit_content_for_review(
+    content_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_admin_user)],
+) -> ContentAdminRead:
+    """Transition DRAFT → PENDING_REVIEW. Any admin level can submit."""
+    ctx = _audit_ctx(request, user)
+
+    try:
+        content = await sign_off_service.submit_for_review(db, content_id=content_id)
+    except SignOffError as exc:
+        await write_audit(
+            db, ctx,
+            action="submit_content_for_review",
+            resource_type="education_content",
+            resource_id=content_id,
+            allowed=False,
+            reason=exc.code,
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.code) from exc
+
+    await write_audit(
+        db, ctx,
+        action="submit_content_for_review",
+        resource_type="education_content",
+        resource_id=content.id,
+        allowed=True,
+    )
+    return ContentAdminRead.model_validate(content)
+
+
+@router.post("/content/{content_id}/publish", response_model=ContentAdminRead)
+async def publish_content(
     content_id: uuid.UUID,
     request: Request,
     db: DbSession,
     user: Annotated[object, Depends(require_permission(Permission.CONTENT_PUBLISH))],
 ) -> ContentAdminRead:
-    """Publish content with doctor approval.
-
-    The approving user must be a doctor (super_admin role with a dr_doctors row).
-    Stores reviewed_by_doctor_id for NMC TPG compliance audit trail.
-    """
-    from app.repositories import consultations as consultations_repo
-
+    """Transition APPROVED → PUBLISHED. Requires CONTENT_PUBLISH permission (super_admin)."""
     ctx = _audit_ctx(request, user)
 
-    from app.models.identity import User as UserModel
-
-    assert isinstance(user, UserModel)
-
-    # Resolve doctor row — super_admin approver must have a dr_doctors profile
-    doctor = await consultations_repo.get_doctor_record(db, user_id=user.id)
-    if doctor is None:
+    try:
+        content = await sign_off_service.publish_content(db, content_id=content_id)
+    except SignOffError as exc:
         await write_audit(
             db, ctx,
-            action="approve_education_content",
+            action="publish_education_content",
             resource_type="education_content",
             resource_id=content_id,
             allowed=False,
-            reason="approver_has_no_doctor_profile",
+            reason=exc.code,
         )
         await db.commit()
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="approver_must_be_a_registered_doctor",
-        )
-
-    content = await edu_repo.approve_content(db, content_id=content_id, doctor_id=doctor.id)
-    if content is None:
-        await write_audit(
-            db, ctx,
-            action="approve_education_content",
-            resource_type="education_content",
-            resource_id=content_id,
-            allowed=False,
-            reason="content_not_found",
-        )
-        await db.commit()
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.code) from exc
 
     await write_audit(
         db, ctx,
-        action="approve_education_content",
+        action="publish_education_content",
         resource_type="education_content",
         resource_id=content.id,
         allowed=True,

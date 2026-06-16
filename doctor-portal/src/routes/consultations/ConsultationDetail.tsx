@@ -8,6 +8,7 @@ import { PreConsultReport } from '../../components/PreConsultReport';
 interface ConsultationDetail {
   id: string;
   patient_id: string;
+  patient_user_id: string;
   patient_name: string;
   kyros_patient_id: string;
   condition_category: string;

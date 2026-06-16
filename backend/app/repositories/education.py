@@ -116,6 +116,7 @@ async def approve_content(
     content_id: uuid.UUID,
     doctor_id: uuid.UUID,
 ) -> EducationContent | None:
+    """Legacy: sets reviewed_by + status=PUBLISHED in one step. Use doctor_approve_content instead."""
     result = await db.execute(
         update(EducationContent)
         .where(EducationContent.id == content_id)
@@ -145,6 +146,108 @@ async def update_content_status(
         .returning(EducationContent)
     )
     return result.scalar_one_or_none()
+
+
+# ── State-machine transitions (P37) ──────────────────────────────────────────
+# All functions filter on both id AND current status. Returning None means either
+# "not found" or "wrong state" — caller raises the same 409/404 in both cases.
+
+
+async def submit_for_review(
+    db: AsyncSession,
+    *,
+    content_id: uuid.UUID,
+) -> EducationContent | None:
+    """DRAFT → PENDING_REVIEW."""
+    result = await db.execute(
+        update(EducationContent)
+        .where(
+            EducationContent.id == content_id,
+            EducationContent.status == ContentStatus.DRAFT,
+        )
+        .values(status=ContentStatus.PENDING_REVIEW, updated_at=datetime.now(UTC))
+        .returning(EducationContent)
+    )
+    return result.scalar_one_or_none()
+
+
+async def doctor_approve_content(
+    db: AsyncSession,
+    *,
+    content_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> EducationContent | None:
+    """PENDING_REVIEW → APPROVED, stamps reviewed_by_doctor_id for NMC audit trail."""
+    result = await db.execute(
+        update(EducationContent)
+        .where(
+            EducationContent.id == content_id,
+            EducationContent.status == ContentStatus.PENDING_REVIEW,
+        )
+        .values(
+            reviewed_by_doctor_id=doctor_id,
+            reviewed_at=datetime.now(UTC),
+            status=ContentStatus.APPROVED,
+            updated_at=datetime.now(UTC),
+        )
+        .returning(EducationContent)
+    )
+    return result.scalar_one_or_none()
+
+
+async def reject_content(
+    db: AsyncSession,
+    *,
+    content_id: uuid.UUID,
+) -> EducationContent | None:
+    """PENDING_REVIEW → REJECTED."""
+    result = await db.execute(
+        update(EducationContent)
+        .where(
+            EducationContent.id == content_id,
+            EducationContent.status == ContentStatus.PENDING_REVIEW,
+        )
+        .values(status=ContentStatus.REJECTED, updated_at=datetime.now(UTC))
+        .returning(EducationContent)
+    )
+    return result.scalar_one_or_none()
+
+
+async def publish_content(
+    db: AsyncSession,
+    *,
+    content_id: uuid.UUID,
+) -> EducationContent | None:
+    """APPROVED → PUBLISHED."""
+    result = await db.execute(
+        update(EducationContent)
+        .where(
+            EducationContent.id == content_id,
+            EducationContent.status == ContentStatus.APPROVED,
+        )
+        .values(status=ContentStatus.PUBLISHED, updated_at=datetime.now(UTC))
+        .returning(EducationContent)
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_pending_review(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[EducationContent], int]:
+    """List all PENDING_REVIEW content, oldest first (review queue order)."""
+    base = select(EducationContent).where(
+        EducationContent.status == ContentStatus.PENDING_REVIEW
+    )
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
+    total: int = count_result.scalar_one()
+    offset = (page - 1) * page_size
+    items_result = await db.execute(
+        base.order_by(EducationContent.created_at.asc()).offset(offset).limit(page_size)
+    )
+    return list(items_result.scalars().all()), total
 
 
 # ── Assignments ───────────────────────────────────────────────────────────────

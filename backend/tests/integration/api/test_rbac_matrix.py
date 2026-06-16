@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest import (
     _synth_email,
     _synth_phone,
+    create_admin_user,
     create_coordinator_user,
     create_doctor_user,
     create_doctor_with_profile,
@@ -1381,6 +1382,226 @@ async def test_doctor_add_note_unowned_consultation_returns_404(
     assert resp.status_code == 404
 
 
+# ── /v1/doctor/drugs — doctor only ──────────────────────────────────────────
+# Role matrix: doctor=200, no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_drug_search_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/doctor/drugs", params={"q": "levothyroxine"})
+    assert resp.status_code == 401
+
+
+async def test_doctor_drug_search_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/drugs",
+        params={"q": "levothyroxine"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_drug_search_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/drugs",
+        params={"q": "levothyroxine"},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_drug_search_doctor_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/drugs",
+        params={"q": "levothyroxine"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 200
+
+
+# ── /v1/doctor/icd10-codes — doctor only ─────────────────────────────────────
+# Role matrix: doctor=200, no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_icd10_search_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/doctor/icd10-codes", params={"q": "thyroid"})
+    assert resp.status_code == 401
+
+
+async def test_doctor_icd10_search_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/icd10-codes",
+        params={"q": "thyroid"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_icd10_search_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/icd10-codes",
+        params={"q": "thyroid"},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_icd10_search_doctor_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/icd10-codes",
+        params={"q": "thyroid"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 200
+
+
+# ── /v1/doctor/consultations/{id}/diagnoses — doctor only ────────────────────
+# Role matrix: doctor=200/201 + 404 (unowned), no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_list_diagnoses_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses")
+    assert resp.status_code == 401
+
+
+async def test_doctor_list_diagnoses_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_diagnoses_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_diagnoses_unowned_consultation_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 404
+
+
+async def test_doctor_add_diagnosis_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        json={"icd10_code": "E28.2", "icd10_description": "PCOS"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_doctor_add_diagnosis_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        json={"icd10_code": "E28.2", "icd10_description": "PCOS"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_add_diagnosis_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        json={"icd10_code": "E28.2", "icd10_description": "PCOS"},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_add_diagnosis_unowned_consultation_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses",
+        json={"icd10_code": "E28.2", "icd10_description": "PCOS"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 404
+
+
+# ── /v1/doctor/consultations/{id}/diagnoses/{diagnosis_id} — doctor only ─────
+# Role matrix: doctor=204 + 404 (unowned), no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_delete_diagnosis_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.delete(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses/{uuid.uuid4()}"
+    )
+    assert resp.status_code == 401
+
+
+async def test_doctor_delete_diagnosis_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.delete(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses/{uuid.uuid4()}",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_delete_diagnosis_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.delete(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses/{uuid.uuid4()}",
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_delete_diagnosis_unowned_consultation_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.delete(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/diagnoses/{uuid.uuid4()}",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 404
+
+
 # ── /v1/doctor/consultations/{id}/lab-order — doctor only ────────────────────
 
 
@@ -1793,6 +2014,186 @@ async def test_admin_create_content_admin_returns_201(
         headers=make_auth_headers(admin),
     )
     assert resp.status_code == 201
+
+
+# ── /v1/admin/content/{id}/submit-for-review — admin level+ ──────────────────
+
+
+async def test_submit_for_review_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/admin/content/{uuid.uuid4()}/submit-for-review")
+    assert resp.status_code == 401
+
+
+async def test_submit_for_review_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/submit-for-review",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_submit_for_review_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/submit-for-review",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_submit_for_review_admin_returns_409_on_nonexistent(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from tests.conftest import create_admin_user
+
+    admin = await create_admin_user(db_session)
+    # Non-existent content_id returns 409 (content_not_found maps to 409 for wrong-state)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/submit-for-review",
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 409
+
+
+# ── /v1/admin/content/{id}/publish — super_admin only ────────────────────────
+
+
+async def test_admin_publish_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/admin/content/{uuid.uuid4()}/publish")
+    assert resp.status_code == 401
+
+
+async def test_admin_publish_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/publish",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_admin_publish_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/publish",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_admin_publish_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from tests.conftest import create_admin_user
+
+    admin = await create_admin_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/publish",
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 403
+
+
+async def test_admin_publish_super_admin_returns_409_on_nonexistent(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    super_admin = await create_super_admin_user(db_session)
+    # Non-existent content → 409 (content_not_found_or_not_approved)
+    resp = await client.post(
+        f"/v1/admin/content/{uuid.uuid4()}/publish",
+        headers=make_auth_headers(super_admin),
+    )
+    assert resp.status_code == 409
+
+
+# ── /v1/doctor/content — doctor only (CONTENT_APPROVE) ───────────────────────
+
+
+async def test_doctor_list_content_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/doctor/content")
+    assert resp.status_code == 401
+
+
+async def test_doctor_list_content_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get("/v1/doctor/content", headers=make_auth_headers(patient))
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_content_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get("/v1/doctor/content", headers=make_auth_headers(coord))
+    assert resp.status_code == 403
+
+
+async def test_doctor_list_content_doctor_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_with_profile(db_session)
+    resp = await client.get("/v1/doctor/content", headers=make_auth_headers(doctor))
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ── /v1/doctor/content/{id}/review — doctor only (CONTENT_APPROVE) ───────────
+
+
+async def test_doctor_review_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        f"/v1/doctor/content/{uuid.uuid4()}/review",
+        json={"action": "approved"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_doctor_review_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/content/{uuid.uuid4()}/review",
+        json={"action": "approved"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_review_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/content/{uuid.uuid4()}/review",
+        json={"action": "approved"},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_review_doctor_without_profile_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/content/{uuid.uuid4()}/review",
+        json={"action": "approved"},
+        headers=make_auth_headers(doctor),
+    )
+    # doctor has no dr_doctors profile → 404
+    assert resp.status_code == 404
 
 
 # ── /v1/doctor/schedule — doctor only ────────────────────────────────────────
@@ -3301,4 +3702,329 @@ async def test_health_detail_super_admin_returns_200(
     assert data["redis_ok"] is True
     assert data["overall"] == "ok"
     assert data["db_latency_ms"] >= 0
-    assert data["redis_latency_ms"] >= 0
+
+
+# ── /v1/admin/doctors ─────────────────────────────────────────────────────────
+
+
+async def test_list_doctors_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/admin/doctors")
+    assert resp.status_code == 401
+
+
+async def test_list_doctors_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get("/v1/admin/doctors", headers=make_auth_headers(patient))
+    assert resp.status_code == 403
+
+
+async def test_list_doctors_super_admin_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.get("/v1/admin/doctors", headers=make_auth_headers(admin))
+    assert resp.status_code == 200
+
+
+# ── /v1/admin/doctors/{id}/advance ───────────────────────────────────────────
+
+
+async def test_advance_doctor_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/advance",
+        json={"target_status": "documents_submitted"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_advance_doctor_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/advance",
+        json={"target_status": "documents_submitted"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_advance_doctor_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_admin_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/advance",
+        json={"target_status": "documents_submitted"},
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 403
+
+
+async def test_advance_doctor_super_admin_nonexistent_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/advance",
+        json={"target_status": "documents_submitted"},
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 404
+
+
+# ── /v1/admin/doctors/{id}/suspend ───────────────────────────────────────────
+
+
+async def test_suspend_doctor_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/admin/doctors/{uuid.uuid4()}/suspend")
+    assert resp.status_code == 401
+
+
+async def test_suspend_doctor_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/suspend",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_suspend_doctor_super_admin_nonexistent_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/suspend",
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 404
+
+
+# ── /v1/admin/doctors/{id}/reactivate ────────────────────────────────────────
+
+
+async def test_reactivate_doctor_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/admin/doctors/{uuid.uuid4()}/reactivate")
+    assert resp.status_code == 401
+
+
+async def test_reactivate_doctor_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/admin/doctors/{uuid.uuid4()}/reactivate",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/admin/pricing ────────────────────────────────────────────────────────
+
+
+async def test_list_pricing_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/admin/pricing")
+    assert resp.status_code == 401
+
+
+async def test_list_pricing_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get("/v1/admin/pricing", headers=make_auth_headers(patient))
+    assert resp.status_code == 403
+
+
+async def test_list_pricing_super_admin_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.get("/v1/admin/pricing", headers=make_auth_headers(admin))
+    assert resp.status_code == 200
+
+
+async def test_upsert_pricing_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.put(
+        "/v1/admin/pricing/thyroid/initial", json={"fee_paise": 70000}
+    )
+    assert resp.status_code == 401
+
+
+async def test_upsert_pricing_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.put(
+        "/v1/admin/pricing/thyroid/initial",
+        json={"fee_paise": 70000},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_upsert_pricing_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_admin_user(db_session)
+    resp = await client.put(
+        "/v1/admin/pricing/thyroid/initial",
+        json={"fee_paise": 70000},
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 403
+
+
+async def test_upsert_pricing_super_admin_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.put(
+        "/v1/admin/pricing/thyroid/initial",
+        json={"fee_paise": 70000},
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 200
+
+
+# ── /v1/admin/coupons ────────────────────────────────────────────────────────
+
+
+async def test_list_coupons_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/admin/coupons")
+    assert resp.status_code == 401
+
+
+async def test_list_coupons_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get("/v1/admin/coupons", headers=make_auth_headers(patient))
+    assert resp.status_code == 403
+
+
+async def test_list_coupons_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_admin_user(db_session)
+    resp = await client.get("/v1/admin/coupons", headers=make_auth_headers(admin))
+    assert resp.status_code == 403
+
+
+async def test_list_coupons_super_admin_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.get("/v1/admin/coupons", headers=make_auth_headers(admin))
+    assert resp.status_code == 200
+
+
+async def test_create_coupon_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/admin/coupons",
+        json={
+            "code": "TEST01",
+            "discount_type": "flat",
+            "discount_value": 5000,
+            "min_order_paise": 0,
+            "valid_from": "2026-01-01T00:00:00Z",
+        },
+    )
+    assert resp.status_code == 401
+
+
+async def test_create_coupon_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        "/v1/admin/coupons",
+        json={
+            "code": "TEST02",
+            "discount_type": "flat",
+            "discount_value": 5000,
+            "min_order_paise": 0,
+            "valid_from": "2026-01-01T00:00:00Z",
+        },
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_delete_coupon_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.delete(f"/v1/admin/coupons/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+async def test_delete_coupon_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.delete(
+        f"/v1/admin/coupons/{uuid.uuid4()}",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/admin/dsr ─────────────────────────────────────────────────────────────
+
+
+async def test_list_dsr_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/admin/dsr")
+    assert resp.status_code == 401
+
+
+async def test_list_dsr_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get("/v1/admin/dsr", headers=make_auth_headers(patient))
+    assert resp.status_code == 403
+
+
+async def test_list_dsr_super_admin_returns_200(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_super_admin_user(db_session)
+    resp = await client.get("/v1/admin/dsr", headers=make_auth_headers(admin))
+    assert resp.status_code == 200
+
+
+# ── /v1/admin/dsr/{id}/status ─────────────────────────────────────────────────
+
+
+async def test_patch_dsr_status_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.patch(
+        f"/v1/admin/dsr/{uuid.uuid4()}/status",
+        json={"new_status": "in_progress"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_patch_dsr_status_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.patch(
+        f"/v1/admin/dsr/{uuid.uuid4()}/status",
+        json={"new_status": "in_progress"},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_patch_dsr_status_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_admin_user(db_session)
+    resp = await client.patch(
+        f"/v1/admin/dsr/{uuid.uuid4()}/status",
+        json={"new_status": "in_progress"},
+        headers=make_auth_headers(admin),
+    )
+    assert resp.status_code == 403

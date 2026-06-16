@@ -7,10 +7,12 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { useAuth } from '../../lib/auth/context';
+import { listPatientNotesApi } from '../../lib/api/patient-notes';
 import {
   borderRadius, colors, fontFamily, fontSize, spacing, tintSoft, withAlpha, type TintName,
 } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
+import { useQuery } from '@tanstack/react-query';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = spacing[6];
@@ -33,7 +35,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'consult',   label: 'Consult',   icon: 'medkit-outline',        tint: 'blue',   route: '/(tabs)/consultations' },
   { id: 'reminders', label: 'Reminders', icon: 'alarm-outline',         tint: 'amber',  route: '/(tabs)/reminders' },
   { id: 'reports',   label: 'Reports',   icon: 'flask-outline',         tint: 'green',  route: '/(tabs)/reports' },
-  { id: 'profile',   label: 'Profile',   icon: 'person-circle-outline', tint: 'violet', route: '/(tabs)/profile' },
+  { id: 'notes',     label: 'My Notes',  icon: 'create-outline',        tint: 'violet', route: '/notes' },
 ];
 
 function getGreeting(): string {
@@ -84,10 +86,26 @@ function QuickBtn({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
+function formatRelativeShort(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+}
+
 export default function HomeScreen() {
   const { state } = useAuth();
   const router    = useRouter();
   const t         = useTheme();
+
+  const { data: notesData } = useQuery({
+    queryKey: ['patient-notes'],
+    queryFn: () => listPatientNotesApi(1, 3),
+    staleTime: 60_000,
+  });
+
+  const recentNotes = notesData?.items ?? [];
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
   const initials  = state.status === 'authenticated' ? getInitials(state.user.name) : 'K';
@@ -162,6 +180,39 @@ export default function HomeScreen() {
             ))}
           </View>
         </View>
+
+        {/* ── Health notes preview ────────────────────────────────────────── */}
+        <GlassCard>
+          <View style={styles.notesHeader}>
+            <Text style={[styles.sectionTitle, { color: t.text }]}>Health Notes</Text>
+            <HapticPressable
+              onPress={() => router.push('/notes' as never)}
+              accessibilityLabel="View all notes"
+            >
+              <Text style={[styles.notesLink, { color: t.primary }]}>
+                {recentNotes.length === 0 ? 'Add note' : 'See all'}
+              </Text>
+            </HapticPressable>
+          </View>
+          {recentNotes.length === 0 ? (
+            <Text style={[styles.notesEmpty, { color: t.textSub }]}>
+              Write down questions or reminders for your next consultation.
+            </Text>
+          ) : (
+            <View style={styles.notesList}>
+              {recentNotes.map(note => (
+                <View key={note.id} style={[styles.notePreviewRow, { borderColor: t.isDark ? withAlpha(colors.white, 0.08) : withAlpha(colors.stone, 0.20) }]}>
+                  <Text style={[styles.notePreviewBody, { color: t.text }]} numberOfLines={2}>
+                    {note.body}
+                  </Text>
+                  <Text style={[styles.notePreviewTime, { color: t.textSub }]}>
+                    {formatRelativeShort(note.created_at)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </GlassCard>
 
         {/* ── Care plan card ──────────────────────────────────────────────── */}
         <GlassCard>
@@ -295,6 +346,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+
+  notesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[3] },
+  notesLink: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+  notesEmpty: { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 20 },
+  notesList: { gap: spacing[2] },
+  notePreviewRow: { borderTopWidth: 1, paddingTop: spacing[2], gap: spacing[1] },
+  notePreviewBody: { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 20 },
+  notePreviewTime: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 
   carePlanInner: { gap: spacing[2] },
   eyebrow: {

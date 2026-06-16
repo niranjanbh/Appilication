@@ -27,6 +27,7 @@ class ConsultationBookRequest(BaseModel):
     consultation_type: ConsultationType = ConsultationType.INITIAL
     # Fee is resolved server-side from pricing config — never supplied by the client.
     idempotency_key: uuid.UUID | None = Field(default=None)
+    coupon_code: str | None = None
 
 
 class RazorpayOrderInfo(BaseModel):
@@ -46,6 +47,7 @@ class ConsultationBookResponse(BaseModel):
     condition_category: str
     consultation_type: ConsultationType
     consultation_fee_paise: int
+    discount_paise: int = 0
     payment: RazorpayOrderInfo
 
 

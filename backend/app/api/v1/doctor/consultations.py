@@ -13,13 +13,15 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import get_doctor_user
 from app.db.enums import ActorRole, NoteType
+from app.repositories import diagnoses as diagnoses_repo
 from app.repositories import doctor_portal as dr_repo
+from app.services import diagnosis_service
 
 
 def _ev(v: object) -> str:
@@ -35,6 +37,7 @@ router = APIRouter(tags=["doctor-consultations"])
 class DoctorConsultationSummary(BaseModel):
     id: uuid.UUID
     patient_id: uuid.UUID
+    patient_user_id: uuid.UUID
     patient_name: str
     kyros_patient_id: str
     condition_category: str
@@ -48,6 +51,7 @@ class DoctorConsultationSummary(BaseModel):
 class DoctorConsultationDetail(BaseModel):
     id: uuid.UUID
     patient_id: uuid.UUID
+    patient_user_id: uuid.UUID
     patient_name: str
     kyros_patient_id: str
     condition_category: str
@@ -136,6 +140,7 @@ async def list_my_consultations(
             DoctorConsultationSummary(
                 id=c.id,
                 patient_id=pt.id,
+                patient_user_id=u.id,
                 patient_name=u.name,
                 kyros_patient_id=pt.kyros_patient_id,
                 condition_category=c.condition_category,
@@ -197,6 +202,7 @@ async def get_my_consultation(
     return DoctorConsultationDetail(
         id=c.id,
         patient_id=pt.id,
+        patient_user_id=u.id,
         patient_name=u.name,
         kyros_patient_id=pt.kyros_patient_id,
         condition_category=c.condition_category,
@@ -279,12 +285,30 @@ async def complete_consultation(
 
 class NoteCreate(BaseModel):
     note_type: NoteType = NoteType.CLINICAL
-    content: str = Field(..., min_length=1, max_length=10_000)
+    content: str | None = Field(default=None, max_length=10_000)
+    subjective: str | None = Field(default=None, max_length=10_000)
+    objective: str | None = Field(default=None, max_length=10_000)
+    assessment: str | None = Field(default=None, max_length=10_000)
+    plan: str | None = Field(default=None, max_length=10_000)
+
+    @model_validator(mode="after")
+    def _require_some_content(self) -> NoteCreate:
+        fields = (self.content, self.subjective, self.objective, self.assessment, self.plan)
+        if not any(f and f.strip() for f in fields):
+            raise ValueError(
+                "at least one of content, subjective, objective, assessment, plan is required"
+            )
+        return self
 
 
 class NoteRead(BaseModel):
     id: uuid.UUID
     note_type: str
+    content: str | None
+    subjective: str | None
+    objective: str | None
+    assessment: str | None
+    plan: str | None
     version: int
     created_at: datetime
 
@@ -334,6 +358,11 @@ async def list_consultation_notes(
         NoteRead(
             id=n.id,
             note_type=n.note_type.value,
+            content=n.content,
+            subjective=n.subjective,
+            objective=n.objective,
+            assessment=n.assessment,
+            plan=n.plan,
             version=n.version,
             created_at=n.created_at,
         )
@@ -388,6 +417,10 @@ async def add_consultation_note(
         patient_id=pt.id,
         note_type=body.note_type,
         content=body.content,
+        subjective=body.subjective,
+        objective=body.objective,
+        assessment=body.assessment,
+        plan=body.plan,
     )
     await write_audit(
         db, ctx, action="create_doctor_note",
@@ -396,8 +429,215 @@ async def add_consultation_note(
     return NoteRead(
         id=note.id,
         note_type=note.note_type.value,
+        content=note.content,
+        subjective=note.subjective,
+        objective=note.objective,
+        assessment=note.assessment,
+        plan=note.plan,
         version=note.version,
         created_at=note.created_at,
+    )
+
+
+# ── Diagnoses (ICD-10) ───────────────────────────────────────────────────────
+
+
+class DiagnosisCreate(BaseModel):
+    icd10_code: str = Field(..., pattern=r"^[A-Z][0-9]{2}(\.[0-9A-Z]{1,4})?$", max_length=10)
+    icd10_description: str = Field(..., min_length=1, max_length=255)
+    is_primary: bool = False
+
+
+class DiagnosisRead(BaseModel):
+    id: uuid.UUID
+    icd10_code: str
+    icd10_description: str
+    is_primary: bool
+    created_at: datetime
+
+
+@router.get(
+    "/consultations/{consultation_id}/diagnoses",
+    response_model=list[DiagnosisRead],
+)
+async def list_consultation_diagnoses(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> list[DiagnosisRead]:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dr_row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
+    if dr_row is None:
+        await write_audit(
+            db, ctx, action="list_diagnoses",
+            resource_type="diagnosis", allowed=False, reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    doctor, _ = dr_row
+    row = await dr_repo.get_doctor_consultation_detail(
+        db, doctor_id=doctor.id, consultation_id=consultation_id
+    )
+    if row is None:
+        await write_audit(
+            db, ctx, action="list_diagnoses",
+            resource_type="diagnosis", resource_id=consultation_id,
+            allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    diagnoses = await diagnoses_repo.list_diagnoses_for_consultation(
+        db, doctor_id=doctor.id, consultation_id=consultation_id
+    )
+    await write_audit(
+        db, ctx, action="list_diagnoses",
+        resource_type="diagnosis", resource_id=consultation_id, allowed=True,
+    )
+    return [
+        DiagnosisRead(
+            id=d.id,
+            icd10_code=d.icd10_code,
+            icd10_description=d.icd10_description,
+            is_primary=d.is_primary,
+            created_at=d.created_at,
+        )
+        for d in diagnoses
+    ]
+
+
+@router.post(
+    "/consultations/{consultation_id}/diagnoses",
+    response_model=DiagnosisRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_consultation_diagnosis(
+    consultation_id: uuid.UUID,
+    body: DiagnosisCreate,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> DiagnosisRead:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dr_row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
+    if dr_row is None:
+        await write_audit(
+            db, ctx, action="create_diagnosis",
+            resource_type="diagnosis", allowed=False, reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    doctor, _ = dr_row
+    row = await dr_repo.get_doctor_consultation_detail(
+        db, doctor_id=doctor.id, consultation_id=consultation_id
+    )
+    if row is None:
+        await write_audit(
+            db, ctx, action="create_diagnosis",
+            resource_type="diagnosis", resource_id=consultation_id,
+            allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    c, pt, _ = row
+    try:
+        diagnosis = await diagnosis_service.add_diagnosis(
+            db,
+            doctor_id=doctor.id,
+            consultation_id=c.id,
+            patient_id=pt.id,
+            icd10_code=body.icd10_code,
+            icd10_description=body.icd10_description,
+            is_primary=body.is_primary,
+        )
+    except diagnosis_service.DiagnosisError as exc:
+        await write_audit(
+            db, ctx, action="create_diagnosis",
+            resource_type="diagnosis", resource_id=consultation_id,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.code) from exc
+
+    await write_audit(
+        db, ctx, action="create_diagnosis",
+        resource_type="diagnosis", resource_id=diagnosis.id, allowed=True,
+    )
+    return DiagnosisRead(
+        id=diagnosis.id,
+        icd10_code=diagnosis.icd10_code,
+        icd10_description=diagnosis.icd10_description,
+        is_primary=diagnosis.is_primary,
+        created_at=diagnosis.created_at,
+    )
+
+
+@router.delete(
+    "/consultations/{consultation_id}/diagnoses/{diagnosis_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def delete_consultation_diagnosis(
+    consultation_id: uuid.UUID,
+    diagnosis_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> None:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dr_row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
+    if dr_row is None:
+        await write_audit(
+            db, ctx, action="delete_diagnosis",
+            resource_type="diagnosis", allowed=False, reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    doctor, _ = dr_row
+    row = await dr_repo.get_doctor_consultation_detail(
+        db, doctor_id=doctor.id, consultation_id=consultation_id
+    )
+    if row is None:
+        await write_audit(
+            db, ctx, action="delete_diagnosis",
+            resource_type="diagnosis", resource_id=consultation_id,
+            allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    deleted = await diagnoses_repo.delete_diagnosis(
+        db, doctor_id=doctor.id, consultation_id=consultation_id, diagnosis_id=diagnosis_id
+    )
+    if not deleted:
+        await write_audit(
+            db, ctx, action="delete_diagnosis",
+            resource_type="diagnosis", resource_id=diagnosis_id,
+            allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    await write_audit(
+        db, ctx, action="delete_diagnosis",
+        resource_type="diagnosis", resource_id=diagnosis_id, allowed=True,
     )
 
 

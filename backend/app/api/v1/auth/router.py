@@ -307,7 +307,7 @@ async def mfa_confirm(
     return MfaConfirmResponse(recovery_codes=recovery_codes)
 
 
-@router.post("/mfa/disable", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/mfa/disable", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def mfa_disable(
     body: MfaDisableRequest,
     request: Request,

@@ -306,7 +306,11 @@ async def append_doctor_note(
     consultation_id: uuid.UUID,
     patient_id: uuid.UUID,
     note_type: NoteType,
-    content: str,
+    content: str | None = None,
+    subjective: str | None = None,
+    objective: str | None = None,
+    assessment: str | None = None,
+    plan: str | None = None,
 ) -> DoctorNote:
     """Append a versioned note; supersedes the previous current note of the same type.
 
@@ -332,6 +336,10 @@ async def append_doctor_note(
         patient_id=patient_id,
         note_type=note_type,
         content=content,
+        subjective=subjective,
+        objective=objective,
+        assessment=assessment,
+        plan=plan,
         version=next_version,
     )
     db.add(new_note)

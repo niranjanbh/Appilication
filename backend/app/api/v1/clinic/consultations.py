@@ -141,6 +141,11 @@ async def book_consultation(
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
 
+    coupon_error_codes = frozenset({
+        "coupon_not_found", "coupon_inactive", "coupon_expired",
+        "coupon_exhausted", "coupon_not_yet_valid", "order_below_minimum",
+    })
+
     try:
         consultation, payment = await consultation_service.book_consultation(
             db,
@@ -149,6 +154,7 @@ async def book_consultation(
             slot_id=body.slot_id,
             condition_category=body.condition_category,
             consultation_type=body.consultation_type.value,
+            coupon_code=body.coupon_code,
         )
     except consultation_service.ConsultationError as exc:
         await write_audit(
@@ -160,8 +166,10 @@ async def book_consultation(
         if code in ("slot_not_available", "doctor_not_available"):
             raise HTTPException(status.HTTP_409_CONFLICT, detail=code) from exc
         if code == "patient_profile_not_found":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="patient_profile_not_found") from exc
-        if code in ("slot_not_found",):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=code) from exc
+        if code in coupon_error_codes:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=code) from exc
+        if code == "slot_not_found":
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=code) from exc
 
@@ -178,6 +186,7 @@ async def book_consultation(
         condition_category=consultation.condition_category,
         consultation_type=consultation.consultation_type,
         consultation_fee_paise=consultation.consultation_fee_paise,
+        discount_paise=consultation.discount_paise,
         payment=RazorpayOrderInfo(
             payment_id=payment.id,
             razorpay_order_id=payment.razorpay_order_id,

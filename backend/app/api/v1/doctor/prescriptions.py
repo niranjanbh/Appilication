@@ -24,8 +24,16 @@ from app.core.permissions import Permission
 from app.core.rbac import get_doctor_user, permission_audit_fields, require_permission
 from app.db.enums import ActorRole
 from app.services import prescription_service
+from app.services.prescription_service import _OWNERSHIP_CODES
 
 router = APIRouter(tags=["doctor-prescriptions"])
+
+
+def _prescription_http_error(exc: prescription_service.PrescriptionError) -> HTTPException:
+    """Map PrescriptionError codes to 404 (ownership) or 422 (schedule/rule violation)."""
+    if exc.code in _OWNERSHIP_CODES:
+        return HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.code)
 
 
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
@@ -90,6 +98,7 @@ class PrescriptionItemRead(BaseModel):
     instructions: str | None
     refill_allowed: bool
     order_index: int
+    drug_schedule: str | None
 
 
 class PrescriptionRead(BaseModel):
@@ -151,6 +160,7 @@ async def _read_with_items(db: DbSession, rx: Prescription) -> PrescriptionRead:
                 instructions=item.instructions,
                 refill_allowed=item.refill_allowed,
                 order_index=item.order_index,
+                drug_schedule=item.drug_schedule,
             )
             for item in items
         ],
@@ -237,17 +247,16 @@ async def create_prescription(
             items=[item.model_dump() for item in body.items],
         )
     except prescription_service.PrescriptionError as exc:
-        reason = str(exc)
         await write_audit(
             db, ctx,
             action="create_prescription",
             resource_type="consultation",
             resource_id=consultation_id,
             allowed=False,
-            reason=reason,
+            reason=exc.code,
         )
         await db.commit()
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+        raise _prescription_http_error(exc) from exc
 
     await write_audit(
         db, ctx,
@@ -298,10 +307,10 @@ async def update_prescription(
             resource_type="prescription",
             resource_id=prescription_id,
             allowed=False,
-            reason=str(exc),
+            reason=exc.code,
         )
         await db.commit()
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+        raise _prescription_http_error(exc) from exc
 
     await write_audit(
         db, ctx,

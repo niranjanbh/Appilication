@@ -149,12 +149,25 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         nullable=True,
     )
     consultation_fee_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    coupon_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ad_coupons.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    discount_paise: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     payment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("kc_payments.id", ondelete="SET NULL"),
         nullable=True,
     )
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Set by the erasure task — holds the row for NMC statutory retention period.
+    legal_hold_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    legal_hold_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class DoctorNote(Base, UUIDMixin, TimestampMixin):
@@ -182,13 +195,70 @@ class DoctorNote(Base, UUIDMixin, TimestampMixin):
         SAEnum(NoteType, name="note_type", create_type=False, values_callable=enum_values),
         nullable=False,
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subjective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assessment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("kc_doctor_notes.id", ondelete="RESTRICT"),
         nullable=True,
     )
+
+
+class PatientNote(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
+    """Freeform health notes written by a patient, readable by their doctors."""
+
+    __tablename__ = "kc_patient_notes"
+
+    patient_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class Icd10Code(Base):
+    """Curated ICD-10 reference catalog for doctor-portal autocomplete.
+
+    Not a hard FK target for kc_diagnoses — a search aid, not the source of truth.
+    """
+
+    __tablename__ = "kc_icd10_codes"
+
+    code: Mapped[str] = mapped_column(String(10), primary_key=True)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+
+
+class Diagnosis(Base, UUIDMixin, TimestampMixin):
+    """A per-consultation ICD-10 diagnosis recorded by the doctor."""
+
+    __tablename__ = "kc_diagnoses"
+
+    consultation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_consultations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    doctor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("dr_doctors.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_patients.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    icd10_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    icd10_description: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
 
 class LabReport(Base, UUIDMixin, TimestampMixin):
@@ -330,6 +400,11 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     )
     diagnosis_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     general_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set by the erasure task — holds the row for NMC statutory retention period.
+    legal_hold_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    legal_hold_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
@@ -356,3 +431,23 @@ class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
         Boolean, nullable=False, server_default=text("false")
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    drug_schedule: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+
+class DrugCatalogue(Base):
+    """Curated drug catalogue for schedule enforcement and autocomplete.
+
+    NOT exhaustive — a curated reference aid. drug_generic_name is lowercase INN.
+    drug_schedule: 'NONE' | 'H' | 'H1' | 'X' (India Drugs & Cosmetics Act).
+    is_prohibited: True for CDSCO-banned drugs.
+    requires_vertical: if set, doctor must treat that condition category.
+    """
+
+    __tablename__ = "kc_drug_catalogue"
+
+    drug_generic_name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    drug_schedule: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_prohibited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    requires_vertical: Mapped[str | None] = mapped_column(String(50), nullable=True)

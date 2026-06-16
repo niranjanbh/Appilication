@@ -260,6 +260,9 @@ class ContentType(enum.StrEnum):
 
 class ContentStatus(enum.StrEnum):
     DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
     PUBLISHED = "published"
     ARCHIVED = "archived"
 

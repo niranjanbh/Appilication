@@ -1,5 +1,5 @@
 {% extends "admin/base.html" %}
-{% block title %}Platform Settings — Kyros Admin{% endblock %}
+{% block title %}Platform Settings — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
   <h2>Platform Settings</h2>
@@ -24,7 +24,7 @@
     </p>
     <form method="POST" action="/admin/settings/google-oauth">
       <label style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" name="enabled" value="1" {{ 'checked' if google_enabled else '' }} {{ 'disabled' if readonly else '' }}>
+        <input type="checkbox" name="enabled" value="1" {{'checked' if google_enabled else '' }} {{ 'disabled' if readonly else '' }}>
         Google Sign-In is {{ 'enabled' if google_enabled else 'disabled' }}
       </label>
       {% if not readonly %}

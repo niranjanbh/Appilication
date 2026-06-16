@@ -139,40 +139,81 @@ async def _process_data_export_async(
             await _run(owned_db, owns_session=True)
 
 
+# NMC Medical Records statutory retention: 7 years from erasure date.
+# This is a legal constant — changing it requires explicit code review and
+# documented regulatory justification.
+_NMC_RETENTION_YEARS = 7
+
+
 async def _process_erasure_async(
     user_id: uuid.UUID,
     request_id: uuid.UUID,
     db: object = None,
 ) -> None:
-    """Soft-delete the user (30-day grace period) and mark the DSR completed.
+    """Erasure with legal hold — DPDP §12 + TPG 2020 medical records retention.
+
+    Steps:
+      1. Anonymize PII on the user row (name, email, phone, dob, city/state, tokens, etc.)
+      2. Revoke all refresh tokens.
+      3. Apply 7-year NMC legal hold to all consultations + prescriptions.
+      4. Mark DSR COMPLETED with audit notes.
+
+    Idempotent: rows already erased (erased_at IS NOT NULL) or already on hold
+    (legal_hold_until IS NOT NULL) are skipped. Safe to run twice.
 
     In tests, pass db=<AsyncSession> to reuse the test transaction.
     """
+    from datetime import timedelta
+
     from sqlalchemy import update
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.db.enums import DataSubjectRequestStatus
     from app.models.identity import RefreshToken, User
     from app.repositories import consent as consent_repo
+    from app.repositories.erasure import anonymize_pii_values, apply_legal_hold
 
     async def _run(session: AsyncSession, owns_session: bool) -> None:
         now = datetime.now(UTC)
+
+        # 1. Anonymize PII — only if not already erased (idempotency guard)
+        pii_values = anonymize_pii_values(user_id, now)
         await session.execute(
             update(User)
-            .where(User.id == user_id, User.deleted_at.is_(None))
-            .values(deleted_at=now, updated_at=now)
+            .where(User.id == user_id, User.erased_at.is_(None))
+            .values(**pii_values)
         )
+
+        # 2. Revoke all active tokens
         await session.execute(
             update(RefreshToken)
             .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
             .values(revoked_at=now)
         )
+
+        # 3. Apply NMC 7-year legal hold to all clinical records
+        hold_until = now + timedelta(days=_NMC_RETENTION_YEARS * 365)
+        consult_count, rx_count = await apply_legal_hold(
+            session,
+            user_id=user_id,
+            hold_until=hold_until,
+            reason="nmc_7yr_retention",
+        )
+
+        # 4. Mark DSR completed with audit notes (no PHI in notes)
+        notes = json.dumps({
+            "anonymized": True,
+            "consults_held": consult_count,
+            "rx_held": rx_count,
+            "hold_until": hold_until.isoformat(),
+            "retention_reason": "nmc_7yr_retention",
+        })
         await consent_repo.update_data_subject_request_status(
             session,
             request_id=request_id,
             status=DataSubjectRequestStatus.COMPLETED,
             completed_at=now,
-            notes="Soft-deleted. Hard delete scheduled after 30-day grace period.",
+            notes=notes,
         )
         if owns_session:
             await session.commit()

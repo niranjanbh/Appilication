@@ -63,6 +63,10 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         nullable=False,
         server_default=text('\'{"push": true, "whatsapp": true, "email": true}\'::jsonb'),
     )
+    # Set when DPDP erasure task anonymizes PII. Separate from deleted_at (soft-delete).
+    erased_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"
