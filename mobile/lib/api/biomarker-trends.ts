@@ -35,6 +35,24 @@ export interface BiomarkerTrendResponse {
 
 // ── API call ──────────────────────────────────────────────────────────────────
 
+export interface BiomarkerSummary {
+  name: string;
+  latest_value: number | null;
+  unit: string;
+  ref_low: number | null;
+  ref_high: number | null;
+  flag: 'normal' | 'high' | 'low' | null;
+  report_date: string | null;
+}
+
+export interface BiomarkerListResponse {
+  biomarkers: BiomarkerSummary[];
+}
+
+export async function listBiomarkers(): Promise<BiomarkerListResponse> {
+  return apiFetch<BiomarkerListResponse>('/v1/clinic/patient/biomarkers');
+}
+
 export async function getBiomarkerTrend(
   biomarkerName: string,
   range: BiomarkerRange = 'all',

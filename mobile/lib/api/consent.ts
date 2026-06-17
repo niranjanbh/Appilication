@@ -18,3 +18,16 @@ export function captureConsentApi(payload: CaptureConsentPayload): Promise<Conse
 export function listConsentsApi(): Promise<{ consents: ConsentRecord[] }> {
   return apiFetch('/v1/users/me/consents');
 }
+
+export interface DataSubjectResponse {
+  message: string;
+  request_id: string;
+}
+
+export function requestDataExportApi(): Promise<DataSubjectResponse> {
+  return apiFetch('/v1/users/me/data-export', { method: 'POST' });
+}
+
+export function requestErasureApi(): Promise<DataSubjectResponse> {
+  return apiFetch('/v1/users/me/delete', { method: 'POST' });
+}

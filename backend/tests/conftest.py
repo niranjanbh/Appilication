@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 
 import pytest
@@ -41,21 +40,24 @@ fake = Faker("en_IN")
 
 
 @pytest.fixture(scope="session")
-def event_loop():
-    """Single event loop shared by all tests and fixtures in the session.
-
-    Prevents asyncpg "Future attached to a different loop" errors that occur
-    when function-scoped async fixtures (db_session) and test functions use
-    separate per-test event loops.
-    """
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+async def _dispose_shared_pool() -> AsyncGenerator[None, None]:
+    """Dispose the module-level connection pool after each test.
+
+    PHIAuditMiddleware uses AsyncSessionLocal (the shared pooled engine) to
+    write denial audit rows. Each test runs on its own event loop (pytest-asyncio
+    function scope). If the pool holds a connection from test N's loop, test N+1
+    gets a "Future attached to a different loop" error when the middleware fires.
+    Disposing after every test ensures the next test always gets a fresh
+    connection bound to its own loop.
+    """
+    yield
+    from app.db.session import engine as _shared_engine
+    await _shared_engine.dispose()
 
 
 @pytest.fixture

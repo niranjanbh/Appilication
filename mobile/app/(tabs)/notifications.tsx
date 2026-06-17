@@ -104,6 +104,7 @@ export default function NotificationsScreen() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['notifications', page],
     queryFn: () => listNotificationsApi({ page, page_size: 30 }),
+    staleTime: 60_000,
   });
 
   const markReadMutation = useMutation({

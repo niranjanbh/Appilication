@@ -32,7 +32,12 @@ def test_audience_for_role_staff() -> None:
 
 
 def _decode(token: str) -> dict[str, object]:
-    return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    return jwt.decode(
+        token,
+        settings.jwt_secret,
+        algorithms=[settings.jwt_algorithm],
+        options={"verify_aud": False},
+    )
 
 
 def test_create_access_token_patient_claims() -> None:

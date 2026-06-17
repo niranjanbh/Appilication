@@ -19,7 +19,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM, UUID
 
 revision: str = "0022"
 down_revision: str | None = "0021"
@@ -44,8 +44,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "role",
-            # Reuse the existing user_role enum type (created in 0001).
-            sa.Enum(name="user_role", create_type=False),
+            ENUM(name="user_role", create_type=False),
             nullable=False,
         ),
         sa.Column(

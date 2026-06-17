@@ -234,6 +234,36 @@ async def get_biomarker_trend_for_patient(
     return [dict(row) for row in rows]
 
 
+async def list_distinct_biomarkers_for_patient(
+    db: AsyncSession,
+    *,
+    patient_user_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """Return distinct biomarker names with their latest value, unit, flag, and trend."""
+    sql = text("""
+        SELECT DISTINCT ON (lower(b->>'name'))
+            b->>'name'      AS name,
+            b->>'value'     AS latest_value,
+            b->>'unit'      AS unit,
+            b->>'ref_low'   AS ref_low,
+            b->>'ref_high'  AS ref_high,
+            b->>'flag'      AS flag,
+            COALESCE(r.report_date, r.created_at::date) AS report_date
+        FROM kc_lab_reports r
+        JOIN kc_patients p ON p.id = r.patient_id
+        CROSS JOIN LATERAL jsonb_array_elements(r.parsed_json->'biomarkers') AS b
+        WHERE p.user_id = :patient_user_id
+          AND r.status IN ('ocr_complete', 'patient_review_needed')
+          AND r.parsed_json IS NOT NULL
+          AND b->>'name' IS NOT NULL
+        ORDER BY lower(b->>'name'),
+                 COALESCE(r.report_date, r.created_at::date) DESC,
+                 r.created_at DESC
+    """)
+    result = await db.execute(sql, {"patient_user_id": str(patient_user_id)})
+    return [dict(row) for row in result.mappings().all()]
+
+
 async def list_pending_ocr(
     db: AsyncSession,
     *,

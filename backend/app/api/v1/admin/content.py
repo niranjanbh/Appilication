@@ -22,8 +22,8 @@ from pydantic import BaseModel
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
 from app.core.permissions import Permission
-from app.core.rbac import get_admin_user, permission_audit_fields, require_permission
-from app.db.enums import ActorRole, ContentStatus
+from app.core.rbac import enforce_role, get_admin_user, permission_audit_fields, require_permission
+from app.db.enums import ActorRole, ContentStatus, UserRole
 from app.repositories import education as edu_repo
 from app.services import sign_off_service
 from app.services.sign_off_service import SignOffError
@@ -155,7 +155,7 @@ async def submit_content_for_review(
     content_id: uuid.UUID,
     request: Request,
     db: DbSession,
-    user: Annotated[object, Depends(get_admin_user)],
+    user: Annotated[object, Depends(enforce_role(UserRole.ADMIN, UserRole.SUPER_ADMIN))],
 ) -> ContentAdminRead:
     """Transition DRAFT → PENDING_REVIEW. Any admin level can submit."""
     ctx = _audit_ctx(request, user)

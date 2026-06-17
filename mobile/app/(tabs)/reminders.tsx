@@ -430,7 +430,7 @@ export default function RemindersScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: listRemindersApi });
+  const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: listRemindersApi, staleTime: 60_000 });
 
   const createMutation = useMutation({
     mutationFn: createReminderApi,

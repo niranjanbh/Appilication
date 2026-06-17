@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   FlatList,
   RefreshControl,
@@ -96,32 +96,19 @@ function ReportCard({
 export default function ReportsScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const [reports, setReports] = useState<LabReport[]>([]);
-  const [total, setTotal]     = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await listLabReports(1, 50);
-      setReports(data.items);
-      setTotal(data.total);
-      setError(null);
-    } catch {
-      setError('Could not load lab reports. Please try again.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['lab-reports'],
+    queryFn: () => listLabReports(1, 50),
+    staleTime: 60_000,
+  });
 
-  useEffect(() => { void load(); }, [load]);
+  const reports = data?.items ?? [];
+  const total   = data?.total ?? 0;
 
   const bg = isDark ? colors.midnight : colors.skyMist;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: bg }]}>
         <AmbientBackground />
@@ -154,8 +141,8 @@ export default function ReportsScreen() {
         ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void load(true)}
+            refreshing={isFetching && !isLoading}
+            onRefresh={refetch}
             tintColor={colors.electricBlue}
           />
         }
@@ -174,7 +161,7 @@ export default function ReportsScreen() {
             <EmptyState
               icon="cloud-offline-outline"
               tint="amber"
-              title={error}
+              title="Could not load lab reports. Please try again."
               body="Pull down to refresh, or try again in a moment. Your reports are safe."
             />
           ) : (

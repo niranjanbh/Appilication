@@ -224,7 +224,9 @@ async def test_access_token_contains_user_id_and_role(
     resp = await client.post("/v1/auth/verify-otp", json={"phone": phone, "otp": otp})
     access_token = resp.json()["access_token"]
 
-    payload = jwt.decode(access_token, cfg.jwt_secret, algorithms=[cfg.jwt_algorithm])
+    payload = jwt.decode(
+        access_token, cfg.jwt_secret, algorithms=[cfg.jwt_algorithm], options={"verify_aud": False}
+    )
     assert "sub" in payload
     assert payload["role"] == "patient"
     assert payload["v"] == 1

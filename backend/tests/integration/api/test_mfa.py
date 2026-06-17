@@ -94,7 +94,10 @@ async def test_mfa_verify_with_totp_returns_staff_audience_tokens(
     assert tokens["expires_in"] == settings.jwt_staff_access_token_expire_minutes * 60
 
     payload = jwt.decode(
-        tokens["access_token"], settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+        tokens["access_token"],
+        settings.jwt_secret,
+        algorithms=[settings.jwt_algorithm],
+        options={"verify_aud": False},
     )
     assert payload["aud"] == "staff"
     assert payload["mfa"] is True
@@ -305,7 +308,10 @@ async def test_staff_login_without_mfa_uses_staff_access_token_ttl(
     assert tokens["expires_in"] == settings.jwt_staff_access_token_expire_minutes * 60
 
     payload = jwt.decode(
-        tokens["access_token"], settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+        tokens["access_token"],
+        settings.jwt_secret,
+        algorithms=[settings.jwt_algorithm],
+        options={"verify_aud": False},
     )
     assert payload["aud"] == "staff"
     assert payload["mfa"] is False

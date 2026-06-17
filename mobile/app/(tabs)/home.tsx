@@ -146,8 +146,7 @@ export default function HomeScreen() {
             {/* glass sheen along the top edge */}
             <LinearGradient
               colors={[withAlpha(colors.white, 0.14), withAlpha(colors.white, 0)]}
-              style={styles.heroSheen}
-              pointerEvents="none"
+              style={[styles.heroSheen, { pointerEvents: 'none' }]}
             />
             <View style={styles.heroRow}>
               <View style={styles.heroIconWrap}>

@@ -1,199 +1,217 @@
-# Kyros Claude Code Setup
+# Kyros Clinic Platform
 
-This bundle contains the Claude Code configuration for the Kyros Platform repository:
+India-first, doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid,
+weight management, skin/hair, men's intimate health, TRT, and longevity support.
+
+## Surfaces
+
+| Surface | Stack | Path |
+|---|---|---|
+| Patient mobile app | Expo 51 + React Native + React Native Web | `mobile/` |
+| Patient web portal | React Native Web (same codebase as mobile) | `mobile/` |
+| Doctor portal | Vite 5 + React 18 + TypeScript | `doctor-portal/` |
+| Marketing website | Next.js 14 App Router + MDX | `website/` |
+| Super admin portal | Jinja2 + HTMX + Alpine.js (served by FastAPI) | `backend/app/adminui/` |
+| Coordinator portal | Jinja2 + HTMX + Alpine.js (served by FastAPI) | `backend/app/adminui/` |
+
+All six surfaces are served by a single FastAPI modular monolith — one codebase, one
+Postgres database, one deploy unit.
+
+## Tech stack
+
+**Backend:** FastAPI 0.115 · SQLAlchemy 2.0 async + asyncpg · Pydantic v2 · Alembic ·
+Celery 5.4 · Postgres 16 · Redis 7 · argon2id · structlog · ruff · mypy strict ·
+pytest + pytest-asyncio
+
+**Frontend:** Next.js 14 App Router (website) · Vite 5 + React 18 + TypeScript (doctor
+portal) · Expo 51 + React Native + React Native Web (mobile + web patient portal)
+
+**Infra (local dev):** Docker Compose · MailHog (email preview)
+
+**Infra (production):** AWS `ap-south-1` · EC2 → ECS Fargate · RDS Postgres · ElastiCache
+Redis · S3 + KMS · Secrets Manager · CloudWatch · Sentry
+
+**Integrations:** Razorpay (payments) · 100ms (video) · Google Document AI (OCR) · MSG91
+(SMS OTP) · AiSensy (WhatsApp) · SendGrid (email) · Expo Push (mobile push) · ElevenLabs
+(content voice) · ABDM/ABHA sandbox
+
+## Repository layout
 
 ```
-kyros-claude-code-setup/
-├── CLAUDE.md                              # Project memory, loaded every session
-├── Makefile                               # All dev workflows
-├── .claude/
-│   ├── settings.json                      # Tool permissions (deny-first, healthcare-appropriate)
-│   └── rules/                             # Path-scoped rules
-│       ├── security.md                    # Always-on: the 20 non-negotiables
-│       ├── backend.md                     # paths: backend/**/*.py
-│       ├── migrations.md                  # paths: backend/alembic/**
-│       ├── admin-ui.md                    # paths: backend/app/adminui/**
-│       ├── tests.md                       # paths: backend/tests/**
-│       ├── frontend-mobile.md             # paths: mobile/**/*.{ts,tsx}
-│       ├── frontend-doctor.md             # paths: doctor-portal/**/*.{ts,tsx}
-│       └── frontend-website.md            # paths: website/**/*.{ts,tsx,mdx}
-└── scripts/
-    └── extract-build-prompts.py           # P1–P30 splitter
+.
+├── backend/                    # FastAPI monolith
+│   ├── app/
+│   │   ├── api/v1/             # REST endpoints (auth, clinic, doctor, admin, …)
+│   │   ├── adminui/            # Jinja2 + HTMX super-admin + coordinator portals
+│   │   ├── core/               # Config, security, RBAC, permissions, audit
+│   │   ├── db/                 # Engine, session, enums
+│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── repositories/       # SQL layer (one file per aggregate)
+│   │   ├── services/           # Business logic
+│   │   ├── tasks/              # Celery tasks
+│   │   └── observability/      # Structlog middleware, Sentry, metrics
+│   ├── alembic/versions/       # 30 sequential migrations (0001–0030)
+│   └── tests/                  # 827 integration + unit tests
+├── doctor-portal/              # Vite + React 18 + TypeScript doctor SPA
+├── mobile/                     # Expo 51 React Native (iOS / Android / Web)
+├── website/                    # Next.js 14 marketing site + MDX content
+├── design-tokens/              # Shared design tokens consumed by all frontends
+├── infra/                      # CloudFormation templates, ECS task definitions
+├── scripts/                    # Dev utilities, seed scripts, prompt extractor
+├── docs/
+│   ├── strategy/               # build-spec.md, backend-strategy.md, frontend-strategy.md
+│   ├── build-prompts/          # P01–P39 per-prompt work units
+│   ├── postman/                # Postman collection + environment
+│   ├── runbook-prod.md
+│   ├── dpdp-breach-runbook.md
+│   └── dpia-v1.md
+├── .claude/                    # Claude Code configuration (see .claude/SETUP.md)
+├── CLAUDE.md                   # Project memory loaded every Claude Code session
+├── Makefile                    # All dev workflows
+├── docker-compose.yml          # Local dev services
+└── docker-compose.test.yml     # Isolated test services (separate ports + DB)
 ```
 
-## Installation
+## Local development
 
-From the root of your `kyros-platform` repository:
+### Prerequisites
+
+- Docker Desktop (or Docker Engine + Compose v2)
+- Node.js 20+ and pnpm 9+ (for frontends)
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/) (for backend work outside Docker)
+
+### First-time setup
 
 ```bash
-# 1. Copy CLAUDE.md and Makefile to repo root
-cp /path/to/kyros-claude-code-setup/CLAUDE.md ./
-cp /path/to/kyros-claude-code-setup/Makefile ./
-
-# 2. Copy the .claude/ directory
-cp -r /path/to/kyros-claude-code-setup/.claude ./
-
-# 3. Copy the extraction script
-mkdir -p scripts
-cp /path/to/kyros-claude-code-setup/scripts/extract-build-prompts.py scripts/
-chmod +x scripts/extract-build-prompts.py
-
-# 4. Place your strategy docs
-mkdir -p docs/strategy
-cp /path/to/kyros-build-spec.md            docs/strategy/build-spec.md
-cp /path/to/backend-strategy.md      docs/strategy/backend-strategy.md
-cp /path/to/kyros-app-design-strategy.md   docs/strategy/frontend-strategy.md
-
-# 5. Place your existing skills (if you haven't already)
-mkdir -p .claude/skills
-# Copy each skill directory (the SKILL.md plus any companion files) under .claude/skills/
-
-# 6. Extract the P1–P30 prompt queue into per-prompt files
-python scripts/extract-build-prompts.py
-
-# 7. Gitignore personal notes
-echo "CLAUDE.local.md" >> .gitignore
-echo ".claude/settings.local.json" >> .gitignore
+git clone <repo-url> kyros-platform
+cd kyros-platform
+make bootstrap
 ```
 
-You're ready. Start Claude Code in the repo root:
+`make bootstrap` builds the backend image, starts Postgres + Redis, runs all migrations,
+seeds development fixtures, then starts all services.
+
+| Service | URL |
+|---|---|
+| Backend API | http://localhost:8000 |
+| OpenAPI docs | http://localhost:8000/docs |
+| Super admin portal | http://localhost:8000/admin |
+| Coordinator portal | http://localhost:8000/coord |
+| MailHog (email preview) | http://localhost:8025 |
+| Postgres | localhost:5433 |
+| Redis | localhost:6380 |
+
+### Daily workflow
 
 ```bash
-claude
+make dev          # start all services (foreground; Ctrl-C stops)
+make up           # start all services (detached)
+make logs         # tail backend + worker logs
+make down         # stop services (keeps volumes)
 ```
 
-Verify the setup loaded correctly:
-
-```
-> /memory
-```
-
-You should see `CLAUDE.md` and every `.claude/rules/*.md` listed, with the path-scoped rules
-showing their `paths:` patterns.
-
-## How the pieces fit together
-
-**Loaded every session, automatically by Claude Code:**
-- `CLAUDE.md` — project memory, the slim orienting document.
-- `.claude/rules/security.md` — no `paths:` frontmatter, so it's always on.
-
-**Loaded automatically when Claude Code reads matching files:**
-- `.claude/rules/backend.md` triggers when editing `backend/**/*.py`.
-- `.claude/rules/migrations.md` triggers when editing `backend/alembic/**`.
-- `.claude/rules/admin-ui.md` triggers when editing `backend/app/adminui/**`.
-- `.claude/rules/tests.md` triggers when editing `backend/tests/**`.
-- `.claude/rules/frontend-mobile.md` triggers in `mobile/**/*.{ts,tsx}`.
-- `.claude/rules/frontend-doctor.md` triggers in `doctor-portal/**/*.{ts,tsx}`.
-- `.claude/rules/frontend-website.md` triggers in `website/**/*.{ts,tsx,mdx}`.
-
-**Triggered by Claude Code's skill system when relevant to the prompt:**
-- `.claude/skills/kyros-business-strategy/SKILL.md`
-- `.claude/skills/kyros-clinical-compliance/SKILL.md`
-- `.claude/skills/kyros-design-system/SKILL.md`
-- `.claude/skills/kyros-customer-acquisition/SKILL.md`
-- `.claude/skills/kyros-b2b2c-partnerships/SKILL.md`
-
-**Read on demand by Claude when working on a specific task:**
-- `docs/strategy/build-spec.md` — full technical spec
-- `docs/strategy/backend-strategy.md` — backend implementation blueprint
-- `docs/strategy/frontend-strategy.md` — frontend implementation blueprint
-- `docs/build-prompts/P{nn}-*.md` — the prompt for the current work unit
-
-This layering is intentional. Naïvely loading all three 200KB strategy docs every session
-would burn ~100K tokens before any code is written. The slim `CLAUDE.md` + path-scoped rules
-keep startup context under ~5K tokens; the heavy docs load only when their sections are
-actually needed.
-
-## Executing build prompts
-
-For each Pn (P1 through P30):
+### Database
 
 ```bash
-claude
+make migrate                   # apply pending Alembic migrations
+make migrate-create            # autogenerate a new migration
+make migrate-history           # show migration history
+make migrate-current           # show current DB head
+make migrate-downgrade-one     # roll back one migration (dev only)
+make seed                      # re-run seed fixtures (idempotent)
+make create-super-admin        # create a super-admin user interactively
+make shell-db                  # psql into the dev database
+make shell-redis               # redis-cli into dev Redis
 ```
 
-In the session:
+Migrations **never run automatically on app boot**. A schema-version mismatch causes the
+app to refuse to start with a clear error.
 
-```
-> Execute P1. Read docs/build-prompts/P01-repository-scaffolding.md, then plan
-> before editing.
-```
-
-Claude Code will:
-1. Read the prompt file (which has required reading + acceptance criteria).
-2. Open the relevant strategy doc sections.
-3. Present a plan and wait for approval.
-4. Implement, run `make test`, summarize.
-
-When done, exit (`/exit`) and start a fresh session for P2. **One prompt = one session.** This
-keeps context clean, reduces cross-prompt contamination, and produces consistent output.
-
-## Refreshing prompts after a spec edit
-
-If `docs/strategy/build-spec.md` is edited (e.g., a prompt's acceptance criteria is clarified),
-re-run the extractor:
+### Testing
 
 ```bash
-make extract-prompts
-# or directly:
-python scripts/extract-build-prompts.py
+make test              # run full pytest suite in isolated compose-test environment
+make test-watch        # run tests in watch mode
+make test-rbac         # run RBAC matrix tests only
+make test-migrations   # run migration up/down round-trip tests
 ```
 
-This overwrites `docs/build-prompts/*.md` with the current content. Existing files for prompts
-that no longer exist are left alone (review with `git status`).
+Tests run against a separate Postgres instance (port 55432) and Redis (port 56379) defined
+in `docker-compose.test.yml`. The suite currently has **827 tests** (integration + unit).
 
-## Adding new rules
-
-When a code review catches something Claude Code should have known, decide:
-
-- Does this apply to **every file**? → add to `.claude/rules/security.md` (if security/PHI) or
-  `CLAUDE.md` (if architectural).
-- Does this apply to **a specific subtree**? → add to the corresponding path-scoped rule.
-- Is this a **multi-step procedure** Claude only needs sometimes? → make it a Claude skill in
-  `.claude/skills/`.
-
-Keep each rule file under ~100 lines. When a rule file grows beyond that, split it (e.g.,
-`backend.md` could split into `backend-routing.md`, `backend-data.md`, `backend-tasks.md`).
-
-## Customizing settings.json for your workflow
-
-The shipped `settings.json` uses `defaultMode: "default"` (Claude asks before unmatched
-operations). After working for a day, you'll notice which commands you keep approving — move
-those to the `allow` list in `.claude/settings.local.json` (gitignored, personal).
-
-To run Claude Code in a more permissive mode for trusted operations:
+### Code quality
 
 ```bash
-# Auto-approve edits and writes; still ask for shell
-claude --permission-mode acceptEdits
+make ruff          # lint backend Python
+make ruff-fix      # auto-fix lint issues
+make mypy          # type-check backend (strict mode)
+make lint          # ruff + mypy together
+make format        # ruff format
 ```
 
-To run in plan-only mode (read but don't write):
+### Frontend
 
 ```bash
-claude --permission-mode plan
+make install-frontend      # pnpm install for all workspaces
+make typecheck-frontend    # tsc --noEmit for website + doctor-portal + mobile
+make build-frontend        # production build for all frontends
+make openapi               # regenerate openapi.json from live server
+make generate-clients      # regenerate TypeScript API clients from openapi.json
 ```
 
-## Troubleshooting
+### Utilities
 
-**"My CLAUDE.md isn't being followed."**
-Run `/memory` to verify it's loaded. Make instructions more specific. Look for conflicts with
-other CLAUDE.md or rules files.
+```bash
+make shell-backend     # bash inside the backend container
+make shell-worker      # bash inside the Celery worker container
+make postman           # export Postman collection to docs/postman/
+make extract-prompts   # split build-spec.md into per-prompt files in docs/build-prompts/
+```
 
-**"Path-scoped rules aren't loading."**
-Rules with `paths:` frontmatter load when Claude reads a matching file. Ask Claude to read a
-backend file, then check `/memory` — `backend.md` should appear.
+## API structure
 
-**"Context window is filling up."**
-Don't do multiple prompts per session. End with `/exit`, start fresh for the next prompt. If
-mid-prompt context pressure appears, finish the current concern, then `/compact`.
+All REST endpoints live under `/v1/`:
 
-**"The extraction script fails."**
-Check that `docs/strategy/build-spec.md` exists. The script expects `#### Pn — Title` headers
-(with em-dash, en-dash, or hyphen) at lines 1479–1953 of the build spec. If the spec format
-changes substantially, update `PROMPT_HEADER_RE` in the script.
+| Prefix | Audience | Description |
+|---|---|---|
+| `/v1/public/` | Unauthenticated | Doctors list, booking inquiry, health content |
+| `/v1/auth/` | All | Login, OTP, refresh, password reset, Google OAuth |
+| `/v1/users/` | All authenticated | Profile, notifications, DPDP erasure request |
+| `/v1/wellness/` | Patient | Reminders, health sync |
+| `/v1/payments/` | Patient | Razorpay checkout, invoice download |
+| `/v1/clinic/patient/` | Patient | Consultations, lab reports, prescriptions, ABHA, notes |
+| `/v1/doctor/` | Doctor | Patient panel, notes, lab orders, prescriptions, video |
+| `/v1/admin/` | Super admin / Admin | Content, analytics, DSR, pricing, coupons, doctors |
+| `/v1/webhooks/` | Internal | Razorpay webhook (HMAC-verified) |
+| `/admin/` | Super admin (session cookie) | Jinja2 super-admin portal |
+| `/coord/` | Coordinator (session cookie) | Jinja2 coordinator portal |
 
----
+## Architecture rules
 
-See `docs/strategy/backend-strategy.md` and `docs/strategy/frontend-strategy.md` for the full
-implementation blueprints.
+- **Modular monolith.** One FastAPI app serves all six surfaces. Domain separation by table
+  prefix (`wn_`, `kc_`, `dr_`, `ad_`) and directory, not microservices.
+- **Repository pattern.** Routers → Services → Repositories. No SQLAlchemy in routers.
+- **Cross-user PHI returns 404, never 403.** Scoping is a repository parameter.
+- **Money in paise as integers.** No floats at the storage boundary.
+- **Timestamps stored UTC, displayed IST.** No naive datetimes.
+- **Every authorization decision is audit-logged** (allowed and denied) to `ad_audit_log`.
+- **Migrations reviewed before apply.** Auto-run on boot is disabled; startup schema-head
+  check refuses traffic against a stale schema.
+
+See `.claude/rules/security.md` for the full 20 healthcare non-negotiables.
+
+## Claude Code setup
+
+See [`.claude/SETUP.md`](.claude/SETUP.md) for the Claude Code configuration guide —
+rule loading order, how to add new rules, skill descriptions, and troubleshooting.
+
+## Key docs
+
+| Document | Purpose |
+|---|---|
+| `docs/strategy/build-spec.md` | Full DB schema, API route catalogue, P1–P39 prompt queue |
+| `docs/strategy/backend-strategy.md` | Backend implementation blueprint (FastAPI, RBAC, Celery, …) |
+| `docs/strategy/frontend-strategy.md` | Frontend implementation blueprint (mobile, doctor portal, website) |
+| `docs/runbook-prod.md` | Production runbook (deploy, rollback, on-call) |
+| `docs/dpdp-breach-runbook.md` | DPDP 72-hour breach notification procedure |
+| `docs/dpia-v1.md` | Data Protection Impact Assessment v1 |

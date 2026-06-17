@@ -80,7 +80,10 @@ export default function TabsLayout() {
         },
         headerShown: !isDesktop,
         headerShadowVisible: false,
+        lazy: false,
+        freezeOnBlur: true,
       }}
+      detachInactiveScreens={false}
     >
       {TABS.map(tab => (
         <Tabs.Screen

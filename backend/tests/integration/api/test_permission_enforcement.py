@@ -235,15 +235,24 @@ async def test_multirole_doctor_admin_stamps_doctor_for_clinical_action(
     assert row.permission == "prescription:create"
 
 
-async def test_super_admin_content_approve_stamps_super_admin(
+async def test_super_admin_with_doctor_role_can_approve_content(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    from app.db.enums import DoctorStatus
+    """A super_admin who also holds a DOCTOR staff role can approve content via the
+    doctor review endpoint. The audit row stamps 'doctor' as the role_context
+    (clinical precedence) and 'content:approve' as the permission.
+    """
+    from app.db.enums import ContentStatus, DoctorStatus, UserRole
     from app.models.doctor import Doctor
     from app.repositories import education as edu_repo
+    from app.repositories import staff_roles as staff_roles_repo
 
     admin = await create_super_admin_user(db_session)
-    # The approve endpoint requires the approver to also have a dr_doctors row.
+    # Grant the super_admin a DOCTOR staff role so they have CONTENT_APPROVE permission.
+    await staff_roles_repo.grant_role(
+        db_session, user_id=admin.id, role=UserRole.DOCTOR, granted_by=None  # type: ignore[attr-defined]
+    )
+    # The doctor review endpoint needs a dr_doctors row for the approver.
     db_session.add(
         Doctor(
             user_id=admin.id,  # type: ignore[attr-defined]
@@ -252,6 +261,7 @@ async def test_super_admin_content_approve_stamps_super_admin(
             status=DoctorStatus.ACTIVE,
         )
     )
+    # Content must be in PENDING_REVIEW state to be approvable.
     content = await edu_repo.create_content(
         db_session,
         title="Thyroid basics",
@@ -261,17 +271,20 @@ async def test_super_admin_content_approve_stamps_super_admin(
         content_url=None,
         body_md="# Thyroid",
     )
+    content.status = ContentStatus.PENDING_REVIEW  # type: ignore[attr-defined]
     await db_session.flush()
 
     resp = await client.post(
-        f"/v1/admin/content/{content.id}/approve",
+        f"/v1/doctor/content/{content.id}/review",
         headers=make_auth_headers(admin),
+        json={"action": "approved"},
     )
     assert resp.status_code == 200, resp.text
 
     row = await _audit_row(
-        db_session, action="approve_education_content", actor_user_id=admin.id, allowed=True
+        db_session, action="doctor_review_content", actor_user_id=admin.id, allowed=True  # type: ignore[attr-defined]
     )
     assert row is not None
-    assert row.role_context == "super_admin"
-    assert row.permission == "content:publish"
+    # Doctor takes precedence over super_admin for CONTENT_APPROVE (clinical precedence).
+    assert row.role_context == "doctor"
+    assert row.permission == "content:approve"

@@ -140,7 +140,7 @@ export default function ProfileScreen() {
                 label="Insights & trends"
                 labelColor={textPri}
                 hintColor={textSub}
-                onPress={() => {}}
+                onPress={() => router.push('/insights')}
               />
               <Separator isDark={isDark} />
               <MenuItem
@@ -195,7 +195,7 @@ export default function ProfileScreen() {
                 hint="My consents"
                 labelColor={textPri}
                 hintColor={textSub}
-                onPress={() => {}}
+                onPress={() => router.push('/privacy-security')}
               />
             </View>
           </GlassCard>
@@ -212,7 +212,7 @@ export default function ProfileScreen() {
                 label="Download my data"
                 labelColor={textPri}
                 hintColor={textSub}
-                onPress={() => {}}
+                onPress={() => router.push('/download-data')}
               />
               <Separator isDark={isDark} />
               <MenuItem
@@ -221,7 +221,7 @@ export default function ProfileScreen() {
                 label="Delete my account"
                 labelColor={colors.criticalRed}
                 hintColor={colors.criticalRed}
-                onPress={() => {}}
+                onPress={() => router.push('/delete-account')}
                 accessibilityLabel="Delete my account"
               />
             </View>

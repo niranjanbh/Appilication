@@ -16,7 +16,7 @@ export function AmbientBackground() {
   const fade  = withAlpha(t.background, 0);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <LinearGradient colors={[glowA, fade]} style={[styles.blob, styles.topLeft]} />
       <LinearGradient colors={[glowB, fade]} style={[styles.blob, styles.right]} />
       <LinearGradient colors={[glowC, fade]} style={[styles.blob, styles.bottom]} />

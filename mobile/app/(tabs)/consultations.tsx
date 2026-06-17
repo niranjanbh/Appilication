@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   RefreshControl,
   ScrollView,
@@ -115,32 +115,14 @@ function ConsultationCard({
 export default function ConsultationsScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
 
-  const fetchConsultations = useCallback(async () => {
-    try {
-      const data = await apiFetch<ListResponse>('/v1/clinic/patient/consultations?page_size=50');
-      setConsultations(data.items);
-      setError(null);
-    } catch {
-      setError('Could not load consultations. Please try again.');
-    }
-  }, []);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['consultations'],
+    queryFn: () => apiFetch<ListResponse>('/v1/clinic/patient/consultations?page_size=50'),
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    fetchConsultations().finally(() => setLoading(false));
-  }, [fetchConsultations]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchConsultations();
-    setRefreshing(false);
-  }, [fetchConsultations]);
-
+  const consultations = data?.items ?? [];
   const upcoming = consultations.filter(isUpcoming);
   const past     = consultations.filter(c => !isUpcoming(c));
   const bg       = isDark ? colors.midnight : colors.skyMist;
@@ -153,7 +135,7 @@ export default function ConsultationsScreen() {
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.electricBlue} />}
+        refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={colors.electricBlue} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -168,9 +150,9 @@ export default function ConsultationsScreen() {
           </HapticPressable>
         </View>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={styles.error}>Could not load consultations. Please try again.</Text>}
 
-        {loading ? (
+        {isLoading ? (
           <SkeletonCards count={3} />
         ) : (
           <>

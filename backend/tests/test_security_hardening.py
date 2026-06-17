@@ -15,6 +15,7 @@ from app.core.config import Settings, settings
 
 GOOD_JWT_SECRET = "prod_jwt_secret_minimum_32_characters_aaaa"
 GOOD_OTP_SECRET = "prod_otp_secret_minimum_32_characters_bbbb"
+GOOD_MFA_KEY = "prod_mfa_encryption_key_32chars_cccc"
 
 
 def _prod_kwargs(**overrides: Any) -> dict[str, Any]:
@@ -24,6 +25,7 @@ def _prod_kwargs(**overrides: Any) -> dict[str, Any]:
         "debug": False,
         "jwt_secret": GOOD_JWT_SECRET,
         "otp_secret": GOOD_OTP_SECRET,
+        "mfa_encryption_key": GOOD_MFA_KEY,
         "cors_allowed_origins": ["https://kyrosclinic.com"],
     }
     kwargs.update(overrides)

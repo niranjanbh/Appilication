@@ -27,7 +27,7 @@ export function PrivacyShield() {
   if (!shielded) return null;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.shield]} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, styles.shield, { pointerEvents: 'none' }]}>
       <BlurView
         tint={t.isDark ? 'dark' : 'light'}
         intensity={glass.blur.shield}

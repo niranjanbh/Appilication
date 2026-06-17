@@ -107,7 +107,10 @@ def create_access_token(
 def decode_access_token(token: str) -> TokenClaims:
     try:
         payload: dict[str, Any] = jwt.decode(
-            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_aud": False},
         )
     except JWTError as err:
         raise HTTPException(

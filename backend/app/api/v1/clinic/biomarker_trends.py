@@ -124,7 +124,56 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     )
 
 
-# ── Endpoint ───────────────────────────────────────────────────────────────────
+class BiomarkerSummary(BaseModel):
+    name: str
+    latest_value: float | None
+    unit: str
+    ref_low: float | None
+    ref_high: float | None
+    flag: str | None
+    report_date: date | None
+
+
+class BiomarkerListResponse(BaseModel):
+    biomarkers: list[BiomarkerSummary]
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/biomarkers",
+    response_model=BiomarkerListResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_biomarkers(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> BiomarkerListResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    rows = await lab_reports_repo.list_distinct_biomarkers_for_patient(
+        db, patient_user_id=user.id,
+    )
+    await write_audit(db, ctx, action="list_biomarkers", allowed=True)
+
+    biomarkers = [
+        BiomarkerSummary(
+            name=str(row["name"]),
+            latest_value=_parse_float(row.get("latest_value")),
+            unit=str(row.get("unit") or ""),
+            ref_low=_parse_float(row.get("ref_low")),
+            ref_high=_parse_float(row.get("ref_high")),
+            flag=row.get("flag"),
+            report_date=row.get("report_date"),
+        )
+        for row in rows
+    ]
+    return BiomarkerListResponse(biomarkers=biomarkers)
 
 
 @router.get(
