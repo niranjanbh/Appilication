@@ -42,8 +42,8 @@ interface OptionGroupProps {
 
 function OptionGroup({ label, options, selected, onSelect, isDark }: OptionGroupProps) {
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : colors.borderLight;
 
   return (
@@ -136,8 +136,8 @@ export default function IntakeFormScreen() {
   const skipScale = useSharedValue(1);
   const skipAnim  = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.skyMist;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>

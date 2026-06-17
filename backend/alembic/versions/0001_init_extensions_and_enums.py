@@ -24,53 +24,45 @@ def upgrade() -> None:
 
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE user_role AS ENUM ('patient', 'doctor', 'coordinator', 'super_admin');
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS user_role AS ENUM (
+            'patient', 'doctor', 'coordinator', 'super_admin'
+        )
         """
     )
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE user_gender AS ENUM ('female', 'male', 'non_binary', 'prefer_not_to_say');
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS user_gender AS ENUM (
+            'female', 'male', 'non_binary', 'prefer_not_to_say'
+        )
         """
     )
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE consent_type AS ENUM (
-                'terms', 'privacy', 'telemedicine', 'data_processing',
-                'health_sync', 'marketing', 'recording', 'research'
-            );
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS consent_type AS ENUM (
+            'terms', 'privacy', 'telemedicine', 'data_processing',
+            'health_sync', 'marketing', 'recording', 'research'
+        )
         """
     )
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE data_subject_request_type AS ENUM ('access', 'correction', 'erasure', 'grievance');
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS data_subject_request_type AS ENUM (
+            'access', 'correction', 'erasure', 'grievance'
+        )
         """
     )
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE data_subject_request_status AS ENUM ('received', 'in_progress', 'completed', 'rejected');
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS data_subject_request_status AS ENUM (
+            'received', 'in_progress', 'completed', 'rejected'
+        )
         """
     )
     op.execute(
         """
-        DO $$ BEGIN
-            CREATE TYPE actor_role AS ENUM ('patient', 'doctor', 'coordinator', 'super_admin', 'system');
-        EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$
+        CREATE TYPE IF NOT EXISTS actor_role AS ENUM (
+            'patient', 'doctor', 'coordinator', 'super_admin', 'system'
+        )
         """
     )
 

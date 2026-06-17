@@ -3,7 +3,7 @@ import { clearTokens, loadTokens, saveTokens } from '../auth/storage';
 // Override by setting EXPO_PUBLIC_API_BASE_URL in your .env file.
 // Expo substitutes EXPO_PUBLIC_* vars at bundle time.
 declare const process: { env: Record<string, string | undefined> };
-const API_BASE_URL = (process.env['EXPO_PUBLIC_API_BASE_URL'] ?? 'http://localhost:8000').replace(/\/$/, '');
+const API_BASE_URL = (process.env['EXPO_PUBLIC_API_BASE_URL'] ?? 'https://api.kyrosclinic.com').replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(

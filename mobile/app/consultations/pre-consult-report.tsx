@@ -15,7 +15,7 @@ function trendSymbol(t: BiomarkerSummary['trend']): string {
 function trendColor(t: BiomarkerSummary['trend'], isDark: boolean): string {
   if (t === 'up') return colors.criticalRed;
   if (t === 'down') return colors.successGreen;
-  return isDark ? colors.slateText : colors.coolGray;
+  return isDark ? colors.stoneDim : colors.coolGray;
 }
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
@@ -221,10 +221,10 @@ export default function PreConsultReportScreen() {
   const dlScale = useSharedValue(1);
   const dlAnim  = useAnimatedStyle(() => ({ transform: [{ scale: dlScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (loading) {

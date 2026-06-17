@@ -33,12 +33,22 @@ export const colors = {
   successLight: tokens.colors.successLight,
   warningAmber: tokens.colors.warningAmber,
   criticalRed:  tokens.colors.criticalRed,
-  midnight:     tokens.colors.midnight,
-  nightSurface: tokens.colors.nightSurface,
-  nightElev:    tokens.colors.nightElev,
+  midnight:     tokens.colors.forestInk,
+  nightSurface: tokens.colors.forestSurface,
+  nightElev:    tokens.colors.forestSurfaceRaised,
   electricBlue: tokens.colors.electricBlue,
-  slateText:    tokens.colors.slateText,
+  slateText:    tokens.colors.stoneDim,
   accentViolet: tokens.colors.accentViolet,
+  // Forest-ink dark palette
+  forestInk:           tokens.colors.forestInk,
+  forestSurface:       tokens.colors.forestSurface,
+  forestSurfaceRaised: tokens.colors.forestSurfaceRaised,
+  jadeGlow:            tokens.colors.jadeGlow,
+  terracottaSoft:      tokens.colors.terracottaSoft,
+  sageDim:             tokens.colors.sageDim,
+  ivoryText:           tokens.colors.ivoryText,
+  stoneDim:            tokens.colors.stoneDim,
+  alertBright:         tokens.colors.alertBright,
 } as const;
 
 /** Glassmorphism surface tokens — rgba strings keyed by scheme, plus blur intensities. */

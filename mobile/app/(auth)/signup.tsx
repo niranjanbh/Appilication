@@ -76,11 +76,11 @@ export default function SignupScreen() {
   };
 
   const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText    : colors.coolGray;
-  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
   const inputTxt = isDark ? colors.white        : colors.navyDeep;
-  const modalBg  = isDark ? colors.nightSurface : colors.white;
+  const modalBg  = isDark ? colors.forestSurface : colors.white;
 
   return (
     <KeyboardAvoidingView
@@ -263,7 +263,7 @@ export default function SignupScreen() {
             {COUNTRY_CODES.map(item => (
               <Pressable
                 key={item.code}
-                style={[styles.sheetRow, item.code === countryCode && { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}
+                style={[styles.sheetRow, item.code === countryCode && { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}
                 onPress={() => { setCountryCode(item.code); setPickerVisible(false); }}
                 accessibilityLabel={`${item.name} ${item.code}`}
               >

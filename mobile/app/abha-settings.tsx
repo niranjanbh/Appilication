@@ -96,11 +96,11 @@ export default function AbhaSettingsScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg        = isDark ? colors.midnight     : colors.skyMist;
+  const bg        = isDark ? colors.forestInk     : colors.skyMist;
   const textPri   = isDark ? colors.white        : colors.navyDeep;
-  const textSub   = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg    = isDark ? colors.nightSurface : colors.white;
-  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const textSub   = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg    = isDark ? colors.forestSurface : colors.white;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   if (statusLoading) {
@@ -138,11 +138,11 @@ export default function AbhaSettingsScreen() {
       {!status?.linked && !success && (
         <>
           {/* Tab switcher */}
-          <View style={[styles.tabBar, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]}>
+          <View style={[styles.tabBar, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.borderLight }]}>
             {(['link', 'create'] as Tab[]).map(t => (
               <Pressable
                 key={t}
-                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, boxShadow: `0 2px 8px ${withAlpha(isDark ? colors.midnight : colors.navyDeep, 0.08)}` }]]}
+                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, boxShadow: `0 2px 8px ${withAlpha(isDark ? colors.forestInk : colors.navyDeep, 0.08)}` }]]}
                 onPress={() => { setTab(t); setError(null); if (t === 'create') setCreateStep('aadhaar'); }}
                 accessibilityLabel={t === 'link' ? 'Link existing ABHA' : 'Create new ABHA'}
               >

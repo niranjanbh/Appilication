@@ -24,6 +24,7 @@ import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
+import { listAvailableDoctorsApi, type AvailableDoctor } from '../../lib/api/doctors';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -71,12 +72,15 @@ const CONDITIONS = [
   { slug: 'longevity',     label: 'Longevity',             icon: '🌱' },
 ];
 
-// ── Seed doctor ────────────────────────────────────────────────────────────────
+// ── Selected doctor shape (from API) ──────────────────────────────────────────
 
-const SEED_DOCTORS = [
-  { id: '00000000-0000-0000-0000-000000000001', name: 'Dr. Meera Krishnan', specialty: 'Endocrinologist', fee_paise: 60000, duration_minutes: 20 },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Dr. Arjun Patel',    specialty: 'General Medicine', fee_paise: 45000, duration_minutes: 20 },
-];
+interface SelectedDoctor {
+  id: string;
+  name: string;
+  specialty: string;
+  fee_paise: number;
+  duration_minutes: number;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -100,7 +104,7 @@ function StepHeader({ step, title, theme }: { step: number; title: string; theme
   return (
     <View style={sh.wrapper}>
       {/* Progress bar */}
-      <View style={[sh.track, { backgroundColor: theme.isDark ? colors.nightElev : colors.borderLight }]}>
+      <View style={[sh.track, { backgroundColor: theme.isDark ? colors.forestSurfaceRaised : colors.borderLight }]}>
         <View style={[sh.fill, { width: `${(step / total) * 100}%` as never }]} />
       </View>
       {/* Step count */}
@@ -157,7 +161,7 @@ function PressCard({ onPress, children, style, accessibilityLabel }: {
 function ConditionStep({ onSelect, theme }: { onSelect: (slug: string) => void; theme: ThemeProps }) {
   return (
     <ScrollView
-      style={[styles.flex, { backgroundColor: theme.isDark ? colors.midnight : colors.skyMist }]}
+      style={[styles.flex, { backgroundColor: theme.isDark ? colors.forestInk : colors.skyMist }]}
       contentContainerStyle={styles.stepContainer}
       showsVerticalScrollIndicator={false}
     >
@@ -182,18 +186,61 @@ function ConditionStep({ onSelect, theme }: { onSelect: (slug: string) => void; 
 
 // ── Step 2 — Doctor ───────────────────────────────────────────────────────────
 
-function DoctorStep({ onSelect, theme }: { onSelect: (d: typeof SEED_DOCTORS[0]) => void; theme: ThemeProps }) {
+function DoctorStep({ condition, onSelect, onBack, theme }: {
+  condition: string;
+  onSelect: (d: SelectedDoctor) => void;
+  onBack: () => void;
+  theme: ThemeProps;
+}) {
+  const [doctors, setDoctors] = useState<AvailableDoctor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+
+  useEffect(() => {
+    listAvailableDoctorsApi(condition)
+      .then(data => { setDoctors(data.items); setError(null); })
+      .catch(() => setError('Could not load available doctors.'))
+      .finally(() => setLoading(false));
+  }, [condition]);
+
+  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
+
+  if (loading) {
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+  }
+
   return (
     <ScrollView
-      style={[styles.flex, { backgroundColor: theme.isDark ? colors.midnight : colors.skyMist }]}
+      style={[styles.flex, { backgroundColor: bg }]}
       contentContainerStyle={styles.stepContainer}
       showsVerticalScrollIndicator={false}
     >
       <StepHeader step={2} title="Choose a specialist" theme={theme} />
-      {SEED_DOCTORS.map(d => (
+
+      {error && (
+        <View style={[styles.errorBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
+          <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        </View>
+      )}
+
+      {!error && doctors.length === 0 && (
+        <View style={[styles.emptyState, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}>
+          <Text style={styles.emptyIcon}>👨‍⚕️</Text>
+          <Text style={[styles.emptyText, { color: theme.textPri }]}>No doctors available</Text>
+          <Text style={[styles.emptySub, { color: theme.textSub }]}>No specialists are currently available for this condition. Please try again later.</Text>
+        </View>
+      )}
+
+      {doctors.map(d => (
         <PressCard
           key={d.id}
-          onPress={() => onSelect(d)}
+          onPress={() => onSelect({
+            id: d.id,
+            name: d.name,
+            specialty: d.specialty[0] ?? 'General',
+            fee_paise: 0,
+            duration_minutes: d.consultation_duration_minutes_default,
+          })}
           accessibilityLabel={`Select ${d.name}`}
           style={[styles.doctorCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}
         >
@@ -202,14 +249,18 @@ function DoctorStep({ onSelect, theme }: { onSelect: (d: typeof SEED_DOCTORS[0])
           </View>
           <View style={styles.doctorInfo}>
             <Text style={[styles.doctorName, { color: theme.textPri }]}>{d.name}</Text>
-            <Text style={[styles.doctorSpecialty, { color: theme.textSub }]}>{d.specialty}</Text>
-            <View style={[styles.feePill, { backgroundColor: colors.electricBlue + '15' }]}>
-              <Text style={[styles.feeText, { color: colors.electricBlue }]}>{formatRupees(d.fee_paise)}</Text>
-            </View>
+            <Text style={[styles.doctorSpecialty, { color: theme.textSub }]}>{d.specialty.join(', ') || 'General'}</Text>
+            {d.bio_short && (
+              <Text style={[styles.doctorSpecialty, { color: theme.textSub }]} numberOfLines={2}>{d.bio_short}</Text>
+            )}
           </View>
           <Text style={[styles.chevron, { color: theme.textSub }]}>›</Text>
         </PressCard>
       ))}
+
+      <Pressable onPress={onBack} accessibilityLabel="Go back" style={styles.backBtn}>
+        <Text style={[styles.backBtnText, { color: theme.textSub }]}>← Back</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -237,7 +288,7 @@ function SlotStep({ doctorId, onSelect, onBack, theme }: {
       .finally(() => setLoading(false));
   }, [doctorId]);
 
-  const bg = theme.isDark ? colors.midnight : colors.skyMist;
+  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
 
   if (loading) {
     return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
@@ -286,7 +337,7 @@ function SlotStep({ doctorId, onSelect, onBack, theme }: {
 
 function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
   condition: string;
-  doctor: typeof SEED_DOCTORS[0];
+  doctor: SelectedDoctor;
   slot: AvailableSlot;
   onSuccess: (consultationId: string) => void;
   onBack: () => void;
@@ -325,7 +376,7 @@ function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
   }, [condition, doctor, slot, onSuccess]);
 
   const conditionLabel = CONDITIONS.find(c => c.slug === condition)?.label ?? condition;
-  const bg = theme.isDark ? colors.midnight : colors.skyMist;
+  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
 
   const payScale = useSharedValue(1);
   const payAnim  = useAnimatedStyle(() => ({ transform: [{ scale: payScale.value }] }));
@@ -352,11 +403,13 @@ function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
             )}
           </View>
         ))}
-        {/* Fee row (highlighted) */}
-        <View style={[styles.feeRow, { backgroundColor: colors.electricBlue + '10', borderRadius: borderRadius.lg }]}>
-          <Text style={[styles.feeRowLabel, { color: theme.textSub }]}>Consultation fee</Text>
-          <Text style={[styles.feeRowValue, { color: colors.electricBlue }]}>{formatRupees(doctor.fee_paise)}</Text>
-        </View>
+        {/* Fee row (highlighted) — fee determined server-side during booking */}
+        {doctor.fee_paise > 0 && (
+          <View style={[styles.feeRow, { backgroundColor: colors.electricBlue + '10', borderRadius: borderRadius.lg }]}>
+            <Text style={[styles.feeRowLabel, { color: theme.textSub }]}>Consultation fee</Text>
+            <Text style={[styles.feeRowValue, { color: colors.electricBlue }]}>{formatRupees(doctor.fee_paise)}</Text>
+          </View>
+        )}
       </View>
 
       <Text style={[styles.payNote, { color: theme.textSub }]}>
@@ -377,7 +430,7 @@ function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
           ) : (
             <>
               <Text style={styles.payBtnIcon}>💳</Text>
-              <Text style={styles.payBtnText}>Pay {formatRupees(doctor.fee_paise)}</Text>
+              <Text style={styles.payBtnText}>{doctor.fee_paise > 0 ? `Pay ${formatRupees(doctor.fee_paise)}` : 'Confirm & pay'}</Text>
             </>
           )}
         </Pressable>
@@ -399,7 +452,7 @@ export default function BookConsultationScreen() {
   const isDark  = useThemePreference().colorScheme === 'dark';
   const [step,        setStep]        = useState<Step>('condition');
   const [condition,   setCondition]   = useState('');
-  const [doctor,      setDoctor]      = useState<typeof SEED_DOCTORS[0] | null>(null);
+  const [doctor,      setDoctor]      = useState<SelectedDoctor | null>(null);
   const [slot,        setSlot]        = useState<AvailableSlot | null>(null);
   const [confirmedId, setConfirmedId] = useState('');
 
@@ -411,8 +464,8 @@ export default function BookConsultationScreen() {
   const theme: ThemeProps = {
     isDark,
     textPri: isDark ? colors.white        : colors.navyDeep,
-    textSub: isDark ? colors.slateText    : colors.coolGray,
-    cardBg:  isDark ? colors.nightSurface : colors.white,
+    textSub: isDark ? colors.stoneDim    : colors.coolGray,
+    cardBg:  isDark ? colors.forestSurface : colors.white,
     cardBdr: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)',
   };
 
@@ -420,7 +473,7 @@ export default function BookConsultationScreen() {
     return <ConditionStep onSelect={slug => { setCondition(slug); setStep('doctor'); }} theme={theme} />;
   }
   if (step === 'doctor') {
-    return <DoctorStep onSelect={d => { setDoctor(d); setStep('slot'); }} theme={theme} />;
+    return <DoctorStep condition={condition} onSelect={d => { setDoctor(d); setStep('slot'); }} onBack={() => setStep('condition')} theme={theme} />;
   }
   if (step === 'slot' && doctor) {
     return <SlotStep doctorId={doctor.id} onSelect={s => { setSlot(s); setStep('pay'); }} onBack={() => setStep('doctor')} theme={theme} />;
@@ -431,7 +484,7 @@ export default function BookConsultationScreen() {
 
   // ── Success screen ────────────────────────────────────────────────────────
 
-  const bg = isDark ? colors.midnight : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.skyMist;
   const successScale = useSharedValue(0.7);
   const successAnim  = useAnimatedStyle(() => ({ transform: [{ scale: successScale.value }] }));
 

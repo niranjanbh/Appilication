@@ -20,20 +20,20 @@ export const lightPalette = {
 } as const;
 
 export const darkPalette = {
-  background:   colors.midnight,
-  surface:      colors.nightSurface,
-  surfaceMuted: colors.nightElev,
-  primary:      colors.electricBlue,
-  text:         colors.white,
-  textSub:      colors.slateText,
-  border:       'rgba(255,255,255,0.08)',
+  background:   colors.forestInk,
+  surface:      colors.forestSurface,
+  surfaceMuted: colors.forestSurfaceRaised,
+  primary:      colors.saffron,
+  text:         colors.ivoryText,
+  textSub:      colors.stoneDim,
+  border:       'rgba(79,163,131,0.15)',
   shadow:       '#000000',
-  navBar:       colors.nightSurface,
-  success:      colors.successLight,
+  navBar:       colors.forestSurface,
+  success:      colors.jadeGlow,
   warning:      colors.warningAmber,
-  critical:     colors.criticalRed,
+  critical:     colors.alertBright,
   glass:        glass.dark,
-  skeletonBase: colors.nightElev,
+  skeletonBase: colors.forestSurfaceRaised,
   isDark:       true as const,
 } as const;
 

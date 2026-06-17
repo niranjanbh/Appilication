@@ -69,10 +69,10 @@ export default function HealthSyncScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   return (
@@ -105,7 +105,7 @@ export default function HealthSyncScreen() {
             <Text style={[styles.dataCardTitle, { color: textPri }]}>What we read</Text>
             {DATA_POINTS.map(({ icon, label }) => (
               <View key={label} style={styles.dataRow}>
-                <View style={[styles.dataIconWrap, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+                <View style={[styles.dataIconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
                   <Text style={styles.dataIcon}>{icon}</Text>
                 </View>
                 <Text style={[styles.dataLabel, { color: textPri }]}>{label}</Text>

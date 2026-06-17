@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -36,6 +35,7 @@ import {
   scheduleReminderNotification,
 } from '../../lib/native/notifications';
 import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
+import { ReminderList } from '../../components/reminders/ReminderList';
 import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -115,12 +115,12 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
     onSave(payload, editing);
   }
 
-  const modalBg  = isDark ? colors.nightSurface : colors.white;
-  const sheetBg  = isDark ? colors.midnight     : colors.skyMist;
-  const textPri  = isDark ? colors.white     : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText : colors.coolGray;
-  const inputBg  = isDark ? colors.nightElev : colors.white;
-  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+  const modalBg  = isDark ? colors.forestSurface       : colors.white;
+  const sheetBg  = isDark ? colors.forestInk           : colors.skyMist;
+  const textPri  = isDark ? colors.ivoryText           : colors.navyDeep;
+  const textSub  = isDark ? colors.stoneDim            : colors.coolGray;
+  const inputBg  = isDark ? colors.forestSurfaceRaised : colors.white;
+  const inputBdr = isDark ? 'rgba(79,163,131,0.20)'   : colors.borderLight;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -132,7 +132,7 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
           </Pressable>
           <Text style={[m.title, { color: textPri }]}>{editing ? 'Edit reminder' : 'New reminder'}</Text>
           <Pressable onPress={handleSave} disabled={isSaving} accessibilityLabel="Save reminder">
-            {isSaving ? <ActivityIndicator color={colors.electricBlue} size="small" /> : <Text style={m.save}>Save</Text>}
+            {isSaving ? <ActivityIndicator color={colors.jadeGlow} size="small" /> : <Text style={m.save}>Save</Text>}
           </Pressable>
         </View>
 
@@ -145,7 +145,7 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
               return (
                 <Pressable
                   key={t.value}
-                  style={[m.typeChip, { backgroundColor: active ? colors.navyDeep : (isDark ? colors.nightElev : colors.white), borderColor: active ? colors.navyDeep : inputBdr }]}
+                  style={[m.typeChip, { backgroundColor: active ? colors.forest : (isDark ? colors.forestSurfaceRaised : colors.white), borderColor: active ? colors.forest : inputBdr }]}
                   onPress={() => setForm(f => ({ ...f, type: t.value }))}
                   accessibilityLabel={`Reminder type ${t.label}`}
                 >
@@ -239,7 +239,7 @@ const m = StyleSheet.create({
   },
   title:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
   cancel: { fontFamily: fontFamily.body, fontSize: fontSize.body },
-  save:   { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.electricBlue, fontWeight: '700' },
+  save:   { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.jadeGlow, fontWeight: '700' },
   body:   { padding: spacing[5], gap: spacing[4] },
   fieldLabel: {
     fontFamily: fontFamily.body,
@@ -286,9 +286,9 @@ interface AdherenceDialogProps {
 }
 
 function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClose, isDark }: AdherenceDialogProps) {
-  const sheetBg = isDark ? colors.nightSurface : colors.white;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const sheetBg = isDark ? colors.forestSurface : colors.white;
+  const textPri = isDark ? colors.ivoryText     : colors.navyDeep;
+  const textSub = isDark ? colors.stoneDim      : colors.coolGray;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -300,7 +300,7 @@ function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClo
           {(
             [
               { action: 'taken'   as AdherenceAction, label: '✓  Taken',      bg: colors.successGreen,                          border: undefined },
-              { action: 'skipped' as AdherenceAction, label: 'Skip',           bg: isDark ? colors.nightElev : colors.borderLight, border: undefined },
+              { action: 'skipped' as AdherenceAction, label: 'Skip',           bg: isDark ? colors.forestSurfaceRaised : colors.borderLight, border: undefined },
               { action: 'snoozed' as AdherenceAction, label: 'Snooze 15 min', bg: colors.warningAmber + '25',                    border: colors.warningAmber },
             ]
           ).map(({ action, label: btnLabel, bg, border }) => (
@@ -352,8 +352,8 @@ function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps)
   const pct    = Math.round(reminder.adherence_rate * 100);
   const pctColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
 
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.navyDeep;
+  const textSub = isDark ? colors.stoneDim  : colors.coolGray;
   const type    = TYPE_ICON[reminder.type] ?? TYPE_ICON.custom;
 
   function confirmDelete() {
@@ -406,6 +406,7 @@ export default function RemindersScreen() {
   const isDark = useThemePreference().colorScheme === 'dark';
   const [modalVisible, setModalVisible] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [adherenceState, setAdherenceState] = useState<{
     visible: boolean; reminderId: string; scheduledAt: string; label: string;
   }>({ visible: false, reminderId: '', scheduledAt: '', label: '' });
@@ -481,7 +482,7 @@ export default function RemindersScreen() {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
   }
 
-  const bg = isDark ? colors.midnight : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.skyMist;
 
   if (remindersQuery.isLoading) {
     return (
@@ -512,19 +513,12 @@ export default function RemindersScreen() {
         </View>
       ) : (
         <>
-          <FlatList
-            data={reminders}
-            keyExtractor={r => r.id}
-            renderItem={({ item }) => (
-              <ReminderCard
-                reminder={item}
-                isDark={isDark}
-                onEdit={openEdit}
-                onDelete={r => deleteMutation.mutate(r.id)}
-              />
-            )}
-            contentContainerStyle={styles.list}
-            ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+          <ReminderList
+            reminders={reminders}
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            onEdit={openEdit}
+            onDelete={r => deleteMutation.mutate(r.id)}
           />
           <HapticPressable
             haptic="medium"
@@ -601,10 +595,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.saffron,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.saffron, 0.35)}`,
   },
 
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing[6] },

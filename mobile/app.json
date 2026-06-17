@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kyros",
     "slug": "kyros",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,13 +13,43 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "clinic.kyros.app"
+      "bundleIdentifier": "clinic.kyros.app",
+      "buildNumber": "1",
+      "associatedDomains": [
+        "applinks:kyrosclinic.com",
+        "applinks:www.kyrosclinic.com"
+      ],
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      }
     },
     "android": {
       "package": "clinic.kyros.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0F3D2E"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "kyrosclinic.com",
+              "pathPrefix": "/app"
+            },
+            {
+              "scheme": "https",
+              "host": "www.kyrosclinic.com",
+              "pathPrefix": "/app"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -34,7 +64,15 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0F3D2E"
+        }
+      ],
+      "expo-screen-capture"
     ],
     "experiments": {
       "typedRoutes": true
