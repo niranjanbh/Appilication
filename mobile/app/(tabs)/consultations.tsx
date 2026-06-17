@@ -58,8 +58,8 @@ const STATUS_LABEL: Record<ConsultationStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
-  scheduled:   colors.navyDeep,
-  confirmed:   colors.electricBlue,
+  scheduled:   colors.forest,
+  confirmed:   colors.jadeGlow,
   in_progress: colors.warningAmber,
   completed:   colors.successGreen,
   cancelled:   colors.criticalRed,
@@ -78,8 +78,8 @@ function ConsultationCard({
   onPress: () => void;
 }) {
   const sc      = STATUS_COLOR[item.status];
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.navyDeep;
+  const textSub = isDark ? colors.stoneDim  : colors.coolGray;
 
   return (
     <HapticPressable
@@ -143,9 +143,9 @@ export default function ConsultationsScreen() {
 
   const upcoming = consultations.filter(isUpcoming);
   const past     = consultations.filter(c => !isUpcoming(c));
-  const bg       = isDark ? colors.midnight : colors.skyMist;
-  const textPri  = isDark ? colors.white    : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText : colors.coolGray;
+  const bg       = isDark ? colors.forestInk : colors.skyMist;
+  const textPri  = isDark ? colors.ivoryText : colors.navyDeep;
+  const textSub  = isDark ? colors.stoneDim  : colors.coolGray;
 
   return (
     <View style={[styles.flex, { backgroundColor: bg }]}>
@@ -153,7 +153,7 @@ export default function ConsultationsScreen() {
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.electricBlue} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? colors.jadeGlow : colors.jade} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -242,11 +242,11 @@ const styles = StyleSheet.create({
   bookBtn: {
     height: 36,
     paddingHorizontal: spacing[4],
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.saffron,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 4px 8px ${withAlpha(colors.saffron, 0.30)}`,
   },
   bookBtnText: {
     fontFamily: fontFamily.body,

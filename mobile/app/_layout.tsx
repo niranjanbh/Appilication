@@ -5,6 +5,8 @@ import { ActivityIndicator, useColorScheme, View } from 'react-native';
 import { AuthProvider } from '../lib/auth/context';
 import { OpenInAppBanner } from '../components/web/OpenInAppBanner';
 import { PrivacyShield } from '../components/ui/PrivacyShield';
+import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+import { OfflineBanner } from '../components/ui/OfflineBanner';
 import { colors, fontFamily, fontSize } from '../lib/design-tokens';
 import { ThemeProvider, useThemePreference } from '../lib/theme-context';
 // Side-effect: registers the background sync task definition before the React tree mounts.
@@ -29,7 +31,7 @@ export default function RootLayout() {
     'TiroDevanagariHindi-Regular': { uri: 'https://fonts.gstatic.com/s/tirodevanagarihindu/v6/55xyezMfnuiTmFNjvECeQjDanASeyhf5LuQQ6AVA.ttf' },
   });
 
-  const loadingBg = isDark ? colors.midnight : colors.navyDeep;
+  const loadingBg = isDark ? colors.forestInk : colors.navyDeep;
 
   if (!fontsLoaded) {
     return (
@@ -40,16 +42,19 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <OpenInAppBanner />
-          <RootLayoutNav />
-          {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
-          <PrivacyShield />
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OpenInAppBanner />
+            <OfflineBanner />
+            <RootLayoutNav />
+            {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
+            <PrivacyShield />
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -57,7 +62,7 @@ function RootLayoutNav() {
   const { colorScheme } = useThemePreference();
   const isDark = colorScheme === 'dark';
 
-  const headerBg   = isDark ? colors.nightSurface : colors.navyDeep;
+  const headerBg   = isDark ? colors.forestSurface : colors.navyDeep;
   const headerText = colors.white;
 
   return (
@@ -71,7 +76,7 @@ function RootLayoutNav() {
           color: headerText,
         },
         headerShadowVisible: false,
-        contentStyle: { backgroundColor: isDark ? colors.midnight : colors.skyMist },
+        contentStyle: { backgroundColor: isDark ? colors.forestInk : colors.skyMist },
       }}
     >
       {/* Route groups render their own headers (or none) — hide the outer
@@ -81,6 +86,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+      <Stack.Screen name="notes/index" options={{ title: 'My Notes' }} />
     </Stack>
   );
 }

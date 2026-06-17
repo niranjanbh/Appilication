@@ -42,9 +42,9 @@ export default function ConditionsScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
@@ -75,7 +75,7 @@ export default function ConditionsScreen() {
                 {
                   backgroundColor: active
                     ? colors.navyDeep
-                    : isDark ? colors.nightSurface : colors.white,
+                    : isDark ? colors.forestSurface : colors.white,
                   borderColor: active
                     ? colors.navyDeep
                     : isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight,

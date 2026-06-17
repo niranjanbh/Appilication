@@ -105,10 +105,10 @@ export default function NotificationPreferencesScreen() {
 
   const isPending = mutation.isPending;
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const iconBlue = isDark ? '#0F1E38' : '#EBF3FF';
   const iconAmb  = isDark ? '#2A1A05' : '#FFF4E5';

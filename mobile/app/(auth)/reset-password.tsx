@@ -56,8 +56,8 @@ export default function ResetPasswordScreen() {
   };
 
   const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
-  const inputBg = isDark ? colors.nightElev : colors.skyMist;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const inputBg = isDark ? colors.forestSurfaceRaised : colors.skyMist;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   return (

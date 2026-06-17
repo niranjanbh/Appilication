@@ -19,10 +19,10 @@ function Row({ children }: { children: React.ReactNode }) {
 
 export default function DesignShowcase() {
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
   const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   return (

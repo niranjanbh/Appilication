@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { IconChip } from '../../components/ui/IconChip';
 import { useAuth } from '../../lib/auth/context';
+import { apiFetch } from '../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
 import { useThemePreference } from '../../lib/theme-context';
 
@@ -76,6 +78,11 @@ export default function ProfileScreen() {
   const { colorScheme, setPreference } = useThemePreference();
   const isDark = colorScheme === 'dark';
 
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const user     = state.status === 'authenticated' ? state.user : null;
   const initials = user ? getInitials(user.name) : 'K';
 
@@ -83,10 +90,54 @@ export default function ProfileScreen() {
     setPreference(val ? 'dark' : 'light');
   }
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  async function handleDownloadData() {
+    Alert.alert(
+      'Download your data',
+      'We will prepare an export of your personal data and notify you when it is ready for download.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request export',
+          onPress: async () => {
+            setExportLoading(true);
+            try {
+              const res = await apiFetch<{ message: string }>('/v1/users/me/data-export', { method: 'POST' });
+              Alert.alert('Export requested', res.message);
+            } catch {
+              Alert.alert('Error', 'Could not request data export. Please try again.');
+            } finally {
+              setExportLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleDeleteAccount() {
+    setDeleteConfirmText('');
+    setDeleteModalVisible(true);
+  }
+
+  async function confirmDeleteAccount() {
+    setDeleteLoading(true);
+    try {
+      const res = await apiFetch<{ message: string }>('/v1/users/me/delete', { method: 'POST' });
+      setDeleteModalVisible(false);
+      Alert.alert('Account deletion scheduled', res.message, [
+        { text: 'OK', onPress: () => signOut() },
+      ]);
+    } catch {
+      Alert.alert('Error', 'Could not process your request. Please try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  const bg      = isDark ? colors.forestInk     : colors.skyMist;
+  const textPri = isDark ? colors.ivoryText     : colors.navyDeep;
+  const textSub = isDark ? colors.stoneDim      : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
 
   return (
     <View style={[styles.flex, { backgroundColor: bg }]}>
@@ -101,7 +152,7 @@ export default function ProfileScreen() {
         {user && (
           <GlassCard>
             <View style={styles.identityRow}>
-              <LinearGradient colors={[colors.navyMid, colors.navyDeep]} style={styles.avatar}>
+              <LinearGradient colors={isDark ? [colors.jade, colors.forest] : [colors.navyMid, colors.navyDeep]} style={styles.avatar}>
                 <Text style={styles.avatarText}>{initials}</Text>
               </LinearGradient>
               <View style={styles.identityInfo}>
@@ -109,8 +160,8 @@ export default function ProfileScreen() {
                 <Text style={[styles.userDetail, { color: textSub }]}>
                   {user.phone ?? user.email ?? 'Kyros patient'}
                 </Text>
-                <View style={[styles.planBadge, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-                  <Text style={[styles.planBadgeText, { color: colors.electricBlue }]}>
+                <View style={[styles.planBadge, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
+                  <Text style={[styles.planBadgeText, { color: isDark ? colors.jadeGlow : colors.electricBlue }]}>
                     Free plan
                   </Text>
                 </View>
@@ -170,9 +221,9 @@ export default function ProfileScreen() {
                   onValueChange={handleThemeToggle}
                   trackColor={{
                     false: colors.borderLight,
-                    true:  colors.electricBlue + '80',
+                    true:  colors.jadeGlow + '80',
                   }}
-                  thumbColor={isDark ? colors.electricBlue : colors.white}
+                  thumbColor={isDark ? colors.jadeGlow : colors.white}
                   ios_backgroundColor={colors.borderLight}
                   accessibilityLabel="Toggle dark theme"
                 />
@@ -209,10 +260,10 @@ export default function ProfileScreen() {
               <MenuItem
                 icon="download-outline"
                 tint="blue"
-                label="Download my data"
+                label={exportLoading ? 'Requesting…' : 'Download my data'}
                 labelColor={textPri}
                 hintColor={textSub}
-                onPress={() => {}}
+                onPress={handleDownloadData}
               />
               <Separator isDark={isDark} />
               <MenuItem
@@ -221,7 +272,7 @@ export default function ProfileScreen() {
                 label="Delete my account"
                 labelColor={colors.criticalRed}
                 hintColor={colors.criticalRed}
-                onPress={() => {}}
+                onPress={handleDeleteAccount}
                 accessibilityLabel="Delete my account"
               />
             </View>
@@ -245,6 +296,62 @@ export default function ProfileScreen() {
         </HapticPressable>
 
       </ScrollView>
+
+      {/* ── Delete account confirmation modal ───────────────────────────── */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: cardBg }]}>
+            <Text style={[styles.modalTitle, { color: colors.criticalRed }]}>Delete your account?</Text>
+            <Text style={[styles.modalBody, { color: textPri }]}>
+              This action is irreversible. Your account will be scheduled for deletion within 30 days.
+              Clinical records will be retained for 7 years as required by NMC regulations.
+            </Text>
+            <Text style={[styles.modalBody, { color: textSub }]}>
+              Type DELETE below to confirm.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { color: textPri, borderColor: isDark ? 'rgba(255,255,255,0.15)' : colors.borderLight }]}
+              placeholder="Type DELETE"
+              placeholderTextColor={textSub}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              accessibilityLabel="Type DELETE to confirm account deletion"
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalCancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight }]}
+                onPress={() => setDeleteModalVisible(false)}
+                accessibilityLabel="Cancel"
+              >
+                <Text style={[styles.modalBtnText, { color: textPri }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.modalBtn,
+                  styles.modalDeleteBtn,
+                  deleteConfirmText !== 'DELETE' && styles.modalBtnDisabled,
+                ]}
+                onPress={confirmDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+                accessibilityLabel="Confirm delete account"
+              >
+                {deleteLoading ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: colors.white }]}>Delete account</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -268,7 +375,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 4px 8px ${withAlpha(colors.forest, 0.25)}`,
   },
   avatarText: {
     fontFamily: fontFamily.body,
@@ -351,5 +458,70 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
     fontWeight: '500',
+  },
+
+  // Delete account modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[6],
+  },
+  modalCard: {
+    borderRadius: borderRadius.xxl,
+    padding: spacing[6],
+    width: '100%',
+    maxWidth: 400,
+    gap: spacing[4],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.h3,
+    fontWeight: '600',
+  },
+  modalBody: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    lineHeight: 22,
+  },
+  modalInput: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginTop: spacing[2],
+  },
+  modalBtn: {
+    flex: 1,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtn: {
+    borderWidth: 1,
+  },
+  modalDeleteBtn: {
+    backgroundColor: colors.criticalRed,
+  },
+  modalBtnDisabled: {
+    opacity: 0.4,
+  },
+  modalBtnText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    fontWeight: '600',
   },
 });

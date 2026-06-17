@@ -37,10 +37,10 @@ function AssignmentCard({
   const isRead = !!assignment.read_at;
   const { content } = assignment;
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? colors.electricBlue + '40' : colors.electricBlue + '30';
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   return (
     <Animated.View style={[anim, isRead && styles.readOpacity]}>
@@ -87,7 +87,7 @@ function LibraryCard({
   const scale = useSharedValue(1);
   const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const textPri = isDark ? colors.white     : colors.navyDeep;
 
@@ -107,8 +107,8 @@ function LibraryCard({
         {content.condition_categories.length > 0 && (
           <View style={styles.tagRow}>
             {content.condition_categories.slice(0, 3).map(cat => (
-              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-                <Text style={[styles.tagText, { color: isDark ? colors.slateText : colors.navyDeep }]}>
+              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
+                <Text style={[styles.tagText, { color: isDark ? colors.stoneDim : colors.navyDeep }]}>
                   {cat.replace('_', ' ')}
                 </Text>
               </View>
@@ -144,9 +144,9 @@ export default function EducationIndexScreen() {
     router.push(`/education/${contentId}${query}`);
   };
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
+  const bg      = isDark ? colors.forestInk  : colors.skyMist;
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   if (loading) {
     return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;

@@ -59,10 +59,10 @@ function NotificationRow({ item, onPress, isDark }: NotificationRowProps) {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 
-  const unreadWash = isDark ? colors.navyMid + '40' : colors.iceBlue;
-  const titleClr   = isDark ? colors.white     : colors.navyDeep;
-  const bodyClr    = isDark ? colors.slateText : colors.coolGray;
-  const iconClr    = isUnread ? colors.electricBlue : bodyClr;
+  const unreadWash = isDark ? colors.forestSurfaceRaised + 'C0' : colors.iceBlue;
+  const titleClr   = isDark ? colors.ivoryText : colors.navyDeep;
+  const bodyClr    = isDark ? colors.stoneDim  : colors.coolGray;
+  const iconClr    = isUnread ? (isDark ? colors.jadeGlow : colors.electricBlue) : bodyClr;
 
   return (
     <HapticPressable
@@ -74,7 +74,7 @@ function NotificationRow({ item, onPress, isDark }: NotificationRowProps) {
     >
       <GlassCard unpadded strong={isUnread}>
         <View style={[styles.row, isUnread && { backgroundColor: unreadWash }]}>
-          <View style={[styles.iconBubble, { backgroundColor: isDark ? colors.nightElev : colors.skyMist }]}>
+          <View style={[styles.iconBubble, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.skyMist }]}>
             <Ionicons name={icon} size={20} color={iconClr} />
             {isUnread && (
               <View style={styles.unreadDot} />
@@ -125,7 +125,7 @@ export default function NotificationsScreen() {
   }
 
   const unreadCount = data?.unread_count ?? 0;
-  const bg = isDark ? colors.midnight : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.skyMist;
 
   if (isLoading) {
     return (
@@ -145,19 +145,19 @@ export default function NotificationsScreen() {
       {/* Unread toolbar */}
       {unreadCount > 0 && (
         <View style={[styles.toolbar, {
-          backgroundColor: isDark ? colors.nightSurface : colors.white,
-          borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : colors.borderLight,
+          backgroundColor: isDark ? colors.forestSurface : colors.white,
+          borderBottomColor: isDark ? 'rgba(79,163,131,0.12)' : colors.borderLight,
         }]}>
-          <View style={[styles.unreadBadge, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-            <Text style={[styles.unreadCount, { color: colors.electricBlue }]}>{unreadCount}</Text>
-            <Text style={[styles.unreadLabel, { color: isDark ? colors.slateText : colors.coolGray }]}>unread</Text>
+          <View style={[styles.unreadBadge, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
+            <Text style={[styles.unreadCount, { color: isDark ? colors.jadeGlow : colors.electricBlue }]}>{unreadCount}</Text>
+            <Text style={[styles.unreadLabel, { color: isDark ? colors.stoneDim : colors.coolGray }]}>unread</Text>
           </View>
           <Pressable
             onPress={() => markAllMutation.mutate()}
             disabled={markAllMutation.isPending}
             accessibilityLabel="Mark all notifications as read"
           >
-            <Text style={[styles.markAll, { color: colors.electricBlue }]}>Mark all read</Text>
+            <Text style={[styles.markAll, { color: isDark ? colors.jadeGlow : colors.electricBlue }]}>Mark all read</Text>
           </Pressable>
         </View>
       )}
@@ -172,7 +172,7 @@ export default function NotificationsScreen() {
           <RefreshControl
             refreshing={isFetching && !isLoading}
             onRefresh={refetch}
-            tintColor={colors.electricBlue}
+            tintColor={isDark ? colors.jadeGlow : colors.jade}
           />
         }
         contentContainerStyle={[
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.electricBlue,
+    backgroundColor: colors.jadeGlow,
   },
   rowContent: { flex: 1, gap: 2 },
   rowTitle: {

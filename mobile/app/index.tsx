@@ -7,7 +7,7 @@ import { colors } from '../lib/design-tokens';
 export default function Index() {
   const { state } = useAuth();
   const isDark = useThemePreference().colorScheme === 'dark';
-  const bg = isDark ? colors.midnight : colors.navyDeep;
+  const bg = isDark ? colors.forestInk : colors.navyDeep;
 
   if (state.status === 'loading') {
     return (

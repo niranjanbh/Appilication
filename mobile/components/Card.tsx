@@ -13,12 +13,12 @@ export function Card({ variant = 'clay', style, children, ...props }: CardProps)
 
   const dynamicBg =
     variant === 'clay' || variant === 'white' || variant === 'flat'
-      ? isDark ? colors.nightSurface : colors.white
+      ? isDark ? colors.forestSurface       : colors.white
       : variant === 'ivory'
-      ? isDark ? colors.nightElev    : colors.ivory
+      ? isDark ? colors.forestSurfaceRaised : colors.ivory
       : undefined;
 
-  const dynamicBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const dynamicBorder = isDark ? 'rgba(79,163,131,0.12)' : 'rgba(0,31,63,0.06)';
 
   return (
     <View
@@ -51,12 +51,12 @@ const styles = StyleSheet.create({
     boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
   },
 
-  // Dark — deep navy hero card with glass border
+  // Dark — forest hero card with jade border
   dark: {
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    boxShadow: `0 14px 24px ${withAlpha(colors.navyDeep, 0.40)}`,
+    borderColor: 'rgba(79,163,131,0.20)',
+    boxShadow: `0 14px 24px ${withAlpha(colors.forest, 0.40)}`,
   },
 
   // Glass — translucent surface

@@ -94,11 +94,11 @@ export default function AbhaLinkScreen() {
   const skipScale = useSharedValue(1);
   const skipAnim  = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
 
-  const bg       = isDark ? colors.midnight     : colors.skyMist;
+  const bg       = isDark ? colors.forestInk     : colors.skyMist;
   const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg   = isDark ? colors.nightSurface : colors.white;
-  const inputBg  = isDark ? colors.nightElev    : colors.skyMist;
+  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
+  const cardBg   = isDark ? colors.forestSurface : colors.white;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   // ── Success state ─────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export default function AbhaLinkScreen() {
 
       {/* Step progress */}
       <View style={styles.stepRow}>
-        <View style={[styles.progressTrack, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]}>
+        <View style={[styles.progressTrack, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.borderLight }]}>
           <View style={[styles.progressFill, { width: `${(STEP / TOTAL_STEPS) * 100}%` as never }]} />
         </View>
         <Text style={[styles.stepLabel, { color: textSub }]}>Step {STEP} of {TOTAL_STEPS}</Text>
@@ -153,7 +153,7 @@ export default function AbhaLinkScreen() {
       </View>
 
       {/* Tab switcher */}
-      <View style={[styles.tabBar, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]}>
+      <View style={[styles.tabBar, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.borderLight }]}>
         {(['link', 'create'] as Tab[]).map(t => (
           <Pressable
             key={t}

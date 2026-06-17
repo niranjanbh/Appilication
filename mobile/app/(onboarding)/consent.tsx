@@ -37,15 +37,15 @@ interface ConsentCardProps {
 function ConsentCard({ icon, title, summary, fullText, agreed, onAgree, isDark }: ConsentCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   return (
     <View style={[c.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
       <View style={c.cardHeader}>
-        <View style={[c.iconWrap, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+        <View style={[c.iconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
           <Text style={c.icon}>{icon}</Text>
         </View>
         <View style={c.cardHeaderText}>
@@ -182,8 +182,8 @@ export default function ConsentScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.skyMist;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
   const textPri = isDark ? colors.white     : colors.navyDeep;
 
   return (

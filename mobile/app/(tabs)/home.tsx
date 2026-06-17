@@ -125,7 +125,7 @@ export default function HomeScreen() {
             <Text style={[styles.greeting, { color: t.textSub }]}>{getGreeting()}</Text>
             <Text style={[styles.heroName, { color: t.text }]}>{firstName || 'Welcome'}</Text>
           </View>
-          <LinearGradient colors={[colors.navyMid, colors.navyDeep]} style={styles.avatar}>
+          <LinearGradient colors={t.isDark ? [colors.jade, colors.forest] : [colors.navyMid, colors.navyDeep]} style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </LinearGradient>
         </View>
@@ -138,7 +138,7 @@ export default function HomeScreen() {
           accessibilityLabel="Book your first consultation"
         >
           <LinearGradient
-            colors={[colors.navyMid, colors.navyDeep]}
+            colors={t.isDark ? [colors.jade, colors.forest] : [colors.navyMid, colors.navyDeep]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroCard}
@@ -146,8 +146,7 @@ export default function HomeScreen() {
             {/* glass sheen along the top edge */}
             <LinearGradient
               colors={[withAlpha(colors.white, 0.14), withAlpha(colors.white, 0)]}
-              style={styles.heroSheen}
-              pointerEvents="none"
+              style={[styles.heroSheen, { pointerEvents: 'none' }]}
             />
             <View style={styles.heroRow}>
               <View style={styles.heroIconWrap}>
@@ -280,7 +279,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
-    boxShadow: `0 14px 24px ${withAlpha(colors.navyDeep, 0.40)}`,
+    boxShadow: `0 14px 24px ${withAlpha(colors.forest, 0.40)}`,
   },
   heroSheen: {
     position: 'absolute',

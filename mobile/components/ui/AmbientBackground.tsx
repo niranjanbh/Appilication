@@ -10,13 +10,13 @@ import { useTheme } from '../../lib/theme';
  */
 export function AmbientBackground() {
   const t = useTheme();
-  const glowA = t.isDark ? withAlpha(colors.electricBlue, 0.16) : withAlpha(colors.electricBlue, 0.10);
-  const glowB = t.isDark ? withAlpha(colors.accentViolet, 0.13) : withAlpha(colors.accentViolet, 0.08);
-  const glowC = t.isDark ? withAlpha(colors.successLight, 0.08) : withAlpha(colors.successLight, 0.10);
+  const glowA = t.isDark ? withAlpha(colors.jadeGlow, 0.18)     : withAlpha(colors.electricBlue, 0.10);
+  const glowB = t.isDark ? withAlpha(colors.saffron,  0.12)     : withAlpha(colors.accentViolet,  0.08);
+  const glowC = t.isDark ? withAlpha(colors.sageDim,  0.10)     : withAlpha(colors.successLight,  0.10);
   const fade  = withAlpha(t.background, 0);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <LinearGradient colors={[glowA, fade]} style={[styles.blob, styles.topLeft]} />
       <LinearGradient colors={[glowB, fade]} style={[styles.blob, styles.right]} />
       <LinearGradient colors={[glowC, fade]} style={[styles.blob, styles.bottom]} />

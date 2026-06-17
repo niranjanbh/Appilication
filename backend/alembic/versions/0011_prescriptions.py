@@ -22,14 +22,20 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE TYPE prescription_status AS ENUM (
-            'draft', 'signed', 'dispensed', 'cancelled'
-        )
+        DO $$ BEGIN
+            CREATE TYPE prescription_status AS ENUM (
+                'draft', 'signed', 'dispensed', 'cancelled'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
     op.execute("""
-        CREATE TYPE drug_form AS ENUM (
-            'tablet', 'capsule', 'syrup', 'injection', 'topical', 'other'
-        )
+        DO $$ BEGIN
+            CREATE TYPE drug_form AS ENUM (
+                'tablet', 'capsule', 'syrup', 'injection', 'topical', 'other'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
 
     op.create_table(

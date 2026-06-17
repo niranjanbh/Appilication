@@ -37,12 +37,12 @@ function PrescriptionCard({
   const active = isActive(prescription);
   const firstDrug  = prescription.items[0]?.drug_generic_name ?? 'Prescription';
   const itemCount  = prescription.items.length;
-  const dotColor   = active ? colors.successGreen : (isDark ? colors.slateText : colors.coolGray);
+  const dotColor   = active ? colors.successGreen : (isDark ? colors.stoneDim : colors.coolGray);
 
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   return (
     <Animated.View style={anim}>
@@ -98,7 +98,7 @@ export default function PrescriptionsListScreen() {
     void fetchPrescriptions();
   }, [fetchPrescriptions]);
 
-  const bg = isDark ? colors.midnight : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.skyMist;
 
   if (loading) {
     return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
@@ -118,7 +118,7 @@ export default function PrescriptionsListScreen() {
   const active = prescriptions.filter(isActive);
   const past   = prescriptions.filter(rx => !isActive(rx));
   const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textSub = isDark ? colors.stoneDim : colors.coolGray;
 
   return (
     <ScrollView

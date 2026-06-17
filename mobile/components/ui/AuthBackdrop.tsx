@@ -8,19 +8,19 @@ import { colors, withAlpha } from '../../lib/design-tokens';
  */
 export function AuthBackdrop() {
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <LinearGradient
-        colors={[colors.navyMid, colors.navyDeep, colors.midnight]}
+        colors={[colors.forestSurface, colors.forestInk, colors.forestInk]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0.4, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={[withAlpha(colors.electricBlue, 0.35), withAlpha(colors.electricBlue, 0)]}
+        colors={[withAlpha(colors.jadeGlow, 0.30), withAlpha(colors.jadeGlow, 0)]}
         style={[styles.blob, styles.topRight]}
       />
       <LinearGradient
-        colors={[withAlpha(colors.accentViolet, 0.28), withAlpha(colors.accentViolet, 0)]}
+        colors={[withAlpha(colors.saffron, 0.22), withAlpha(colors.saffron, 0)]}
         style={[styles.blob, styles.bottomLeft]}
       />
     </View>

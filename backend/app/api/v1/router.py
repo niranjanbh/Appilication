@@ -4,15 +4,12 @@ from fastapi import APIRouter
 
 from app.api.v1.admin.analytics import router as admin_analytics_router
 from app.api.v1.admin.content import router as admin_content_router
-from app.api.v1.admin.coupons import router as admin_coupons_router
-from app.api.v1.admin.doctors import router as admin_doctors_router
-from app.api.v1.admin.dsr import router as admin_dsr_router
 from app.api.v1.admin.internal import router as admin_internal_router
-from app.api.v1.admin.pricing import router as admin_pricing_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.clinic.abha import router as abha_router
 from app.api.v1.clinic.biomarker_trends import router as biomarker_trends_router
 from app.api.v1.clinic.consultations import router as clinic_router
+from app.api.v1.clinic.doctors import router as patient_doctors_router
 from app.api.v1.clinic.education import router as patient_education_router
 from app.api.v1.clinic.lab_reports import router as lab_reports_router
 from app.api.v1.clinic.patient_notes import router as patient_notes_router
@@ -43,11 +40,8 @@ api_v1_router.include_router(patient_prescriptions_router, prefix="/clinic/patie
 api_v1_router.include_router(patient_pre_consult_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_education_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_notes_router, prefix="/clinic/patient")
+api_v1_router.include_router(patient_doctors_router, prefix="/clinic/patient")
 api_v1_router.include_router(doctor_router, prefix="/doctor")
 api_v1_router.include_router(admin_content_router, prefix="/admin")
 api_v1_router.include_router(admin_analytics_router, prefix="/admin")
 api_v1_router.include_router(admin_internal_router, prefix="/admin")
-api_v1_router.include_router(admin_doctors_router, prefix="/admin")
-api_v1_router.include_router(admin_pricing_router, prefix="/admin")
-api_v1_router.include_router(admin_coupons_router, prefix="/admin")
-api_v1_router.include_router(admin_dsr_router, prefix="/admin")
