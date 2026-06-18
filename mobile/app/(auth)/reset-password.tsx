@@ -57,8 +57,8 @@ export default function ResetPasswordScreen() {
 
   const textPri = isDark ? colors.white : colors.navyDeep;
   const textSub = isDark ? colors.stoneDim : colors.coolGray;
-  const inputBg = isDark ? colors.forestSurfaceRaised : colors.skyMist;
-  const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
+  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.35)';
+  const inputBdr = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.50)';
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

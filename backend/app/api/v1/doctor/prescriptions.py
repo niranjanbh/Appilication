@@ -345,17 +345,16 @@ async def sign_prescription(
             prescription_id=prescription_id,
         )
     except prescription_service.PrescriptionError as exc:
-        reason = str(exc)
         await write_audit(
             db, ctx,
             action="sign_prescription",
             resource_type="prescription",
             resource_id=prescription_id,
             allowed=False,
-            reason=reason,
+            reason=exc.code,
         )
         await db.commit()
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+        raise _prescription_http_error(exc) from exc
 
     await write_audit(
         db, ctx,

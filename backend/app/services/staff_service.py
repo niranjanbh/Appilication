@@ -108,8 +108,12 @@ async def revoke_staff_sessions(
     if user.role not in STAFF_ROLES:
         raise StaffServiceError("not_a_staff_role")
 
+    import asyncio
+
     jwt_sessions_revoked = await auth_repo.revoke_all_for_user(db, user.id)
-    portal_sessions_revoked = revoke_all_portal_sessions_for_user(user.id)
+    portal_sessions_revoked = await asyncio.to_thread(
+        revoke_all_portal_sessions_for_user, user.id
+    )
 
     await write_audit(
         db,

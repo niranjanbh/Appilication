@@ -1,3 +1,4 @@
+{% from "_csrf.html" import csrf_field %}
 {% for payment, payer in payments %}
 <tr>
   <td style="font-size:12px;">{{ payment.created_at.strftime('%d %b %Y %H:%M') if payment.created_at else '—' }}</td>
@@ -13,6 +14,7 @@
     <form method="POST" action="/admin/payments/{{ payment.id }}/refund"
           style="display:flex;gap:6px;align-items:center;"
           onsubmit="return confirm('Refund ₹{{ '%.2f' | format(payment.amount_paise / 100) }} to {{ payer.name if payer else 'the payer' }} in full?')">
+      {{ csrf_field(request) }}
       <input type="text" name="reason" required maxlength="200" placeholder="Reason…"
              style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:140px;">
       <button type="submit" class="btn btn-danger btn-sm">Refund</button>

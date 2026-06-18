@@ -1,0 +1,6 @@
+{# Double-submit CSRF token. Renders the hidden _csrf field that verify_csrf
+   (app/adminui/deps.py) checks against the CSRF cookie. Admin-first precedence
+   must match verify_csrf so a browser logged into both portals stays consistent. #}
+{% macro csrf_field(request) -%}
+<input type="hidden" name="_csrf" value="{{ request.cookies.get('kyros_admin_csrf') or request.cookies.get('kyros_coord_csrf') or '' }}">
+{%- endmacro %}

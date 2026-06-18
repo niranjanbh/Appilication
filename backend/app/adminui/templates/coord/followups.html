@@ -1,4 +1,5 @@
 {% extends "coord/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Follow-ups — Kyros Coordinator{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -28,6 +29,7 @@
     <p style="font-size:13px;color:var(--stone);">No assigned patients.</p>
     {% else %}
     <form method="POST" action="/coord/followups" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      {{ csrf_field(request) }}
       <div>
         <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
         <select name="patient_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
@@ -74,6 +76,7 @@
           <td>
             {% if followup.status == 'pending' %}
             <form method="POST" action="/coord/followups/{{ followup.id }}/complete">
+              {{ csrf_field(request) }}
               <button type="submit" class="btn btn-primary btn-sm">Mark done</button>
             </form>
             {% elif followup.completed_at %}

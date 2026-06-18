@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_super_admin_session
 from app.core.audit import AuditContext, write_audit
-from app.db.enums import ActorRole, DataSubjectRequestStatus
+from app.db.enums import (
+    ActorRole,
+    DataSubjectRequestStatus,
+    DataSubjectRequestType,
+)
 from app.db.session import get_db
 from app.models.consent import DataSubjectRequest
 from app.models.identity import User
@@ -91,6 +95,58 @@ async def dsr_queue(
             "error": None,
         },
     )
+
+
+@router.get("/dsr/{request_id}/download")
+async def dsr_download_export(
+    request_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+) -> RedirectResponse:
+    """Redirect to a short-lived presigned URL for a completed access export.
+
+    The export ZIP lives at a deterministic, DSR-derivable S3 key (SSE-KMS).
+    Every download is audit-logged; the admin delivers it per the DPDP runbook.
+    """
+    import asyncio
+
+    from app.integrations import s3
+
+    ctx = _ctx(request, admin)
+    dsr = await db.get(DataSubjectRequest, request_id)
+
+    if (
+        dsr is None
+        or dsr.request_type != DataSubjectRequestType.ACCESS
+        or dsr.status != DataSubjectRequestStatus.COMPLETED
+    ):
+        await write_audit(
+            db, ctx, action="admin_dsr_download_export",
+            resource_type="data_subject_request", resource_id=request_id,
+            allowed=False, reason="not_found_or_not_ready",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    export_key = s3.data_export_s3_key(dsr.user_id, dsr.id)
+    exists = await asyncio.to_thread(s3.head_object, s3_key=export_key)
+    if exists is None:
+        await write_audit(
+            db, ctx, action="admin_dsr_download_export",
+            resource_type="data_subject_request", resource_id=request_id,
+            allowed=False, reason="export_object_missing",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "export not available")
+
+    url = await asyncio.to_thread(s3.generate_download_url, s3_key=export_key)
+    await write_audit(
+        db, ctx, action="admin_dsr_download_export",
+        resource_type="data_subject_request", resource_id=request_id, allowed=True,
+    )
+    await db.commit()
+    return RedirectResponse(url=url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/dsr/{request_id}/status")

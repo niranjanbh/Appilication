@@ -106,7 +106,9 @@ async def finalize_upload(
     if report.file_url is None:
         raise LabReportValidationError("Report has no file_url — cannot finalize.")
 
-    meta = s3.head_object(s3_key=report.file_url)
+    import asyncio
+
+    meta = await asyncio.to_thread(s3.head_object, s3_key=report.file_url)
     if meta is None:
         raise LabReportValidationError(
             "Upload not found in S3. Please complete the upload before calling finalize."

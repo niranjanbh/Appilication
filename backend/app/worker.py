@@ -38,6 +38,18 @@ celery_app.conf.update(
             "task": "kyros.maintenance.ensure_health_partitions_ahead",
             "schedule": crontab(hour=3, minute=0, day_of_month="1"),  # 1st of each month
         },
+        "reconcile-pending-payments": {
+            "task": "kyros.payment.reconcile_pending",
+            "schedule": crontab(minute=0, hour="*/2"),  # every 2 hours
+        },
+        "provision-upcoming-video-rooms": {
+            "task": "kyros.video.provision_upcoming_rooms",
+            "schedule": crontab(minute="*/1"),  # every minute
+        },
+        "dispatch-due-reminders": {
+            "task": "kyros.reminder.dispatch_due",
+            "schedule": crontab(minute="*/5"),  # every 5 minutes
+        },
     },
 )
 celery_app.autodiscover_tasks([
@@ -51,4 +63,5 @@ celery_app.autodiscover_tasks([
     "app.tasks.maintenance_tasks",
     "app.tasks.report_tasks",
     "app.tasks.analytics_tasks",
+    "app.tasks.doctor_tasks",
 ])

@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}{{ user.name }} — Doctors — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -36,9 +37,11 @@
     <div class="card-title">Pipeline actions</div>
     <div class="action-bar">
       <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify">
+        {{ csrf_field(request) }}
         <button type="submit" class="btn btn-secondary">Mark Verified</button>
       </form>
       <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate">
+        {{ csrf_field(request) }}
         <button type="submit" class="btn btn-primary">Activate</button>
       </form>
     </div>
@@ -48,6 +51,7 @@
   <div class="card" style="margin-top:16px;">
     <div class="card-title">Revenue share</div>
     <form method="POST" action="/admin/doctors/{{ doctor.id }}/revenue-share" style="display:flex;gap:10px;align-items:flex-end;margin-top:10px;">
+      {{ csrf_field(request) }}
       <div>
         <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Percentage (%)</label>
         <input type="number" name="revenue_share_pct" min="0" max="100" step="0.01"

@@ -255,8 +255,10 @@ async def _verify_otp_code(
 
         raise BusinessRuleError("otp_expired")
 
+    import hmac as _hmac
+
     expected = hash_otp(code)
-    if not stored == expected:
+    if not _hmac.compare_digest(stored, expected):
         from app.core.exceptions import BusinessRuleError
 
         raise BusinessRuleError("otp_invalid")

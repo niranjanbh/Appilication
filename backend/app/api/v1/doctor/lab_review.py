@@ -64,12 +64,19 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     )
 
 
-async def _resolve_doctor(db: DbSession, user: object) -> object:
+async def _resolve_doctor(
+    db: DbSession, user: object, ctx: AuditContext, action: str
+) -> object:
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
     if row is None:
+        await write_audit(
+            db, ctx, action=action,
+            resource_type="doctor", allowed=False, reason="no_doctor_profile",
+        )
+        await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
     return row[0]
 
@@ -110,17 +117,14 @@ async def list_patient_lab_reports(
     from app.models.doctor import Doctor as DoctorModel
 
     ctx = _audit_ctx(request, user)
-    doctor = await _resolve_doctor(db, user)
+    doctor = await _resolve_doctor(db, user, ctx, "list_patient_lab_reports")
     assert isinstance(doctor, DoctorModel)
 
+    # Repo scopes to the doctor's panel: a non-panel patient and a panel patient
+    # with no reports both return [] — identical responses, so no enumeration leak.
     reports = await dr_repo.list_patient_lab_reports(
         db, doctor_id=doctor.id, patient_id=patient_id
     )
-    if not reports:
-        # Could be empty panel or no reports — either way write a denied entry
-        # only when the patient isn't on panel at all; omit for empty-but-valid.
-        # We return an empty list rather than 404 for "no reports yet."
-        pass
 
     await write_audit(
         db, ctx, action="list_patient_lab_reports",
@@ -144,7 +148,7 @@ async def get_patient_lab_report(
     from app.models.doctor import Doctor as DoctorModel
 
     ctx = _audit_ctx(request, user)
-    doctor = await _resolve_doctor(db, user)
+    doctor = await _resolve_doctor(db, user, ctx, "view_patient_lab_report")
     assert isinstance(doctor, DoctorModel)
 
     report = await dr_repo.get_patient_lab_report(
@@ -193,30 +197,15 @@ async def annotate_lab_report(
         )
 
     ctx = _audit_ctx(request, user)
-    doctor = await _resolve_doctor(db, user)
+    doctor = await _resolve_doctor(db, user, ctx, "annotate_lab_report")
     assert isinstance(doctor, DoctorModel)
 
-    # We need patient_id for the scope check; fetch the report first.
-    from sqlalchemy import select
-
-    from app.models.clinic import LabReport
-    raw = await db.execute(select(LabReport).where(LabReport.id == report_id))
-    raw_report = raw.scalar_one_or_none()
-    if raw_report is None:
-        await write_audit(
-            db, ctx, action="annotate_lab_report",
-            resource_type="lab_report", resource_id=report_id,
-            allowed=False, reason="not_own_or_not_found",
-        )
-        await db.commit()
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
-
-    assert isinstance(raw_report, LabReport)
-    updated = await dr_repo.annotate_lab_report(
+    # The repo function verifies both existence and panel membership in a
+    # single scoped query — no un-scoped pre-fetch needed.
+    updated = await dr_repo.annotate_lab_report_by_doctor(
         db,
         doctor_id=doctor.id,
         report_id=report_id,
-        patient_id=raw_report.patient_id,
         commentary=body.commentary,
         flags=body.patient_attention_flags,
     )

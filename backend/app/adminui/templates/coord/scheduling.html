@@ -1,4 +1,5 @@
 {% extends "coord/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Scheduling — Kyros Coordinator{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -42,6 +43,7 @@
     <p style="font-size:13px;color:var(--stone);margin-top:8px;">No available slots in the selected window. Try extending the range.</p>
     {% else %}
     <form method="POST" action="/coord/scheduling/book" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px;">
+      {{ csrf_field(request) }}
       <div>
         <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
         <select name="patient_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
@@ -104,6 +106,7 @@
               <form method="POST" action="/coord/scheduling/{{ consultation.id }}/reschedule"
                     style="display:flex;gap:6px;align-items:center;"
                     onsubmit="return confirm('Move this consultation to the selected slot?')">
+                {{ csrf_field(request) }}
                 <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;max-width:230px;">
                   <option value="">New slot…</option>
                   {% for slot, doctor, slot_doctor_user in slots %}
@@ -116,6 +119,7 @@
               <form method="POST" action="/coord/scheduling/{{ consultation.id }}/cancel"
                     style="display:flex;gap:6px;align-items:center;"
                     onsubmit="return confirm('Cancel this consultation?')">
+                {{ csrf_field(request) }}
                 <input type="text" name="reason" maxlength="200" placeholder="Reason…"
                        style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:110px;">
                 <button type="submit" class="btn btn-danger btn-sm">Cancel</button>

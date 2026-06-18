@@ -85,6 +85,36 @@ def generate_download_url(*, s3_key: str) -> str:
     return url
 
 
+def data_export_s3_key(user_id: uuid.UUID, request_id: uuid.UUID) -> str:
+    """Deterministic key for a DPDP data-export ZIP — derivable from the DSR row."""
+    return f"exports/{user_id}/{request_id}.zip"
+
+
+def put_bytes(
+    *,
+    s3_key: str,
+    data: bytes,
+    content_type: str = "application/octet-stream",
+) -> None:
+    """Server-side upload of in-memory bytes with SSE-KMS (security rule 6).
+
+    Used for generated PHI artifacts (DPDP export ZIPs). All PHI in S3 must be
+    encrypted with SSE-KMS; an explicit key is used when configured, otherwise
+    the account default aws/s3 KMS key.
+    """
+    client = _s3_client()
+    extra: dict[str, Any] = {"ServerSideEncryption": "aws:kms"}
+    if settings.s3_kms_key_id:
+        extra["SSEKMSKeyId"] = settings.s3_kms_key_id
+    client.put_object(
+        Bucket=settings.s3_bucket,
+        Key=s3_key,
+        Body=data,
+        ContentType=content_type,
+        **extra,
+    )
+
+
 def head_object(*, s3_key: str) -> dict[str, Any] | None:
     """Return S3 HEAD metadata or None if the object does not exist."""
     import botocore.exceptions

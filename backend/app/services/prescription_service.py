@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from html import escape as _esc
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -242,14 +243,14 @@ def render_prescription_html(
         duration = f"{item.duration_days} days" if item.duration_days else "Ongoing"
         items_html += f"""
         <div class="rx-item">
-            <div class="drug-name">{item.drug_generic_name}</div>
-            <div class="drug-form">{item.drug_form.capitalize()}</div>
+            <div class="drug-name">{_esc(item.drug_generic_name)}</div>
+            <div class="drug-form">{_esc(item.drug_form.capitalize())}</div>
             <div class="drug-detail">
-                <span class="label">Dose:</span> {item.dosage} &nbsp;|&nbsp;
-                <span class="label">Frequency:</span> {item.frequency} &nbsp;|&nbsp;
-                <span class="label">Duration:</span> {duration}
+                <span class="label">Dose:</span> {_esc(item.dosage)} &nbsp;|&nbsp;
+                <span class="label">Frequency:</span> {_esc(item.frequency)} &nbsp;|&nbsp;
+                <span class="label">Duration:</span> {_esc(duration)}
             </div>
-            {f'<div class="drug-instructions">{item.instructions}</div>' if item.instructions else ''}
+            {f'<div class="drug-instructions">{_esc(item.instructions)}</div>' if item.instructions else ''}
         </div>
         """
 
@@ -258,7 +259,7 @@ def render_prescription_html(
         diagnosis_section = f"""
         <div class="section">
             <div class="section-label">Diagnosis / Chief Complaint</div>
-            <div class="section-value">{prescription.diagnosis_note}</div>
+            <div class="section-value">{_esc(prescription.diagnosis_note)}</div>
         </div>
         """
 
@@ -267,7 +268,7 @@ def render_prescription_html(
         general_section = f"""
         <div class="section">
             <div class="section-label">General Instructions</div>
-            <div class="section-value">{prescription.general_instructions}</div>
+            <div class="section-value">{_esc(prescription.general_instructions)}</div>
         </div>
         """
 
@@ -319,13 +320,13 @@ def render_prescription_html(
   </div>
 
   <div class="doctor-block">
-    <div class="doctor-name">Dr {doctor_name}</div>
-    <div class="doctor-meta">NMC Reg: {nmc_registration_number} &nbsp;|&nbsp; {', '.join(specialty) if specialty else 'General Practice'}</div>
+    <div class="doctor-name">Dr {_esc(doctor_name)}</div>
+    <div class="doctor-meta">NMC Reg: {_esc(nmc_registration_number)} &nbsp;|&nbsp; {_esc(', '.join(specialty)) if specialty else 'General Practice'}</div>
     <div class="signed-chip">&#x2713; Digitally signed {signed_at_str}</div>
   </div>
 
   <div class="patient-block">
-    <div class="patient-field"><div class="patient-label">Patient</div><div class="patient-value">{patient_name}</div></div>
+    <div class="patient-field"><div class="patient-label">Patient</div><div class="patient-value">{_esc(patient_name)}</div></div>
     <div class="patient-field"><div class="patient-label">Prescription ID</div><div class="patient-value rx-id">{str(prescription.id)[:13]}…</div></div>
   </div>
 

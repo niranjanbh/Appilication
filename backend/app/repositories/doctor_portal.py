@@ -616,6 +616,56 @@ async def annotate_lab_report(
     return result.scalar_one_or_none()
 
 
+async def annotate_lab_report_by_doctor(
+    db: AsyncSession,
+    *,
+    doctor_id: uuid.UUID,
+    report_id: uuid.UUID,
+    commentary: dict[str, str] | None,
+    flags: list[str] | None,
+) -> LabReport | None:
+    """Scoped annotation without requiring caller to know patient_id.
+
+    Single scoped query: verifies the report exists AND the owning patient
+    is on this doctor's panel. Returns None for both not-found and
+    not-on-panel (cross-user 404 pattern).
+    """
+    from sqlalchemy import update
+
+    on_panel = (
+        select(Consultation.patient_id)
+        .where(
+            Consultation.doctor_id == doctor_id,
+            Consultation.patient_id == LabReport.patient_id,
+            Consultation.deleted_at.is_(None),
+        )
+        .exists()
+    )
+    check = await db.execute(
+        select(LabReport).where(LabReport.id == report_id, on_panel)
+    )
+    report = check.scalar_one_or_none()
+    if report is None:
+        return None
+
+    values: dict[str, Any] = {
+        "doctor_reviewed_by_id": doctor_id,
+        "updated_at": datetime.now(UTC),
+    }
+    if commentary is not None:
+        values["doctor_commentary"] = commentary
+    if flags is not None:
+        values["patient_attention_flags"] = flags
+
+    result = await db.execute(
+        update(LabReport)
+        .where(LabReport.id == report_id)
+        .values(**values)
+        .returning(LabReport)
+    )
+    return result.scalar_one_or_none()
+
+
 # ── Bank details ───────────────────────────────────────────────────────────────
 
 

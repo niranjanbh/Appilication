@@ -1,4 +1,5 @@
 {% extends "coord/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Communication — Kyros Coordinator{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -46,6 +47,7 @@
       <div class="card">
         <div class="card-title">Send message to {{ user.name }}</div>
         <form method="POST" action="/coord/communication/send" style="margin-top:16px;">
+          {{ csrf_field(request) }}
           <input type="hidden" name="patient_id" value="{{ patient.id }}">
 
           <div style="margin-bottom:14px;">

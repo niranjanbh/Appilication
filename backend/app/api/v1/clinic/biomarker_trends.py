@@ -242,7 +242,15 @@ async def get_biomarker_trend(
             )
         )
 
-    # Use the most recent data point's reference range as the canonical range
+    if not data_points:
+        return BiomarkerTrendResponse(
+            biomarker_name=biomarker,
+            unit="",
+            data_points=[],
+            ref_low=None,
+            ref_high=None,
+        )
+
     latest = data_points[-1]
     canonical_ref_low = latest.ref_low
     canonical_ref_high = latest.ref_high

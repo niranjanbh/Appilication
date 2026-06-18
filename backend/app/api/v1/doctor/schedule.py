@@ -85,12 +85,19 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     )
 
 
-async def _get_doctor_or_404(db: DbSession, user: object) -> object:
+async def _get_doctor_or_404(
+    db: DbSession, user: object, ctx: AuditContext, action: str
+) -> object:
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
     if row is None:
+        await write_audit(
+            db, ctx, action=action,
+            resource_type="doctor", allowed=False, reason="no_doctor_profile",
+        )
+        await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
     return row[0]  # Doctor
 
@@ -109,7 +116,7 @@ async def list_schedule(
     from app.models.doctor import Availability
 
     ctx = _audit_ctx(request, user)
-    doctor = await _get_doctor_or_404(db, user)
+    doctor = await _get_doctor_or_404(db, user, ctx, "list_schedule")
 
     from app.models.doctor import Doctor as DoctorModel
 
@@ -144,7 +151,7 @@ async def bulk_create_slots(
     from app.models.doctor import Doctor as DoctorModel
 
     ctx = _audit_ctx(request, user)
-    doctor = await _get_doctor_or_404(db, user)
+    doctor = await _get_doctor_or_404(db, user, ctx, "bulk_create_schedule")
     assert isinstance(doctor, DoctorModel)
 
     pairs = [(s.slot_start, s.slot_end) for s in body.slots]
@@ -184,7 +191,7 @@ async def delete_slot(
     from app.models.doctor import Doctor as DoctorModel
 
     ctx = _audit_ctx(request, user)
-    doctor = await _get_doctor_or_404(db, user)
+    doctor = await _get_doctor_or_404(db, user, ctx, "delete_schedule_slot")
     assert isinstance(doctor, DoctorModel)
 
     result = await dr_repo.delete_availability_slot(
@@ -227,7 +234,7 @@ async def update_preferences(
     from app.models.doctor import Doctor as DoctorModel
 
     ctx = _audit_ctx(request, user)
-    doctor = await _get_doctor_or_404(db, user)
+    doctor = await _get_doctor_or_404(db, user, ctx, "update_schedule_preferences")
     assert isinstance(doctor, DoctorModel)
 
     patch: dict[str, object] = {}
@@ -238,6 +245,12 @@ async def update_preferences(
 
     updated = await dr_repo.update_doctor_preferences(db, doctor_id=doctor.id, fields=patch)
     if updated is None:
+        await write_audit(
+            db, ctx, action="update_schedule_preferences",
+            resource_type="doctor", resource_id=doctor.id,
+            allowed=False, reason="not_found",
+        )
+        await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
 
     await write_audit(

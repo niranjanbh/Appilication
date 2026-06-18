@@ -225,12 +225,33 @@ def _login_redirect(request: Request) -> HTTPException:
     )
 
 
-def verify_csrf(request: Request) -> None:
-    """Validate CSRF token for POST forms (call from POST handlers)."""
-    # Double-submit: cookie value must match form field value.
-    # Both are set at login time; neither is readable from other origins.
-    pass  # Implemented inline in POST handlers for simplicity in dev.
-    # Production hardening: compare request.cookies.get(CSRF_COOKIE) with form _csrf.
+_CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
+
+async def verify_csrf(request: Request) -> None:
+    """Validate the CSRF token on state-changing requests.
+
+    Double-submit cookie pattern: the CSRF cookie value (HttpOnly=False, so the
+    template can read it) must match the hidden ``_csrf`` form field. Both are
+    set at login; SameSite=Lax already blocks cross-origin cookie attachment on
+    POST — this is the defense-in-depth second factor.
+
+    Safe methods (GET/HEAD/OPTIONS/TRACE) are exempt, so this can be attached as
+    a router-level dependency covering both GET pages and POST forms. Admin-first
+    cookie precedence must match the csrf_field template macro.
+    """
+    if request.method in _CSRF_SAFE_METHODS:
+        return
+
+    cookie_token = request.cookies.get(_CSRF_COOKIE) or request.cookies.get(_COORD_CSRF_COOKIE)
+    if not cookie_token:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "csrf_missing")
+
+    form = await request.form()
+    form_token = form.get("_csrf", "")
+
+    if not isinstance(form_token, str) or not secrets.compare_digest(cookie_token, form_token):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "csrf_invalid")
 
 
 # ── Coordinator session auth ───────────────────────────────────────────────────
@@ -328,6 +349,10 @@ async def require_coord_session(
     if user is None or not isinstance(user, UserModel) or user.role != UserRole.COORDINATOR:
         raise _coord_login_redirect(request)
 
+    from app.db.enums import ActorRole
+
+    request.state.actor_user_id = user.id
+    request.state.actor_role = ActorRole(user.role.value)
     return user
 
 

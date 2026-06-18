@@ -187,7 +187,7 @@ async def update_coupon(
 ) -> CouponAdminRead:
     ctx = _audit_ctx(request, user)
 
-    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     if not fields:
         existing = await coupon_repo.get_by_id(db, coupon_id=coupon_id)
         if existing is None:

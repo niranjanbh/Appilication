@@ -9,6 +9,7 @@ DELETE /v1/clinic/patient/notes/{note_id} — soft-delete own note
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -39,8 +40,8 @@ class PatientNoteRead(BaseModel):
 
     id: uuid.UUID
     body: str
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class PatientNoteListResponse(BaseModel):
@@ -48,6 +49,7 @@ class PatientNoteListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    pages: int
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,15 +69,7 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
 
 
 def _note_to_read(note: object) -> PatientNoteRead:
-    from app.models.clinic import PatientNote
-
-    assert isinstance(note, PatientNote)
-    return PatientNoteRead(
-        id=note.id,
-        body=note.body,
-        created_at=note.created_at.isoformat(),
-        updated_at=note.updated_at.isoformat(),
-    )
+    return PatientNoteRead.model_validate(note)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -129,6 +123,7 @@ async def list_notes(
         total=total,
         page=page,
         page_size=page_size,
+        pages=(total + page_size - 1) // page_size if page_size else 0,
     )
 
 

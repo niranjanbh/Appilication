@@ -230,7 +230,7 @@ async def get_doctor_record(
 ) -> Doctor | None:
     """Return the dr_doctors row for a user, or None if not found."""
     result = await db.execute(
-        select(Doctor).where(Doctor.user_id == user_id)
+        select(Doctor).where(Doctor.user_id == user_id, Doctor.deleted_at.is_(None))
     )
     return result.scalar_one_or_none()
 
@@ -296,9 +296,12 @@ async def get_pre_consult_report_for_patient(
     result = await db.execute(
         select(PreConsultationReport)
         .join(Patient, Patient.id == PreConsultationReport.patient_id)
+        .join(Consultation, Consultation.id == PreConsultationReport.consultation_id)
         .where(
             PreConsultationReport.consultation_id == consultation_id,
             Patient.user_id == patient_user_id,
+            Patient.deleted_at.is_(None),
+            Consultation.deleted_at.is_(None),
         )
     )
     return result.scalar_one_or_none()
@@ -318,6 +321,7 @@ async def has_prior_completed_consultation(
                 Consultation.patient_id == patient_id,
                 Consultation.status == ConsultationStatus.COMPLETED,
                 Consultation.id != exclude_consultation_id,
+                Consultation.deleted_at.is_(None),
             )
         )
     )

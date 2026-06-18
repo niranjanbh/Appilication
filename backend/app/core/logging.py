@@ -1,8 +1,37 @@
 from __future__ import annotations
 
 import logging
+import re
+from typing import Any
 
 import structlog
+
+_PHI_KEYS = frozenset({
+    "phone", "phone_number", "mobile", "email", "email_address",
+    "name", "patient_name", "doctor_name", "full_name",
+    "date_of_birth", "dob", "address", "abha_number",
+    "lab_value", "lab_values", "prescription_content",
+    "diagnosis", "diagnosis_note", "password", "password_hash",
+    "token", "token_hash", "otp", "otp_code",
+})
+
+_PHONE_RE = re.compile(r"\+?\d{10,15}")
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+
+def _scrub_phi(
+    _logger: Any, _method: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """Strip known PHI fields and redact phone/email patterns in values."""
+    for key in list(event_dict):
+        if key in _PHI_KEYS:
+            event_dict[key] = "[REDACTED]"
+        elif isinstance(event_dict[key], str):
+            val = event_dict[key]
+            val = _PHONE_RE.sub("[REDACTED_PHONE]", val)
+            val = _EMAIL_RE.sub("[REDACTED_EMAIL]", val)
+            event_dict[key] = val
+    return event_dict
 
 
 def configure_logging(*, debug: bool = False) -> None:
@@ -12,6 +41,7 @@ def configure_logging(*, debug: bool = False) -> None:
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        _scrub_phi,
     ]
 
     structlog.configure(

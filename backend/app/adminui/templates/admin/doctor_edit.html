@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Edit Doctor Profile — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -15,6 +16,7 @@
       NMC number and verification status change through the pipeline, not here.
     </p>
     <form method="POST" action="/admin/doctors/{{ doctor.id }}/edit">
+      {{ csrf_field(request) }}
       <div class="form-group">
         <label for="bio_short">Short bio (max 500 chars)</label>
         <input id="bio_short" name="bio_short" type="text" maxlength="500" value="{{ doctor.bio_short or '' }}">

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinic import PatientNote
@@ -41,15 +41,15 @@ async def list_notes_for_patient(
     result = await db.execute(stmt)
     notes = list(result.scalars().all())
 
-    count_stmt = (
-        select(PatientNote)
+    count_result = await db.scalar(
+        select(func.count())
+        .select_from(PatientNote)
         .where(
             PatientNote.patient_user_id == patient_user_id,
             PatientNote.deleted_at.is_(None),
         )
     )
-    count_result = await db.execute(count_stmt)
-    total = len(count_result.scalars().all())
+    total = count_result or 0
     return notes, total
 
 

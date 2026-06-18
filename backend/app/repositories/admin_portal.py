@@ -444,43 +444,47 @@ async def list_all_consultations(
     date_from: datetime | None = None,
     page: int = 1,
     page_size: int = 30,
-) -> tuple[list[tuple[Consultation, User, User]], int]:
+) -> tuple[list[tuple[Consultation, User, User | None]], int]:
     """Return (Consultation, patient_user, doctor_user) triples."""
-    base = (
-        select(Consultation, Patient, User)
-        .join(Patient, Patient.id == Consultation.patient_id)
-        .join(User, User.id == Patient.user_id)
-        .where(Consultation.deleted_at.is_(None), Patient.deleted_at.is_(None))
-    )
+    from sqlalchemy.orm import aliased
 
+    PatientUser = aliased(User, name="patient_user")
+    DoctorUser = aliased(User, name="doctor_user")
+
+    base_filter = [Consultation.deleted_at.is_(None), Patient.deleted_at.is_(None)]
     if doctor_id:
-        base = base.where(Consultation.doctor_id == doctor_id)
+        base_filter.append(Consultation.doctor_id == doctor_id)
     if status_filter:
         try:
-            base = base.where(Consultation.status == ConsultationStatus(status_filter))
+            base_filter.append(Consultation.status == ConsultationStatus(status_filter))
         except ValueError:
             pass
     if date_from:
-        base = base.where(Consultation.scheduled_start_at >= date_from)
+        base_filter.append(Consultation.scheduled_start_at >= date_from)
 
-    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
-    total: int = count_result.scalar_one()
-
-    offset = (page - 1) * page_size
-    rows = await db.execute(
-        base.order_by(Consultation.scheduled_start_at.desc()).offset(offset).limit(page_size)
+    count_base = (
+        select(func.count())
+        .select_from(Consultation)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .where(*base_filter)
     )
-    triples: list[tuple[Consultation, User, User]] = []
-    for row in rows:
-        # Fetch doctor user separately (simple, avoids complex alias join)
-        dr_result = await db.execute(
-            select(Doctor, User)
-            .join(User, User.id == Doctor.user_id)
-            .where(Doctor.id == row.Consultation.doctor_id)
-        )
-        dr_row = dr_result.first()
-        doctor_user = dr_row.User if dr_row else None
-        triples.append((row.Consultation, row.User, doctor_user))  # type: ignore[arg-type]
+    total: int = (await db.execute(count_base)).scalar_one()
+
+    query = (
+        select(Consultation, PatientUser, DoctorUser)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .join(PatientUser, PatientUser.id == Patient.user_id)
+        .join(Doctor, Doctor.id == Consultation.doctor_id)
+        .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
+        .where(*base_filter)
+        .order_by(Consultation.scheduled_start_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = await db.execute(query)
+    triples: list[tuple[Consultation, User, User | None]] = [
+        (row[0], row[1], row[2]) for row in rows
+    ]
     return triples, total
 
 

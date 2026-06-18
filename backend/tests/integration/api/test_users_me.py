@@ -290,7 +290,14 @@ async def test_data_export_async_generates_zip_and_marks_completed(
         received_at=datetime.now(UTC),
     )
 
-    await _process_data_export_async(user.id, dsr.id, db=db_session)
+    # The export uploads the ZIP to S3 (SSE-KMS); patch that boundary so the
+    # test stays offline and capture the uploaded bytes.
+    with patch("app.integrations.s3.put_bytes") as mock_put:
+        await _process_data_export_async(user.id, dsr.id, db=db_session)
+
+    mock_put.assert_called_once()
+    assert mock_put.call_args.kwargs["s3_key"] == f"exports/{user.id}/{dsr.id}.zip"
+    assert len(mock_put.call_args.kwargs["data"]) > 0
 
     updated_dsr = await db_session.scalar(
         select(DataSubjectRequest).where(DataSubjectRequest.id == dsr.id)
@@ -301,6 +308,8 @@ async def test_data_export_async_generates_zip_and_marks_completed(
     assert updated_dsr.notes is not None
     notes = json.loads(updated_dsr.notes)
     assert notes["zip_size_bytes"] > 0
+    assert notes["export_s3_key"] == f"exports/{user.id}/{dsr.id}.zip"
+    assert "profile.json" in notes["categories"]
 
 
 # ── POST /v1/users/me/delete ──────────────────────────────────────────────────

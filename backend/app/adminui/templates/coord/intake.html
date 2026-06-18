@@ -1,4 +1,5 @@
 {% extends "coord/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Intake Queue — Kyros Coordinator{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -33,6 +34,7 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <!-- Confirm -->
       <form method="POST" action="/coord/intake/{{ consultation.id }}/confirm" style="display:flex;gap:8px;align-items:flex-end;">
+        {{ csrf_field(request) }}
         <div>
           <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Coordinator note (optional)</label>
           <input type="text" name="notes" maxlength="490"
@@ -44,6 +46,7 @@
 
       <!-- Escalate -->
       <form method="POST" action="/coord/intake/{{ consultation.id }}/escalate" style="display:flex;gap:8px;align-items:flex-end;">
+        {{ csrf_field(request) }}
         <div>
           <label style="font-size:11px;color:var(--stone);display:block;margin-bottom:3px;">Escalation reason</label>
           <input type="text" name="reason" required maxlength="200"

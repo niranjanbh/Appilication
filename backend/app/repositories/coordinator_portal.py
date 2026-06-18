@@ -139,10 +139,15 @@ async def list_today_consultations(
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
 
+    from sqlalchemy.orm import aliased
+
+    DoctorUser = aliased(User, name="doctor_user")
     result = await db.execute(
-        select(Consultation, Patient, User)
+        select(Consultation, User, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)
         .join(User, User.id == Patient.user_id)
+        .join(Doctor, Doctor.id == Consultation.doctor_id)
+        .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
         .where(
             Consultation.patient_id.in_(assigned),
             Consultation.scheduled_start_at >= day_start,
@@ -151,15 +156,7 @@ async def list_today_consultations(
         )
         .order_by(Consultation.scheduled_start_at)
     )
-    triples = []
-    for row in result:
-        dr_result = await db.execute(
-            select(User).join(Doctor, Doctor.user_id == User.id)
-            .where(Doctor.id == row.Consultation.doctor_id)
-        )
-        doctor_user = dr_result.scalar_one_or_none()
-        triples.append((row.Consultation, row.User, doctor_user))
-    return triples
+    return [(row[0], row[1], row[2]) for row in result]
 
 
 async def list_intake_queue(
@@ -204,8 +201,13 @@ async def list_patient_consultations_restricted(
     if patient_id not in assigned:
         return []
 
+    from sqlalchemy.orm import aliased
+
+    DoctorUser = aliased(User, name="doctor_user")
     result = await db.execute(
-        select(Consultation)
+        select(Consultation, DoctorUser)
+        .join(Doctor, Doctor.id == Consultation.doctor_id)
+        .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
         .where(
             Consultation.patient_id == patient_id,
             Consultation.deleted_at.is_(None),
@@ -213,17 +215,7 @@ async def list_patient_consultations_restricted(
         .order_by(Consultation.scheduled_start_at.desc())
         .limit(50)
     )
-    consultations = list(result.scalars().all())
-
-    pairs = []
-    for consultation in consultations:
-        dr_result = await db.execute(
-            select(User).join(Doctor, Doctor.user_id == User.id)
-            .where(Doctor.id == consultation.doctor_id)
-        )
-        doctor_user = dr_result.scalar_one_or_none()
-        pairs.append((consultation, doctor_user))
-    return pairs
+    return [(row[0], row[1]) for row in result]
 
 
 # ── Scheduling ─────────────────────────────────────────────────────────────────
@@ -375,10 +367,15 @@ async def list_upcoming_consultations(
     if not assigned:
         return []
 
+    from sqlalchemy.orm import aliased
+
+    DoctorUser = aliased(User, name="doctor_user")
     result = await db.execute(
-        select(Consultation, Patient, User)
+        select(Consultation, User, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)
         .join(User, User.id == Patient.user_id)
+        .join(Doctor, Doctor.id == Consultation.doctor_id)
+        .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
         .where(
             Consultation.patient_id.in_(assigned),
             Consultation.status.in_(
@@ -389,14 +386,7 @@ async def list_upcoming_consultations(
         )
         .order_by(Consultation.scheduled_start_at)
     )
-    triples = []
-    for row in result:
-        dr_result = await db.execute(
-            select(User).join(Doctor, Doctor.user_id == User.id)
-            .where(Doctor.id == row.Consultation.doctor_id)
-        )
-        triples.append((row.Consultation, row.User, dr_result.scalar_one_or_none()))
-    return triples
+    return [(row[0], row[1], row[2]) for row in result]
 
 
 async def reschedule_consultation_for_coordinator(
@@ -431,17 +421,8 @@ async def reschedule_consultation_for_coordinator(
     if consultation is None:
         return None
 
-    # Free the old slot first so the rollback path leaves it booked.
-    await db.execute(
-        update(Availability)
-        .where(Availability.consultation_id == consultation_id)
-        .values(
-            status=AvailabilityStatus.AVAILABLE,
-            consultation_id=None,
-            updated_at=datetime.now(UTC),
-        )
-    )
-
+    # Lock and verify the new slot BEFORE freeing the old one — if the new
+    # slot is unavailable we return None without modifying any state.
     slot = await db.scalar(
         select(Availability)
         .where(
@@ -452,6 +433,16 @@ async def reschedule_consultation_for_coordinator(
     )
     if slot is None:
         return None
+
+    await db.execute(
+        update(Availability)
+        .where(Availability.consultation_id == consultation_id)
+        .values(
+            status=AvailabilityStatus.AVAILABLE,
+            consultation_id=None,
+            updated_at=datetime.now(UTC),
+        )
+    )
 
     await db.execute(
         update(Availability)

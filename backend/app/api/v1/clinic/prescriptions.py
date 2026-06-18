@@ -59,6 +59,7 @@ class PatientPrescriptionListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    pages: int
 
 
 class PrescriptionPdfResponse(BaseModel):
@@ -143,6 +144,7 @@ async def list_prescriptions(
         total=total,
         page=page,
         page_size=page_size,
+        pages=(total + page_size - 1) // page_size if page_size else 0,
     )
 
 

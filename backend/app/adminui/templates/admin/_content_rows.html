@@ -1,3 +1,4 @@
+{% from "_csrf.html" import csrf_field %}
 {% for item in items %}
 <tr>
   <td>
@@ -12,11 +13,13 @@
     <div style="display:flex;gap:6px;">
       {% if item.status.value != 'published' %}
       <form method="POST" action="/admin/content/{{ item.id }}/publish">
+        {{ csrf_field(request) }}
         <button type="submit" class="btn btn-primary btn-sm">Publish</button>
       </form>
       {% endif %}
       {% if item.status.value != 'archived' %}
       <form method="POST" action="/admin/content/{{ item.id }}/archive">
+        {{ csrf_field(request) }}
         <button type="submit" class="btn btn-secondary btn-sm">Archive</button>
       </form>
       {% endif %}

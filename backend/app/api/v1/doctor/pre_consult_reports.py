@@ -68,12 +68,19 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     )
 
 
-async def _resolve_doctor_id(db: DbSession, user: object) -> uuid.UUID:
+async def _resolve_doctor_id(
+    db: DbSession, user: object, ctx: AuditContext, action: str
+) -> uuid.UUID:
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     doctor = await consultations_repo.get_doctor_record(db, user_id=user.id)
     if doctor is None:
+        await write_audit(
+            db, ctx, action=action,
+            resource_type="doctor", allowed=False, reason="no_doctor_profile",
+        )
+        await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
     return doctor.id
 
@@ -92,7 +99,7 @@ async def get_pre_consult_report(
     user: Annotated[object, Depends(get_doctor_user)],
 ) -> DoctorPreConsultReportRead:
     ctx = _audit_ctx(request, user)
-    doctor_id = await _resolve_doctor_id(db, user)
+    doctor_id = await _resolve_doctor_id(db, user, ctx, "get_pre_consult_report")
 
     report = await reports_repo.get_for_doctor(
         db, consultation_id=consultation_id, doctor_id=doctor_id
@@ -132,7 +139,7 @@ async def update_doctor_prep_notes(
     user: Annotated[object, Depends(get_doctor_user)],
 ) -> DoctorPreConsultReportRead:
     ctx = _audit_ctx(request, user)
-    doctor_id = await _resolve_doctor_id(db, user)
+    doctor_id = await _resolve_doctor_id(db, user, ctx, "update_pre_consult_notes")
 
     report = await reports_repo.get_for_doctor(
         db, consultation_id=consultation_id, doctor_id=doctor_id
@@ -180,7 +187,7 @@ async def trigger_report_generation(
     from app.tasks.report_tasks import generate_pre_consultation_report
 
     ctx = _audit_ctx(request, user)
-    doctor_id = await _resolve_doctor_id(db, user)
+    doctor_id = await _resolve_doctor_id(db, user, ctx, "trigger_pre_consult_report")
 
     # Verify the consultation belongs to this doctor before enqueuing
     consultation = await consultations_repo.get_consultation_for_doctor(

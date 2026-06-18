@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from html import escape as _esc
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -311,10 +312,10 @@ def render_pre_consult_html(
             flag_style = "color:#c0392b;" if bm.get("flag") else ""
             lab_rows += f"""
             <tr>
-              <td>{bm.get('name', '').title()}</td>
-              <td style="{flag_style}">{bm.get('value', '—')} {bm.get('unit', '')}</td>
+              <td>{_esc(str(bm.get('name', '')).title())}</td>
+              <td style="{flag_style}">{_esc(str(bm.get('value', '—')))} {_esc(str(bm.get('unit', '')))}</td>
               <td>{trend_symbol}</td>
-              <td>{bm.get('ref_low', '-')} - {bm.get('ref_high', '-')} {bm.get('unit', '')}</td>
+              <td>{_esc(str(bm.get('ref_low', '-')))} - {_esc(str(bm.get('ref_high', '-')))} {_esc(str(bm.get('unit', '')))}</td>
             </tr>"""
 
     adherence_html = ""
@@ -342,7 +343,7 @@ def render_pre_consult_html(
     if report.patient_flags:
         flags = report.patient_flags.get("flags", [])
         if flags:
-            items = "".join(f"<li>{f}</li>" for f in flags)
+            items = "".join(f"<li>{_esc(str(f))}</li>" for f in flags)
             flags_html = f"<ul>{items}</ul>"
 
     return f"""<!DOCTYPE html>
@@ -364,8 +365,8 @@ def render_pre_consult_html(
 <body>
   <h1>Kyros Clinic — Pre-Consultation Report</h1>
   <p class="meta">
-    Patient: <strong>{patient_name}</strong> &nbsp;|&nbsp;
-    Doctor: <strong>{doctor_name}</strong> &nbsp;|&nbsp;
+    Patient: <strong>{_esc(patient_name)}</strong> &nbsp;|&nbsp;
+    Doctor: <strong>{_esc(doctor_name)}</strong> &nbsp;|&nbsp;
     Consultation: <strong>{scheduled_str}</strong>
   </p>
   <p class="meta">Generated: {generated_str}</p>

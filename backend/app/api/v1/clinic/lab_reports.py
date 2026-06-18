@@ -96,6 +96,7 @@ class LabReportListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    pages: int
 
 
 class PatientCorrectionRequest(BaseModel):
@@ -280,6 +281,7 @@ async def list_lab_reports(
         total=total,
         page=page,
         page_size=page_size,
+        pages=(total + page_size - 1) // page_size if page_size else 0,
     )
 
 

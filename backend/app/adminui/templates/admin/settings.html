@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Platform Settings — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -23,6 +24,7 @@
       {% endif %}
     </p>
     <form method="POST" action="/admin/settings/google-oauth">
+      {{ csrf_field(request) }}
       <label style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" name="enabled" value="1" {{'checked' if google_enabled else '' }} {{ 'disabled' if readonly else '' }}>
         Google Sign-In is {{ 'enabled' if google_enabled else 'disabled' }}
@@ -41,6 +43,7 @@
       Used when a user has no per-user channel set. Per-user overrides live on each user's edit page.
     </p>
     <form method="POST" action="/admin/settings/reset-channel">
+      {{ csrf_field(request) }}
       <div class="form-group">
         <label for="channel">Channel</label>
         <select id="channel" name="channel" {{ 'disabled' if readonly else '' }}>

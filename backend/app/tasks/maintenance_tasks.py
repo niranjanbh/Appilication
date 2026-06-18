@@ -40,7 +40,7 @@ async def _ensure_partitions_async() -> dict[str, list[str]]:
                 from_date = f"{year}-{month:02d}-01"
 
                 days_in_month = monthrange(year, month)[1]
-                next_month = datetime(year, month, 1) + timedelta(days=days_in_month + 1)
+                next_month = datetime(year, month, 1) + timedelta(days=days_in_month)
                 to_date = f"{next_month.year}-{next_month.month:02d}-01"
 
                 await conn.execute(

@@ -15,6 +15,7 @@ from app.adminui.deps import (
     create_admin_session,
     mark_session_fresh,
     require_admin_session,
+    verify_csrf,
 )
 from app.db.redis import RedisClient, get_redis
 from app.db.session import get_db
@@ -164,6 +165,7 @@ async def reauth_page(
 async def reauth_submit(
     request: Request,
     admin: Annotated[object, Depends(require_admin_session)],
+    _csrf: Annotated[None, Depends(verify_csrf)] = None,
     password: str = Form(...),
     next_url: str = Form(default="/admin/"),
 ) -> Response:

@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_endpoint_url: str = ""  # empty → real AWS; set to LocalStack URL for offline dev
+    # KMS key for SSE-KMS on PHI objects. Empty → S3 uses the account default
+    # aws/s3 KMS key (still SSE-KMS, satisfies security rule 6).
+    s3_kms_key_id: str = ""
 
     # Google Document AI
     # Name of the AWS Secrets Manager secret holding the GCP service account JSON.
@@ -187,6 +190,10 @@ class Settings(BaseSettings):
             problems.append("KYROS_OTP_SECRET is still the placeholder value")
         if self.mfa_encryption_key.startswith("CHANGEME"):
             problems.append("KYROS_MFA_ENCRYPTION_KEY is still the placeholder value")
+        if not self.razorpay_key_secret:
+            problems.append("KYROS_RAZORPAY_KEY_SECRET must be set in production")
+        if not self.razorpay_webhook_secret:
+            problems.append("KYROS_RAZORPAY_WEBHOOK_SECRET must be set in production")
         if self.debug:
             problems.append("KYROS_DEBUG must be false in production")
         origins = self.cors_allowed_origins

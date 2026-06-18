@@ -1,3 +1,4 @@
+{% from "_csrf.html" import csrf_field %}
 {% for consultation, patient_user, doctor_user in consultations %}
 <tr>
   <td style="font-size:12px;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') if consultation.scheduled_start_at else '—' }}</td>
@@ -12,6 +13,7 @@
       <form method="POST" action="/admin/consultations/{{ consultation.id }}/cancel"
             style="display:flex;gap:6px;align-items:center;"
             onsubmit="return confirm('Cancel this consultation? If paid, a full refund is issued.')">
+        {{ csrf_field(request) }}
         <input type="text" name="reason" required maxlength="200" placeholder="Reason…"
                style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:140px;">
         <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
@@ -20,6 +22,7 @@
       {% if consultation.scheduled_start_at and consultation.scheduled_start_at < now %}
       <form method="POST" action="/admin/consultations/{{ consultation.id }}/no-show"
             onsubmit="return confirm('Mark as patient no-show? No refund is issued.')">
+        {{ csrf_field(request) }}
         <button type="submit" class="btn btn-secondary btn-sm">No-show</button>
       </form>
       {% endif %}

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.staticfiles import StaticFiles
 
+from app.adminui.deps import verify_csrf
 from app.adminui.views.analytics import router as analytics_router
 from app.adminui.views.audit_log import router as audit_log_router
 from app.adminui.views.auth import router as auth_router
@@ -22,21 +23,24 @@ from app.adminui.views.users import router as users_router
 
 admin_router = APIRouter()
 
-# Auth (login/logout) — no session required
+# Auth (login/logout/forgot-password) — no session yet, so CSRF is enforced
+# per-handler inside auth.py (only /reauth needs it). Not covered here.
 admin_router.include_router(auth_router)
 
-# Protected views
-admin_router.include_router(dashboard_router)
-admin_router.include_router(users_router)
-admin_router.include_router(staff_router)
-admin_router.include_router(doctors_router)
-admin_router.include_router(consultations_router)
-admin_router.include_router(payments_router)
-admin_router.include_router(content_router)
-admin_router.include_router(dsr_router)
-admin_router.include_router(audit_log_router)
-admin_router.include_router(analytics_router)
-admin_router.include_router(settings_router)
+# Protected views. CSRF is enforced at the router level: verify_csrf no-ops on
+# GET/HEAD/OPTIONS and validates the double-submit token on every POST.
+_csrf = [Depends(verify_csrf)]
+admin_router.include_router(dashboard_router, dependencies=_csrf)
+admin_router.include_router(users_router, dependencies=_csrf)
+admin_router.include_router(staff_router, dependencies=_csrf)
+admin_router.include_router(doctors_router, dependencies=_csrf)
+admin_router.include_router(consultations_router, dependencies=_csrf)
+admin_router.include_router(payments_router, dependencies=_csrf)
+admin_router.include_router(content_router, dependencies=_csrf)
+admin_router.include_router(dsr_router, dependencies=_csrf)
+admin_router.include_router(audit_log_router, dependencies=_csrf)
+admin_router.include_router(analytics_router, dependencies=_csrf)
+admin_router.include_router(settings_router, dependencies=_csrf)
 
 # Static files (CSS, HTMX, Alpine.js) — shared with coordinator portal
 _static_dir = Path(__file__).parent / "static"

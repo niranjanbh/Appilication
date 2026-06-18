@@ -30,8 +30,8 @@ async def get_funnel(
     return {
         **data,
         "rate_inq_to_reg": round(reg / inq * 100, 1),
-        "rate_reg_to_book": round(book / max(reg, 1) * 100, 1),
-        "rate_book_to_comp": round(comp / max(book, 1) * 100, 1),
+        "rate_reg_to_book": round(book / max(reg or 0, 1) * 100, 1),
+        "rate_book_to_comp": round(comp / max(book or 0, 1) * 100, 1),
     }
 
 

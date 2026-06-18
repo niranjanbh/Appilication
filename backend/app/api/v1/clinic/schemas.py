@@ -3,9 +3,22 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db.enums import ConsultationStatus, ConsultationType
+
+_DB_CONDITION_CATEGORIES = {
+    "thyroid", "weight", "pcos", "skin_hair",
+    "mens_intimate", "hormones_trt", "longevity",
+}
+
+_SLUG_TO_DB: dict[str, str] = {
+    "weight-management": "weight",
+    "pmos": "pcos",
+    "skin-and-hair": "skin_hair",
+    "sexual-health": "mens_intimate",
+    "diabetes": "weight",
+}
 
 
 class AvailableSlotRead(BaseModel):
@@ -20,14 +33,21 @@ class AvailableSlotRead(BaseModel):
 class ConsultationBookRequest(BaseModel):
     doctor_id: uuid.UUID
     slot_id: uuid.UUID
-    condition_category: str = Field(
-        ...,
-        pattern="^(thyroid|weight|pcos|skin_hair|mens_intimate|hormones_trt|longevity)$",
-    )
+    condition_category: str
     consultation_type: ConsultationType = ConsultationType.INITIAL
-    # Fee is resolved server-side from pricing config — never supplied by the client.
     idempotency_key: uuid.UUID | None = Field(default=None)
     coupon_code: str | None = None
+
+    @field_validator("condition_category")
+    @classmethod
+    def normalize_condition(cls, v: str) -> str:
+        v = _SLUG_TO_DB.get(v, v)
+        if v not in _DB_CONDITION_CATEGORIES:
+            raise ValueError(
+                f"condition_category must be one of: {', '.join(sorted(_DB_CONDITION_CATEGORIES))} "
+                f"(or website aliases: {', '.join(sorted(_SLUG_TO_DB))})"
+            )
+        return v
 
 
 class RazorpayOrderInfo(BaseModel):

@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Doctor Pipeline — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -21,10 +22,12 @@
           <a href="/admin/doctors/{{ doctor.id }}" class="btn btn-secondary btn-sm">View</a>
           {% if stage == 'applied' %}
           <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify" style="display:inline;">
+            {{ csrf_field(request) }}
             <button type="submit" class="btn btn-primary btn-sm">Verify</button>
           </form>
           {% elif stage == 'verified' or stage == 'onboarding' %}
           <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate" style="display:inline;">
+            {{ csrf_field(request) }}
             <button type="submit" class="btn btn-primary btn-sm">Activate</button>
           </form>
           {% endif %}

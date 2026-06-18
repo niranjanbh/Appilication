@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Reassign consultation — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -29,6 +30,7 @@
       <form method="POST" action="/admin/consultations/{{ consultation.id }}/reassign"
             style="display:flex;gap:8px;align-items:flex-end;"
             onsubmit="return confirm('Move this consultation to the selected slot?')">
+        {{ csrf_field(request) }}
         <div>
           <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">New slot</label>
           <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:300px;">
