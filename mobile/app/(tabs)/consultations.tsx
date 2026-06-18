@@ -11,26 +11,27 @@ import { useRouter } from 'expo-router';
 import { apiFetch } from '../../lib/api/client';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
+import { NeumorphCard } from '../../components/ui/NeumorphCard';
+import { SkeuButton } from '../../components/ui/SkeuButton';
 import { SkeletonCards } from '../../components/ui/Skeleton';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ConsultationStatus =
-  | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  | 'requested' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
 
 interface Consultation {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
   condition_category: string;
   consultation_type: string;
-  scheduled_start_at: string;
-  scheduled_end_at: string;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   status: ConsultationStatus;
-  consultation_fee_paise: number;
+  consultation_fee_paise: number | null;
   payment_id: string | null;
   cancellation_reason: string | null;
 }
@@ -45,19 +46,24 @@ interface ListResponse {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const UPCOMING_STATUSES: ConsultationStatus[] = ['scheduled', 'confirmed', 'in_progress'];
+const UPCOMING_STATUSES: ConsultationStatus[] = ['requested', 'scheduled', 'confirmed', 'in_progress'];
 function isUpcoming(c: Consultation): boolean { return UPCOMING_STATUSES.includes(c.status); }
 function formatDate(iso: string) { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
 function formatTime(iso: string) { return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }); }
 function formatRupees(p: number) { return `₹${(p / 100).toFixed(0)}`; }
 function formatCat(cat: string)  { return cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+// A requested consultation has no slot yet — show a friendly placeholder.
+function formatWhen(iso: string | null) {
+  return iso ? `${formatDate(iso)} · ${formatTime(iso)}` : 'Awaiting assignment';
+}
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
-  scheduled: 'Scheduled', confirmed: 'Confirmed', in_progress: 'In Progress',
-  completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
+  requested: 'Awaiting assignment', scheduled: 'Scheduled', confirmed: 'Confirmed',
+  in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
+  requested:   colors.warningAmber,
   scheduled:   colors.navyDeep,
   confirmed:   colors.electricBlue,
   in_progress: colors.warningAmber,
@@ -86,13 +92,13 @@ function ConsultationCard({
       scaleTo={0.97}
       onPress={onPress}
       containerStyle={styles.cardSpacing}
-      accessibilityLabel={`Consultation on ${formatDate(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
+      accessibilityLabel={`Consultation, ${formatWhen(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
     >
-      <GlassCard unpadded>
+      <NeumorphCard unpadded>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardDate, { color: textSub }]}>
-              {formatDate(item.scheduled_start_at)} · {formatTime(item.scheduled_start_at)}
+              {formatWhen(item.scheduled_start_at)}
             </Text>
             <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>
               <Text style={[styles.statusText, { color: sc }]}>{STATUS_LABEL[item.status]}</Text>
@@ -102,10 +108,11 @@ function ConsultationCard({
             {formatCat(item.condition_category)}
           </Text>
           <Text style={[styles.cardMeta, { color: textSub }]}>
-            {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'} · {formatRupees(item.consultation_fee_paise)}
+            {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'}
+            {item.consultation_fee_paise != null ? ` · ${formatRupees(item.consultation_fee_paise)}` : ''}
           </Text>
         </View>
-      </GlassCard>
+      </NeumorphCard>
     </HapticPressable>
   );
 }
@@ -140,14 +147,12 @@ export default function ConsultationsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: textPri }]}>Consultations</Text>
-          <HapticPressable
-            scaleTo={0.94}
-            style={styles.bookBtn}
+          <SkeuButton
+            label="+ Book"
+            size="sm"
             onPress={() => router.push('/consultations/book')}
             accessibilityLabel="Book a consultation"
-          >
-            <Text style={styles.bookBtnText}>+ Book</Text>
-          </HapticPressable>
+          />
         </View>
 
         {error && <Text style={styles.error}>Could not load consultations. Please try again.</Text>}

@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.api.deps import DbSession
 from app.api.v1.clinic.schemas import (
     AvailableSlotRead,
-    ConsultationBookRequest,
-    ConsultationBookResponse,
     ConsultationCancelRequest,
     ConsultationCancelResponse,
     ConsultationConfirmPaymentRequest,
     ConsultationJoinResponse,
+    ConsultationRequestCreate,
+    ConsultationRequestResponse,
     PatientConsultationListResponse,
     PatientConsultationRead,
     RazorpayOrderInfo,
@@ -126,73 +126,79 @@ async def get_consultation(
         db, ctx, action="view_consultation",
         resource_type="consultation", resource_id=consultation_id, allowed=True
     )
-    return PatientConsultationRead.model_validate(consultation)
+
+    read = PatientConsultationRead.model_validate(consultation)
+    # Surface the Razorpay order so the app can collect payment once a coordinator
+    # has assigned the doctor + slot (status='scheduled', payment not yet captured).
+    if (
+        consultation.status == ConsultationStatus.SCHEDULED
+        and consultation.payment_id is not None
+    ):
+        from app.db.enums import PaymentStatus
+        from app.models.payment import Payment
+
+        payment = await db.get(Payment, consultation.payment_id)
+        if payment is not None and payment.status != PaymentStatus.PAID:
+            read.payment = RazorpayOrderInfo(
+                payment_id=payment.id,
+                razorpay_order_id=payment.razorpay_order_id,
+                amount_paise=payment.amount_paise,
+                currency=payment.currency,
+            )
+    return read
 
 
-@router.post("/consultations", response_model=ConsultationBookResponse, status_code=status.HTTP_201_CREATED)
-async def book_consultation(
-    body: ConsultationBookRequest,
+@router.post("/consultations", response_model=ConsultationRequestResponse, status_code=status.HTTP_201_CREATED)
+async def request_consultation(
+    body: ConsultationRequestCreate,
     request: Request,
     db: DbSession,
     user: Annotated[object, Depends(get_patient_user)],
-) -> ConsultationBookResponse:
+) -> ConsultationRequestResponse:
+    """Submit a consultation request.
+
+    Patients do not choose a doctor or a slot — a care coordinator assigns the
+    right specialist based on the stated requirement. No payment is taken here;
+    the patient pays to confirm once a doctor + time have been assigned.
+    """
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
 
-    coupon_error_codes = frozenset({
-        "coupon_not_found", "coupon_inactive", "coupon_expired",
-        "coupon_exhausted", "coupon_not_yet_valid", "order_below_minimum",
-    })
-
     try:
-        consultation, payment = await consultation_service.book_consultation(
+        consultation = await consultation_service.request_consultation(
             db,
             patient_user_id=user.id,
-            doctor_id=body.doctor_id,
-            slot_id=body.slot_id,
             condition_category=body.condition_category,
             consultation_type=body.consultation_type.value,
-            coupon_code=body.coupon_code,
+            requirement_notes=body.requirement_notes,
+            preferred_time_window=body.preferred_time_window,
         )
     except consultation_service.ConsultationError as exc:
         await write_audit(
-            db, ctx, action="book_consultation",
+            db, ctx, action="request_consultation",
             resource_type="consultation", allowed=False, reason=exc.code
         )
         await db.commit()
         code = exc.code
-        if code in ("slot_not_available", "doctor_not_available"):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail=code) from exc
         if code == "patient_profile_not_found":
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=code) from exc
-        if code in coupon_error_codes:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=code) from exc
-        if code == "slot_not_found":
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=code) from exc
 
     await write_audit(
-        db, ctx, action="book_consultation",
+        db, ctx, action="request_consultation",
         resource_type="consultation", resource_id=consultation.id, allowed=True
     )
 
-    return ConsultationBookResponse(
+    return ConsultationRequestResponse(
         consultation_id=consultation.id,
         status=consultation.status,
-        scheduled_start_at=consultation.scheduled_start_at,
-        scheduled_end_at=consultation.scheduled_end_at,
         condition_category=consultation.condition_category,
         consultation_type=consultation.consultation_type,
-        consultation_fee_paise=consultation.consultation_fee_paise,
-        discount_paise=consultation.discount_paise,
-        payment=RazorpayOrderInfo(
-            payment_id=payment.id,
-            razorpay_order_id=payment.razorpay_order_id,
-            amount_paise=payment.amount_paise,
-            currency=payment.currency,
-        ),
+        requirement_notes=consultation.requirement_notes,
+        preferred_time_window=consultation.preferred_time_window,
+        created_at=consultation.created_at,
     )
 
 

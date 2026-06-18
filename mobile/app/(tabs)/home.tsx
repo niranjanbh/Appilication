@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
-import { GlassCard } from '../../components/ui/GlassCard';
+import { NeumorphCard } from '../../components/ui/NeumorphCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { useAuth } from '../../lib/auth/context';
@@ -181,7 +181,7 @@ export default function HomeScreen() {
         </View>
 
         {/* ── Health notes preview ────────────────────────────────────────── */}
-        <GlassCard>
+        <NeumorphCard>
           <View style={styles.notesHeader}>
             <Text style={[styles.sectionTitle, { color: t.text }]}>Health Notes</Text>
             <HapticPressable
@@ -211,10 +211,10 @@ export default function HomeScreen() {
               ))}
             </View>
           )}
-        </GlassCard>
+        </NeumorphCard>
 
         {/* ── Care plan card ──────────────────────────────────────────────── */}
-        <GlassCard>
+        <NeumorphCard>
           <View style={styles.carePlanInner}>
             <Text style={[styles.eyebrow, { color: t.textSub }]}>YOUR CARE PLAN</Text>
             <Text style={[styles.carePlanTitle, { color: t.text }]}>
@@ -226,7 +226,7 @@ export default function HomeScreen() {
               first consultation.
             </Text>
           </View>
-        </GlassCard>
+        </NeumorphCard>
 
       </ScrollView>
     </View>

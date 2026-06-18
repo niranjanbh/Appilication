@@ -21,6 +21,29 @@ def test_terminal_statuses_have_no_outgoing_transitions() -> None:
         assert _ALLOWED_TRANSITIONS[terminal] == frozenset()
 
 
+def test_requested_can_advance_to_scheduled_or_cancelled() -> None:
+    assert _ALLOWED_TRANSITIONS[ConsultationStatus.REQUESTED] == frozenset(
+        {ConsultationStatus.SCHEDULED, ConsultationStatus.CANCELLED}
+    )
+
+
+def test_assert_transition_allows_requested_to_scheduled() -> None:
+    _assert_transition(
+        ConsultationStatus.REQUESTED,
+        ConsultationStatus.SCHEDULED,
+        error_code="consultation_not_assignable",
+    )
+
+
+def test_assert_transition_rejects_requested_to_in_progress() -> None:
+    with pytest.raises(ConsultationError) as excinfo:
+        _assert_transition(
+            ConsultationStatus.REQUESTED,
+            ConsultationStatus.IN_PROGRESS,
+        )
+    assert excinfo.value.code == "invalid_transition"
+
+
 def test_scheduled_can_advance_to_confirmed_cancelled_or_no_show() -> None:
     assert _ALLOWED_TRANSITIONS[ConsultationStatus.SCHEDULED] == frozenset(
         {ConsultationStatus.CONFIRMED, ConsultationStatus.CANCELLED, ConsultationStatus.NO_SHOW}

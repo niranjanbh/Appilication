@@ -14,11 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.enums import AvailabilityStatus, ConsultationStatus, DoctorStatus, PaymentStatus
+from app.models.admin import Coordinator
 from app.models.audit import AuditLog
 from app.models.clinic import Consultation, Patient
 from app.models.doctor import Availability, Doctor
 from app.repositories import payments as payments_repo
+from app.services import consultation_service
 from tests.conftest import (
+    create_coordinator_user,
     create_doctor_user,
     create_patient_user,
     make_auth_headers,
@@ -95,6 +98,66 @@ def _sig(order_id: str, payment_id: str, secret: str = "rzp_test_key_secret") ->
     return hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
 
 
+async def _create_coordinator_for_patient(
+    db: AsyncSession, patient_profile_id: uuid.UUID
+) -> Coordinator:
+    """Create a coordinator with the given patient assigned to them."""
+    coord_user = await create_coordinator_user(db)
+    coord = Coordinator(
+        user_id=coord_user.id,
+        assigned_patient_ids=[str(patient_profile_id)],
+    )
+    db.add(coord)
+    await db.flush()
+    return coord
+
+
+async def _request_consultation_api(client: AsyncClient, patient_user: object) -> str:
+    """Patient submits a request via the API; returns the consultation_id."""
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={
+            "condition_category": "thyroid",
+            "requirement_notes": "Tired and gaining weight.",
+            "preferred_time_window": "weekday_morning",
+        },
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["consultation_id"]
+
+
+async def _request_and_assign(
+    client: AsyncClient,
+    db: AsyncSession,
+    patient_user: object,
+    patient_profile: Patient,
+    doctor: Doctor,
+    slot: Availability,
+) -> tuple[str, str]:
+    """Drive the full request → coordinator-assign flow.
+
+    Returns (consultation_id, payment_id). The consultation ends up SCHEDULED
+    with a Razorpay order awaiting payment.
+    """
+    consult_id = await _request_consultation_api(client, patient_user)
+    coord = await _create_coordinator_for_patient(db, patient_profile.id)
+
+    with patch(
+        "app.integrations.razorpay.create_order",
+        new_callable=AsyncMock,
+        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
+    ):
+        _consultation, payment = await consultation_service.assign_consultation(
+            db,
+            consultation_id=uuid.UUID(consult_id),
+            coordinator_id=coord.id,
+            slot_id=slot.id,
+        )
+    await db.flush()
+    return consult_id, str(payment.id)
+
+
 # ── RBAC matrix — unauthenticated / wrong-role ────────────────────────────────
 
 
@@ -130,31 +193,21 @@ async def test_get_consultation_doctor_returns_403(
     assert resp.status_code == 403
 
 
-async def test_book_consultation_no_auth_returns_401(client: AsyncClient) -> None:
+async def test_request_consultation_no_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.post(
         "/v1/clinic/patient/consultations",
-        json={
-            "doctor_id": str(uuid.uuid4()),
-            "slot_id": str(uuid.uuid4()),
-            "condition_category": "thyroid",
-            "consultation_fee_paise": _FEE_PAISE,
-        },
+        json={"condition_category": "thyroid"},
     )
     assert resp.status_code == 401
 
 
-async def test_book_consultation_doctor_returns_403(
+async def test_request_consultation_doctor_returns_403(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     doctor_user = await create_doctor_user(db_session)
     resp = await client.post(
         "/v1/clinic/patient/consultations",
-        json={
-            "doctor_id": str(uuid.uuid4()),
-            "slot_id": str(uuid.uuid4()),
-            "condition_category": "thyroid",
-            "consultation_fee_paise": _FEE_PAISE,
-        },
+        json={"condition_category": "thyroid"},
         headers=make_auth_headers(doctor_user),
     )
     assert resp.status_code == 403
@@ -193,13 +246,118 @@ async def test_list_slots_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
-# ── Happy-path booking flow ────────────────────────────────────────────────────
+# ── Request flow (patient submits, no doctor/slot/payment) ─────────────────────
 
 
-async def test_book_consultation_happy_path(
+async def test_request_consultation_happy_path(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    # Setup
+    patient_user = await create_patient_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    await _create_patient_profile(db_session, patient_user.id)
+
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={
+            "condition_category": "thyroid",
+            "requirement_notes": "Tired and gaining weight.",
+            "preferred_time_window": "weekday_morning",
+        },
+        headers=make_auth_headers(patient_user),
+    )
+
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    # A request has no doctor, slot, fee, or payment yet.
+    assert data["status"] == "requested"
+    assert data["condition_category"] == "thyroid"
+    assert data["requirement_notes"] == "Tired and gaining weight."
+    assert data["preferred_time_window"] == "weekday_morning"
+    assert "payment" not in data
+
+    # The row is persisted with no doctor assigned.
+    consultation = await db_session.get(Consultation, uuid.UUID(data["consultation_id"]))
+    assert consultation is not None
+    assert consultation.doctor_id is None
+    assert consultation.scheduled_start_at is None
+    assert consultation.consultation_fee_paise is None
+    assert consultation.status == ConsultationStatus.REQUESTED
+
+
+async def test_request_consultation_ignores_doctor_selection(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A patient cannot choose a doctor — any doctor_id in the body is ignored."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+    await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={
+            "condition_category": "thyroid",
+            # Attempt to pick a specific doctor — must have no effect.
+            "doctor_id": str(doctor.id),
+        },
+        headers=make_auth_headers(patient_user),
+    )
+
+    assert resp.status_code == 201, resp.text
+    consultation = await db_session.get(
+        Consultation, uuid.UUID(resp.json()["consultation_id"])
+    )
+    assert consultation is not None
+    assert consultation.doctor_id is None
+
+
+async def test_request_consultation_invalid_time_window_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient_user = await create_patient_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    await _create_patient_profile(db_session, patient_user.id)
+
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={"condition_category": "thyroid", "preferred_time_window": "whenever"},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 422
+
+
+async def test_request_consultation_without_patient_profile_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Patient user without a kc_patients row cannot submit a request."""
+    patient_user = await create_patient_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    # Intentionally skip _create_patient_profile
+
+    resp = await client.post(
+        "/v1/clinic/patient/consultations",
+        json={"condition_category": "thyroid"},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 422
+
+
+# ── Coordinator assignment (doctor + slot) ─────────────────────────────────────
+
+
+async def test_coordinator_assign_consultation_happy_path(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
     patient_user = await create_patient_user(db_session)
     doctor_user = await create_doctor_user(db_session)
     from app.models.identity import User as UserModel
@@ -207,44 +365,41 @@ async def test_book_consultation_happy_path(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor)
 
-    with patch(
-        "app.integrations.razorpay.create_order",
-        new_callable=AsyncMock,
-        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
-    ):
-        resp = await client.post(
-            "/v1/clinic/patient/consultations",
-            json={
-                "doctor_id": str(doctor.id),
-                "slot_id": str(slot.id),
-                "condition_category": "thyroid",
-                # Client attempts to set a bogus fee — must be ignored server-side.
-                "consultation_fee_paise": 1,
-            },
-            headers=make_auth_headers(patient_user),
-        )
+    consult_id, _payment_id = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot
+    )
 
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    assert data["status"] == "scheduled"
-    assert data["condition_category"] == "thyroid"
-    # Fee is the server-authoritative value, not the client's "1".
-    assert data["consultation_fee_paise"] == _FEE_PAISE
-    assert data["payment"]["razorpay_order_id"] == _STUB_ORDER_ID
+    # The request is now scheduled with the assigned doctor, slot, and server fee.
+    consultation = await db_session.get(Consultation, uuid.UUID(consult_id))
+    assert consultation is not None
+    assert consultation.status == ConsultationStatus.SCHEDULED
+    assert consultation.doctor_id == doctor.id
+    assert consultation.scheduled_start_at == slot.slot_start
+    assert consultation.consultation_fee_paise == _FEE_PAISE
+    assert consultation.payment_id is not None
 
-    # Slot must now be booked
+    # Slot is now booked.
     loaded_slot = await db_session.get(Availability, slot.id)
     assert loaded_slot is not None
     assert loaded_slot.status == AvailabilityStatus.BOOKED
 
+    # The patient sees the Razorpay order to pay on the detail endpoint.
+    detail = await client.get(
+        f"/v1/clinic/patient/consultations/{consult_id}",
+        headers=make_auth_headers(patient_user),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["payment"]["razorpay_order_id"] == _STUB_ORDER_ID
 
-async def test_book_consultation_unavailable_slot_returns_409(
+
+async def test_assign_consultation_unassigned_patient_raises(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """A coordinator cannot assign a request for a patient who isn't theirs."""
     patient_user = await create_patient_user(db_session)
     doctor_user = await create_doctor_user(db_session)
     from app.models.identity import User as UserModel
@@ -256,33 +411,28 @@ async def test_book_consultation_unavailable_slot_returns_409(
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor)
 
-    # Pre-mark the slot as booked
-    slot.status = AvailabilityStatus.BOOKED
+    consult_id = await _request_consultation_api(client, patient_user)
+    # Coordinator with NO patients assigned.
+    coord_user = await create_coordinator_user(db_session)
+    coord = Coordinator(user_id=coord_user.id, assigned_patient_ids=[])
+    db_session.add(coord)
     await db_session.flush()
 
-    with patch(
-        "app.integrations.razorpay.create_order",
-        new_callable=AsyncMock,
-        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
-    ):
-        resp = await client.post(
-            "/v1/clinic/patient/consultations",
-            json={
-                "doctor_id": str(doctor.id),
-                "slot_id": str(slot.id),
-                "condition_category": "thyroid",
-                "consultation_fee_paise": _FEE_PAISE,
-            },
-            headers=make_auth_headers(patient_user),
+    import pytest
+
+    with pytest.raises(consultation_service.ConsultationError) as exc:
+        await consultation_service.assign_consultation(
+            db_session,
+            consultation_id=uuid.UUID(consult_id),
+            coordinator_id=coord.id,
+            slot_id=slot.id,
         )
+    assert exc.value.code == "patient_not_assigned"
 
-    assert resp.status_code == 409
 
-
-async def test_book_consultation_inactive_doctor_returns_409_doctor_not_available(
+async def test_assign_consultation_inactive_doctor_raises(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """An unverified/inactive doctor cannot be assigned a consult — state precondition."""
     patient_user = await create_patient_user(db_session)
     doctor_user = await create_doctor_user(db_session)
     from app.models.identity import User as UserModel
@@ -290,59 +440,25 @@ async def test_book_consultation_inactive_doctor_returns_409_doctor_not_availabl
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     doctor.status = DoctorStatus.INACTIVE
     await db_session.flush()
     slot = await _create_slot(db_session, doctor)
 
-    resp = await client.post(
-        "/v1/clinic/patient/consultations",
-        json={
-            "doctor_id": str(doctor.id),
-            "slot_id": str(slot.id),
-            "condition_category": "thyroid",
-            "consultation_fee_paise": _FEE_PAISE,
-        },
-        headers=make_auth_headers(patient_user),
-    )
+    consult_id = await _request_consultation_api(client, patient_user)
+    coord = await _create_coordinator_for_patient(db_session, patient_profile.id)
 
-    assert resp.status_code == 409
-    assert resp.json()["detail"] == "doctor_not_available"
+    import pytest
 
-
-async def test_book_consultation_without_patient_profile_returns_422(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
-    """Patient user without a kc_patients row cannot book."""
-    patient_user = await create_patient_user(db_session)
-    doctor_user = await create_doctor_user(db_session)
-    from app.models.identity import User as UserModel
-
-    assert isinstance(patient_user, UserModel)
-    assert isinstance(doctor_user, UserModel)
-
-    # Intentionally skip _create_patient_profile
-    doctor = await _create_doctor_profile(db_session, doctor_user.id)
-    slot = await _create_slot(db_session, doctor)
-
-    with patch(
-        "app.integrations.razorpay.create_order",
-        new_callable=AsyncMock,
-        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
-    ):
-        resp = await client.post(
-            "/v1/clinic/patient/consultations",
-            json={
-                "doctor_id": str(doctor.id),
-                "slot_id": str(slot.id),
-                "condition_category": "thyroid",
-                "consultation_fee_paise": _FEE_PAISE,
-            },
-            headers=make_auth_headers(patient_user),
+    with pytest.raises(consultation_service.ConsultationError) as exc:
+        await consultation_service.assign_consultation(
+            db_session,
+            consultation_id=uuid.UUID(consult_id),
+            coordinator_id=coord.id,
+            slot_id=slot.id,
         )
-
-    assert resp.status_code == 422
+    assert exc.value.code == "doctor_not_available"
 
 
 # ── List consultations ─────────────────────────────────────────────────────────
@@ -439,33 +555,16 @@ async def test_confirm_payment_marks_consultation_confirmed(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor)
 
-    # Book first
-    with patch(
-        "app.integrations.razorpay.create_order",
-        new_callable=AsyncMock,
-        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
-    ):
-        book_resp = await client.post(
-            "/v1/clinic/patient/consultations",
-            json={
-                "doctor_id": str(doctor.id),
-                "slot_id": str(slot.id),
-                "condition_category": "thyroid",
-                "consultation_fee_paise": _FEE_PAISE,
-            },
-            headers=make_auth_headers(patient_user),
-        )
-    assert book_resp.status_code == 201
-    consult_id = book_resp.json()["consultation_id"]
+    # Request → coordinator assigns doctor + slot (creates the payment order).
+    consult_id, payment_id = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot
+    )
 
     # Mark payment as paid in DB to bypass Razorpay verification
-    payment_id = book_resp.json()["payment"]["payment_id"]
-    from app.repositories import payments as payments_repo
-
     await payments_repo.update_payment(
         db_session, payment_id=uuid.UUID(payment_id), status=PaymentStatus.PAID
     )
@@ -487,34 +586,6 @@ async def test_confirm_payment_marks_consultation_confirmed(
 # ── Cancellation ───────────────────────────────────────────────────────────────
 
 
-async def _book_consultation(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    patient_user: object,
-    doctor: Doctor,
-    slot: Availability,
-) -> tuple[str, str]:
-    """Helper: books a consultation and returns (consult_id, payment_id)."""
-    with patch(
-        "app.integrations.razorpay.create_order",
-        new_callable=AsyncMock,
-        return_value={"id": _STUB_ORDER_ID, "amount": _FEE_PAISE, "currency": "INR"},
-    ):
-        resp = await client.post(
-            "/v1/clinic/patient/consultations",
-            json={
-                "doctor_id": str(doctor.id),
-                "slot_id": str(slot.id),
-                "condition_category": "thyroid",
-                "consultation_fee_paise": _FEE_PAISE,
-            },
-            headers=make_auth_headers(patient_user),
-        )
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    return data["consultation_id"], data["payment"]["payment_id"]
-
-
 async def test_cancel_consultation_with_refund(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -526,12 +597,12 @@ async def test_cancel_consultation_with_refund(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor, hours_from_now=48)  # > 24 h away
 
-    consult_id, payment_id = await _book_consultation(
-        client, db_session, patient_user, doctor, slot
+    consult_id, payment_id = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot
     )
 
     # Mark payment as paid so refund path is exercised
@@ -573,12 +644,12 @@ async def test_cancel_consultation_no_refund_within_window(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor, hours_from_now=12)  # ≤ 24 h away
 
-    consult_id, payment_id = await _book_consultation(
-        client, db_session, patient_user, doctor, slot
+    consult_id, payment_id = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot
     )
 
     await payments_repo.update_payment(
@@ -614,11 +685,13 @@ async def test_cancel_already_cancelled_returns_400(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
-    await _create_patient_profile(db_session, patient_user.id)
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot = await _create_slot(db_session, doctor)
 
-    consult_id, _ = await _book_consultation(client, db_session, patient_user, doctor, slot)
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot
+    )
 
     # First cancellation
     await client.post(
@@ -634,6 +707,29 @@ async def test_cancel_already_cancelled_returns_400(
         headers=make_auth_headers(patient_user),
     )
     assert resp.status_code == 400
+
+
+async def test_patient_can_withdraw_requested_consultation(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A patient may cancel (withdraw) a not-yet-assigned request — no refund path."""
+    patient_user = await create_patient_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    await _create_patient_profile(db_session, patient_user.id)
+
+    consult_id = await _request_consultation_api(client, patient_user)
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/cancel",
+        json={"reason": "no longer needed"},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "cancelled"
+    assert data["refund_issued"] is False
 
 
 # ── Slot listing ───────────────────────────────────────────────────────────────

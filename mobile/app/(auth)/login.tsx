@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
 import { getAuthConfigApi, googleLoginApi, loginApi } from '../../lib/api/auth';
@@ -88,6 +89,7 @@ export default function LoginScreen() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const isDark = useThemePreference().colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   // Whether to show the Google button is admin-controlled (server config).
   useEffect(() => {
@@ -160,7 +162,13 @@ export default function LoginScreen() {
     >
       <AuthBackdrop />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: insets.top + spacing[8],
+            paddingBottom: insets.bottom + spacing[6],
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -300,16 +308,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     paddingHorizontal: spacing[6],
-    paddingTop: spacing[16],
-    paddingBottom: spacing[8],
   },
 
   // Logo area — sits on the gradient backdrop
   logoArea: {
     alignItems: 'center',
-    marginBottom: spacing[8],
     gap: spacing[2],
   },
   wordmark: {

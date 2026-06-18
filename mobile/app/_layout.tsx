@@ -31,12 +31,15 @@ export default function RootLayout() {
     'TiroDevanagariHindi-Regular': require('@expo-google-fonts/tiro-devanagari-hindi/400Regular/TiroDevanagariHindi_400Regular.ttf'),
   });
 
-  const loadingBg = isDark ? colors.forestInk : colors.navyDeep;
+  // Match the app's real background per theme so the hand-off to the first screen
+  // is seamless — light: skyMist bg + navy spinner; dark: forest-ink bg + jade spinner.
+  const loadingBg      = isDark ? colors.forestInk : colors.skyMist;
+  const loadingSpinner = isDark ? colors.jadeGlow  : colors.navyDeep;
 
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: loadingBg }}>
-        <ActivityIndicator color={colors.white} size="large" />
+        <ActivityIndicator color={loadingSpinner} size="large" />
       </View>
     );
   }

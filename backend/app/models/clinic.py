@@ -14,6 +14,8 @@ from app.db.enums import (
     ConsultationStatus,
     ConsultationType,
     DrugForm,
+    FoodRelation,
+    FrequencyCode,
     LabOrderStatus,
     LabReportSource,
     LabReportStatus,
@@ -102,10 +104,11 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         nullable=False,
         index=True,
     )
-    doctor_id: Mapped[uuid.UUID] = mapped_column(
+    # Nullable until a coordinator assigns a doctor (status='requested' has none).
+    doctor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("dr_doctors.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     coordinator_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -126,10 +129,15 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         nullable=False,
         server_default=text("'initial'"),
     )
-    scheduled_start_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
+    # Nullable until a coordinator assigns a slot (status='requested' has none).
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
-    scheduled_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Patient's free-text requirement (symptoms / what they want help with) and a
+    # coarse preferred time window (e.g. 'weekday_morning'), captured at request time.
+    requirement_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_time_window: Mapped[str | None] = mapped_column(String(50), nullable=True)
     actual_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     actual_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[ConsultationStatus] = mapped_column(
@@ -148,7 +156,9 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         ForeignKey("kc_pre_consultation_reports.id", ondelete="SET NULL"),
         nullable=True,
     )
-    consultation_fee_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Nullable until assignment — the fee is priced server-side when a coordinator
+    # assigns the doctor + slot, never at request time.
+    consultation_fee_paise: Mapped[int | None] = mapped_column(Integer, nullable=True)
     coupon_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("ad_coupons.id", ondelete="RESTRICT"),
@@ -424,7 +434,22 @@ class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
     dosage: Mapped[str] = mapped_column(String(100), nullable=False)
-    frequency: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Human-readable display string, composed server-side from the structured
+    # fields below. Nullable for forward-compat; new lines always populate it.
+    frequency: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    frequency_code: Mapped[FrequencyCode] = mapped_column(
+        SAEnum(FrequencyCode, name="frequency_code", create_type=False, values_callable=enum_values),
+        nullable=False,
+        server_default=text("'OTHER'"),
+    )
+    # List of TimingSlot values, e.g. ["morning", "night"] for BD dosing.
+    timing_slots: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    food_relation: Mapped[FoodRelation | None] = mapped_column(
+        SAEnum(FoodRelation, name="food_relation", create_type=False, values_callable=enum_values),
+        nullable=True,
+    )
     duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     refill_allowed: Mapped[bool] = mapped_column(

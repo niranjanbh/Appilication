@@ -1,16 +1,15 @@
 /**
- * Consultation booking flow — 4 steps:
+ * Consultation request flow — 2 steps:
  *   1. Condition picker
- *   2. Doctor selection (stub list using seed data)
- *   3. Slot picker
- *   4. Payment → confirmation
+ *   2. Requirement notes + preferred time window → submit request
  *
- * Razorpay checkout runs in the embedded WebView via Razorpay's standard
- * checkout.js flow.  The web page posts back the payment details via
- * window.ReactNativeWebView.postMessage(), which this screen handles.
+ * Patients do NOT choose a doctor or a time slot. A care coordinator reviews the
+ * request and assigns the right specialist based on the stated requirement. The
+ * patient is then notified to pay and confirm (handled on the consultation detail
+ * screen once the doctor + slot are assigned).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,36 +17,25 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
-import { listAvailableDoctorsApi, type AvailableDoctor } from '../../lib/api/doctors';
-import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface AvailableSlot {
-  id: string;
-  doctor_id: string;
-  slot_start: string;
-  slot_end: string;
-}
-
-interface BookResponse {
+interface RequestResponse {
   consultation_id: string;
   status: string;
-  scheduled_start_at: string;
   condition_category: string;
-  consultation_fee_paise: number;
-  payment: {
-    payment_id: string;
-    razorpay_order_id: string;
-    amount_paise: number;
-    currency: string;
-  };
+  consultation_type: string;
+  requirement_notes: string | null;
+  preferred_time_window: string | null;
+  created_at: string;
 }
 
 // ── Shared theme props ─────────────────────────────────────────────────────────
@@ -72,44 +60,29 @@ const CONDITIONS = [
   { slug: 'longevity',     label: 'Longevity',             icon: '🌱' },
 ];
 
-// ── Selected doctor shape (from API) ──────────────────────────────────────────
-
-interface SelectedDoctor {
-  id: string;
-  name: string;
-  specialty: string;
-  fee_paise: number;
-  duration_minutes: number;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-function formatRupees(paise: number) { return `₹${(paise / 100).toFixed(0)}`; }
-function getInitials(name: string) {
-  return name.split(' ').filter(w => /^[A-Za-z]/.test(w)).map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
+// Coarse preferred time windows — must match the backend's accepted set.
+const TIME_WINDOWS = [
+  { slug: 'weekday_morning',   label: 'Weekday mornings' },
+  { slug: 'weekday_afternoon', label: 'Weekday afternoons' },
+  { slug: 'weekday_evening',   label: 'Weekday evenings' },
+  { slug: 'weekend_morning',   label: 'Weekend mornings' },
+  { slug: 'weekend_afternoon', label: 'Weekend afternoons' },
+  { slug: 'weekend_evening',   label: 'Weekend evenings' },
+  { slug: 'flexible',          label: "I'm flexible" },
+];
 
 const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 
 // ── Step header with progress bar ──────────────────────────────────────────────
 
 function StepHeader({ step, title, theme }: { step: number; title: string; theme: ThemeProps }) {
-  const total = 4;
+  const total = 2;
   return (
     <View style={sh.wrapper}>
-      {/* Progress bar */}
       <View style={[sh.track, { backgroundColor: theme.isDark ? colors.forestSurfaceRaised : colors.borderLight }]}>
         <View style={[sh.fill, { width: `${(step / total) * 100}%` as never }]} />
       </View>
-      {/* Step count */}
       <Text style={[sh.count, { color: theme.textSub }]}>Step {step} of {total}</Text>
-      {/* Title */}
       <View style={sh.titleRow}>
         <View style={sh.badge}>
           <Text style={sh.badgeText}>{step}</Text>
@@ -184,260 +157,117 @@ function ConditionStep({ onSelect, theme }: { onSelect: (slug: string) => void; 
   );
 }
 
-// ── Step 2 — Doctor ───────────────────────────────────────────────────────────
+// ── Step 2 — Requirement + preferred time → submit ─────────────────────────────
 
-function DoctorStep({ condition, onSelect, onBack, theme }: {
+function RequirementStep({ condition, onSuccess, onBack, theme }: {
   condition: string;
-  onSelect: (d: SelectedDoctor) => void;
-  onBack: () => void;
-  theme: ThemeProps;
-}) {
-  const [doctors, setDoctors] = useState<AvailableDoctor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-
-  useEffect(() => {
-    listAvailableDoctorsApi(condition)
-      .then(data => { setDoctors(data.items); setError(null); })
-      .catch(() => setError('Could not load available doctors.'))
-      .finally(() => setLoading(false));
-  }, [condition]);
-
-  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
-
-  if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
-  }
-
-  return (
-    <ScrollView
-      style={[styles.flex, { backgroundColor: bg }]}
-      contentContainerStyle={styles.stepContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <StepHeader step={2} title="Choose a specialist" theme={theme} />
-
-      {error && (
-        <View style={[styles.errorBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
-          <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
-        </View>
-      )}
-
-      {!error && doctors.length === 0 && (
-        <View style={[styles.emptyState, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}>
-          <Text style={styles.emptyIcon}>👨‍⚕️</Text>
-          <Text style={[styles.emptyText, { color: theme.textPri }]}>No doctors available</Text>
-          <Text style={[styles.emptySub, { color: theme.textSub }]}>No specialists are currently available for this condition. Please try again later.</Text>
-        </View>
-      )}
-
-      {doctors.map(d => (
-        <PressCard
-          key={d.id}
-          onPress={() => onSelect({
-            id: d.id,
-            name: d.name,
-            specialty: d.specialty[0] ?? 'General',
-            fee_paise: 0,
-            duration_minutes: d.consultation_duration_minutes_default,
-          })}
-          accessibilityLabel={`Select ${d.name}`}
-          style={[styles.doctorCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}
-        >
-          <View style={styles.doctorAvatar}>
-            <Text style={styles.doctorAvatarText}>{getInitials(d.name)}</Text>
-          </View>
-          <View style={styles.doctorInfo}>
-            <Text style={[styles.doctorName, { color: theme.textPri }]}>{d.name}</Text>
-            <Text style={[styles.doctorSpecialty, { color: theme.textSub }]}>{d.specialty.join(', ') || 'General'}</Text>
-            {d.bio_short && (
-              <Text style={[styles.doctorSpecialty, { color: theme.textSub }]} numberOfLines={2}>{d.bio_short}</Text>
-            )}
-          </View>
-          <Text style={[styles.chevron, { color: theme.textSub }]}>›</Text>
-        </PressCard>
-      ))}
-
-      <Pressable onPress={onBack} accessibilityLabel="Go back" style={styles.backBtn}>
-        <Text style={[styles.backBtnText, { color: theme.textSub }]}>← Back</Text>
-      </Pressable>
-    </ScrollView>
-  );
-}
-
-// ── Step 3 — Slot ─────────────────────────────────────────────────────────────
-
-function SlotStep({ doctorId, onSelect, onBack, theme }: {
-  doctorId: string;
-  onSelect: (s: AvailableSlot) => void;
-  onBack: () => void;
-  theme: ThemeProps;
-}) {
-  const [slots,   setSlots]   = useState<AvailableSlot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-
-  useEffect(() => {
-    const now    = new Date();
-    const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    apiFetch<AvailableSlot[]>(
-      `/v1/clinic/patient/consultations/slots?doctor_id=${doctorId}&date_from=${now.toISOString()}&date_to=${future.toISOString()}`,
-    )
-      .then(data => { setSlots(data); setError(null); })
-      .catch(() => setError('Could not load available slots.'))
-      .finally(() => setLoading(false));
-  }, [doctorId]);
-
-  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
-
-  if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
-  }
-
-  return (
-    <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.stepContainer} showsVerticalScrollIndicator={false}>
-      <StepHeader step={3} title="Pick a time slot" theme={theme} />
-
-      {error && (
-        <View style={[styles.errorBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
-          <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
-        </View>
-      )}
-
-      {!error && slots.length === 0 && (
-        <View style={[styles.emptyState, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}>
-          <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={[styles.emptyText, { color: theme.textPri }]}>No slots available</Text>
-          <Text style={[styles.emptySub, { color: theme.textSub }]}>No available slots in the next 14 days.</Text>
-        </View>
-      )}
-
-      <View style={styles.slotGrid}>
-        {slots.map(slot => (
-          <PressCard
-            key={slot.id}
-            onPress={() => onSelect(slot)}
-            accessibilityLabel={`Select slot ${formatDate(slot.slot_start)} at ${formatTime(slot.slot_start)}`}
-            style={[styles.slotCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}
-          >
-            <Text style={[styles.slotDate, { color: theme.textSub }]}>{formatDate(slot.slot_start)}</Text>
-            <Text style={[styles.slotTime, { color: theme.textPri }]}>{formatTime(slot.slot_start)}</Text>
-          </PressCard>
-        ))}
-      </View>
-
-      <Pressable onPress={onBack} accessibilityLabel="Go back" style={styles.backBtn}>
-        <Text style={[styles.backBtnText, { color: theme.textSub }]}>← Back</Text>
-      </Pressable>
-    </ScrollView>
-  );
-}
-
-// ── Step 4 — Confirm & pay ────────────────────────────────────────────────────
-
-function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
-  condition: string;
-  doctor: SelectedDoctor;
-  slot: AvailableSlot;
   onSuccess: (consultationId: string) => void;
   onBack: () => void;
   theme: ThemeProps;
 }) {
-  const [booking, setBooking] = useState(false);
-
-  // Preserve ALL existing booking/Razorpay logic
-  const handlePay = useCallback(async () => {
-    setBooking(true);
-    try {
-      const bookData = await apiFetch<BookResponse>('/v1/clinic/patient/consultations', {
-        method: 'POST',
-        body: JSON.stringify({
-          doctor_id: doctor.id,
-          slot_id: slot.id,
-          condition_category: condition,
-          consultation_type: 'initial',
-          consultation_fee_paise: doctor.fee_paise,
-        }),
-      });
-      Alert.alert(
-        'Booking received',
-        `Your consultation is scheduled. Complete payment via Razorpay to confirm.\n\nOrder: ${bookData.payment.razorpay_order_id}`,
-        [{ text: 'OK', onPress: () => onSuccess(bookData.consultation_id) }],
-      );
-    } catch (e: unknown) {
-      const msg =
-        e instanceof Error && e.message.includes('slot_not_available')
-          ? 'This slot was just booked. Please pick another time.'
-          : 'Booking failed. Please try again.';
-      Alert.alert('Error', msg);
-    } finally {
-      setBooking(false);
-    }
-  }, [condition, doctor, slot, onSuccess]);
+  const [notes, setNotes]       = useState('');
+  const [window, setWindow]     = useState<string>('flexible');
+  const [submitting, setSubmit] = useState(false);
 
   const conditionLabel = CONDITIONS.find(c => c.slug === condition)?.label ?? condition;
   const bg = theme.isDark ? colors.forestInk : colors.skyMist;
 
-  const payScale = useSharedValue(1);
-  const payAnim  = useAnimatedStyle(() => ({ transform: [{ scale: payScale.value }] }));
+  const handleSubmit = useCallback(async () => {
+    setSubmit(true);
+    try {
+      const data = await apiFetch<RequestResponse>('/v1/clinic/patient/consultations', {
+        method: 'POST',
+        body: JSON.stringify({
+          condition_category: condition,
+          consultation_type: 'initial',
+          requirement_notes: notes.trim() || null,
+          preferred_time_window: window,
+        }),
+      });
+      onSuccess(data.consultation_id);
+    } catch {
+      Alert.alert('Error', 'Could not submit your request. Please try again.');
+    } finally {
+      setSubmit(false);
+    }
+  }, [condition, notes, window, onSuccess]);
+
+  const submitScale = useSharedValue(1);
+  const submitAnim  = useAnimatedStyle(() => ({ transform: [{ scale: submitScale.value }] }));
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.stepContainer} showsVerticalScrollIndicator={false}>
-      <StepHeader step={4} title="Review & pay" theme={theme} />
+      <StepHeader step={2} title="Tell us what you need" theme={theme} />
 
-      {/* Summary card */}
       <View style={[styles.summaryCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}>
-        {[
-          { label: 'Condition', value: conditionLabel },
-          { label: 'Doctor',    value: doctor.name },
-          { label: 'Date',      value: formatDate(slot.slot_start) },
-          { label: 'Time',      value: formatTime(slot.slot_start) },
-        ].map(({ label, value }, i, arr) => (
-          <View key={label}>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: theme.textSub }]}>{label}</Text>
-              <Text style={[styles.summaryValue, { color: theme.textPri }]}>{value}</Text>
-            </View>
-            {i < arr.length - 1 && (
-              <View style={[styles.summarySep, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight }]} />
-            )}
-          </View>
-        ))}
-        {/* Fee row (highlighted) — fee determined server-side during booking */}
-        {doctor.fee_paise > 0 && (
-          <View style={[styles.feeRow, { backgroundColor: colors.electricBlue + '10', borderRadius: borderRadius.lg }]}>
-            <Text style={[styles.feeRowLabel, { color: theme.textSub }]}>Consultation fee</Text>
-            <Text style={[styles.feeRowValue, { color: colors.electricBlue }]}>{formatRupees(doctor.fee_paise)}</Text>
-          </View>
-        )}
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: theme.textSub }]}>Concern</Text>
+          <Text style={[styles.summaryValue, { color: theme.textPri }]}>{conditionLabel}</Text>
+        </View>
       </View>
 
-      <Text style={[styles.payNote, { color: theme.textSub }]}>
-        You will be redirected to Razorpay to complete payment. Your appointment is confirmed once payment succeeds.
+      <Text style={[styles.fieldLabel, { color: theme.textPri }]}>What would you like help with?</Text>
+      <TextInput
+        style={[styles.notesInput, {
+          backgroundColor: theme.cardBg,
+          borderColor: theme.cardBdr,
+          color: theme.textPri,
+        }]}
+        placeholder="Briefly describe your symptoms or goals (optional)"
+        placeholderTextColor={theme.textSub}
+        value={notes}
+        onChangeText={setNotes}
+        multiline
+        numberOfLines={4}
+        maxLength={2000}
+        textAlignVertical="top"
+        accessibilityLabel="Describe your requirement"
+      />
+
+      <Text style={[styles.fieldLabel, { color: theme.textPri }]}>Preferred time</Text>
+      <View style={styles.windowGrid}>
+        {TIME_WINDOWS.map(w => {
+          const active = w.slug === window;
+          return (
+            <Pressable
+              key={w.slug}
+              onPress={() => setWindow(w.slug)}
+              accessibilityLabel={w.label}
+              style={[
+                styles.windowChip,
+                {
+                  backgroundColor: active ? colors.navyDeep : theme.cardBg,
+                  borderColor: active ? colors.navyDeep : theme.cardBdr,
+                },
+              ]}
+            >
+              <Text style={[styles.windowChipText, { color: active ? colors.white : theme.textPri }]}>{w.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={[styles.note, { color: theme.textSub }]}>
+        A care coordinator will match you with the right specialist and a time, then notify you to confirm and pay.
       </Text>
 
-      <Animated.View style={payAnim}>
+      <Animated.View style={submitAnim}>
         <Pressable
-          style={[styles.payBtn, booking && styles.disabled]}
-          onPress={handlePay}
-          onPressIn={() => { payScale.value = withSpring(0.97, SPRING); }}
-          onPressOut={() => { payScale.value = withSpring(1, SPRING); }}
-          disabled={booking}
-          accessibilityLabel="Pay and confirm booking"
+          style={[styles.primaryBtn, submitting && styles.disabled]}
+          onPress={handleSubmit}
+          onPressIn={() => { submitScale.value = withSpring(0.97, SPRING); }}
+          onPressOut={() => { submitScale.value = withSpring(1, SPRING); }}
+          disabled={submitting}
+          accessibilityLabel="Submit consultation request"
         >
-          {booking ? (
-            <ActivityIndicator color={colors.white} size="small" />
-          ) : (
-            <>
-              <Text style={styles.payBtnIcon}>💳</Text>
-              <Text style={styles.payBtnText}>{doctor.fee_paise > 0 ? `Pay ${formatRupees(doctor.fee_paise)}` : 'Confirm & pay'}</Text>
-            </>
-          )}
+          {submitting
+            ? <ActivityIndicator color={colors.white} size="small" />
+            : <Text style={styles.primaryBtnText}>Submit request</Text>}
         </Pressable>
       </Animated.View>
 
-      <Pressable onPress={onBack} accessibilityLabel="Change slot" style={styles.backBtn}>
-        <Text style={[styles.backBtnText, { color: theme.textSub }]}>← Change slot</Text>
+      <Pressable onPress={onBack} accessibilityLabel="Go back" style={styles.backBtn}>
+        <Text style={[styles.backBtnText, { color: theme.textSub }]}>← Back</Text>
       </Pressable>
     </ScrollView>
   );
@@ -445,15 +275,13 @@ function PayStep({ condition, doctor, slot, onSuccess, onBack, theme }: {
 
 // ── Main flow ─────────────────────────────────────────────────────────────────
 
-type Step = 'condition' | 'doctor' | 'slot' | 'pay' | 'success';
+type Step = 'condition' | 'requirement' | 'success';
 
-export default function BookConsultationScreen() {
+export default function RequestConsultationScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
   const [step,        setStep]        = useState<Step>('condition');
   const [condition,   setCondition]   = useState('');
-  const [doctor,      setDoctor]      = useState<SelectedDoctor | null>(null);
-  const [slot,        setSlot]        = useState<AvailableSlot | null>(null);
   const [confirmedId, setConfirmedId] = useState('');
 
   const onSuccess = useCallback((consultationId: string) => {
@@ -463,23 +291,17 @@ export default function BookConsultationScreen() {
 
   const theme: ThemeProps = {
     isDark,
-    textPri: isDark ? colors.white        : colors.navyDeep,
-    textSub: isDark ? colors.stoneDim    : colors.coolGray,
+    textPri: isDark ? colors.white         : colors.navyDeep,
+    textSub: isDark ? colors.stoneDim      : colors.coolGray,
     cardBg:  isDark ? colors.forestSurface : colors.white,
     cardBdr: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)',
   };
 
   if (step === 'condition') {
-    return <ConditionStep onSelect={slug => { setCondition(slug); setStep('doctor'); }} theme={theme} />;
+    return <ConditionStep onSelect={slug => { setCondition(slug); setStep('requirement'); }} theme={theme} />;
   }
-  if (step === 'doctor') {
-    return <DoctorStep condition={condition} onSelect={d => { setDoctor(d); setStep('slot'); }} onBack={() => setStep('condition')} theme={theme} />;
-  }
-  if (step === 'slot' && doctor) {
-    return <SlotStep doctorId={doctor.id} onSelect={s => { setSlot(s); setStep('pay'); }} onBack={() => setStep('doctor')} theme={theme} />;
-  }
-  if (step === 'pay' && doctor && slot) {
-    return <PayStep condition={condition} doctor={doctor} slot={slot} onSuccess={onSuccess} onBack={() => setStep('slot')} theme={theme} />;
+  if (step === 'requirement') {
+    return <RequirementStep condition={condition} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
   }
 
   // ── Success screen ────────────────────────────────────────────────────────
@@ -487,8 +309,6 @@ export default function BookConsultationScreen() {
   const bg = isDark ? colors.forestInk : colors.skyMist;
   const successScale = useSharedValue(0.7);
   const successAnim  = useAnimatedStyle(() => ({ transform: [{ scale: successScale.value }] }));
-
-  // Kick the scale animation on mount
   successScale.value = withSpring(1, { mass: 0.6, stiffness: 200 });
 
   return (
@@ -496,16 +316,16 @@ export default function BookConsultationScreen() {
       <Animated.View style={[styles.successIconWrap, successAnim]}>
         <Text style={styles.successIcon}>✓</Text>
       </Animated.View>
-      <Text style={[styles.successTitle, { color: theme.textPri }]}>Booking received!</Text>
+      <Text style={[styles.successTitle, { color: theme.textPri }]}>Request submitted!</Text>
       <Text style={[styles.successSub, { color: theme.textSub }]}>
-        Complete payment to confirm your appointment. You will receive a confirmation once payment is processed.
+        A care coordinator will review your needs and assign the right specialist. You'll be notified to confirm and pay once a doctor and time are set.
       </Text>
       <Pressable
         style={styles.successBtn}
         onPress={() => router.replace(`/consultations/${confirmedId}`)}
-        accessibilityLabel="View booking"
+        accessibilityLabel="View request"
       >
-        <Text style={styles.successBtnText}>View booking</Text>
+        <Text style={styles.successBtnText}>View request</Text>
       </Pressable>
       <Pressable
         onPress={() => router.replace('/(tabs)/consultations')}
@@ -529,7 +349,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[10],
     gap: spacing[4],
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Condition grid
   conditionGrid: { gap: spacing[3] },
@@ -546,62 +365,6 @@ const styles = StyleSheet.create({
   conditionLabel:   { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600', flex: 1 },
   conditionChevron: { fontFamily: fontFamily.body, fontSize: 22 },
 
-  // Doctor card
-  doctorCard: {
-    borderRadius: borderRadius.xl,
-    padding: spacing[4],
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-    borderWidth: 1,
-    boxShadow: '0 6px 12px rgba(0,0,0,0.07)',
-  },
-  doctorAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.navyDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
-  },
-  doctorAvatarText: { fontFamily: fontFamily.display, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
-  doctorInfo:       { flex: 1, gap: spacing[1] },
-  doctorName:       { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
-  doctorSpecialty:  { fontFamily: fontFamily.body, fontSize: fontSize.sm },
-  feePill:          { alignSelf: 'flex-start', borderRadius: borderRadius.full, paddingHorizontal: spacing[2], paddingVertical: 2 },
-  feeText:          { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '700' },
-  chevron:          { fontFamily: fontFamily.body, fontSize: 22 },
-
-  // Slot grid
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
-  slotCard: {
-    borderRadius: borderRadius.xl,
-    padding: spacing[4],
-    borderWidth: 1,
-    minWidth: 140,
-    gap: spacing[1],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
-  },
-  slotDate: { fontFamily: fontFamily.body, fontSize: fontSize.sm },
-  slotTime: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
-
-  // Empty + error
-  errorBox:   { borderRadius: borderRadius.xl, borderWidth: 1, padding: spacing[4] },
-  errorText:  { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
-  emptyState: {
-    borderRadius: borderRadius.xxl,
-    padding: spacing[8],
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: spacing[3],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
-  },
-  emptyIcon: { fontSize: 40 },
-  emptyText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', textAlign: 'center' },
-  emptySub:  { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },
-
   // Summary card
   summaryCard: {
     borderRadius: borderRadius.xxl,
@@ -612,15 +375,32 @@ const styles = StyleSheet.create({
   summaryRow:   { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing[5], paddingVertical: spacing[4] },
   summaryLabel: { fontFamily: fontFamily.body, fontSize: fontSize.sm, flex: 1 },
   summaryValue: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600', flex: 2, textAlign: 'right' },
-  summarySep:   { height: 1, marginHorizontal: spacing[5] },
-  feeRow:       { flexDirection: 'row', justifyContent: 'space-between', margin: spacing[3], paddingHorizontal: spacing[3], paddingVertical: spacing[3] },
-  feeRowLabel:  { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
-  feeRowValue:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '800' },
 
-  payNote: { fontFamily: fontFamily.body, fontSize: fontSize.sm, lineHeight: 20 },
+  // Fields
+  fieldLabel: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '700', marginTop: spacing[2] },
+  notesInput: {
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    padding: spacing[4],
+    minHeight: 110,
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+  },
 
-  // Pay button
-  payBtn: {
+  // Preferred time chips
+  windowGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  windowChip: {
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  windowChipText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
+
+  note: { fontFamily: fontFamily.body, fontSize: fontSize.sm, lineHeight: 20 },
+
+  // Primary button
+  primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -630,9 +410,8 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
   },
-  payBtnIcon: { fontSize: 20 },
-  payBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
-  disabled:   { opacity: 0.50 },
+  primaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  disabled:       { opacity: 0.50 },
 
   // Back link
   backBtn:     { alignItems: 'center', paddingTop: spacing[2] },

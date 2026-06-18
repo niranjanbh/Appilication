@@ -1,4 +1,4 @@
-import { colors, glass } from './design-tokens';
+import { colors, glass, neumorph, skeu, slider } from './design-tokens';
 import { useThemePreference } from './theme-context';
 
 export const lightPalette = {
@@ -15,6 +15,9 @@ export const lightPalette = {
   warning:      colors.warningAmber,
   critical:     colors.criticalRed,
   glass:        glass.light,
+  neumorph:     neumorph.light,
+  skeu:         skeu.light,
+  slider:       slider.light,
   skeletonBase: colors.borderLight,
   isDark:       false as const,
 } as const;
@@ -33,6 +36,9 @@ export const darkPalette = {
   warning:      colors.warningAmber,
   critical:     colors.alertBright,
   glass:        glass.dark,
+  neumorph:     neumorph.dark,
+  skeu:         skeu.dark,
+  slider:       slider.dark,
   skeletonBase: colors.forestSurfaceRaised,
   isDark:       true as const,
 } as const;

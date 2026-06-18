@@ -11,11 +11,12 @@ import { useRouter } from 'expo-router';
 import { listLabReports, type LabReport } from '../../lib/api/lab-reports';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
+import { NeumorphCard } from '../../components/ui/NeumorphCard';
+import { SkeuButton } from '../../components/ui/SkeuButton';
 import { SkeletonCards } from '../../components/ui/Skeleton';
-import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ function ReportCard({
       onPress={onPress}
       accessibilityLabel={`View ${report.original_filename}`}
     >
-      <GlassCard unpadded>
+      <NeumorphCard unpadded>
         <View style={styles.card}>
           <View style={[styles.fileIcon, { backgroundColor: sColor + '18' }]}>
             <Text style={[styles.fileIconText, { color: sColor }]}>{isPdf ? 'PDF' : 'IMG'}</Text>
@@ -86,7 +87,7 @@ function ReportCard({
             <Text style={[styles.chevron, { color: textSub }]}>›</Text>
           </View>
         </View>
-      </GlassCard>
+      </NeumorphCard>
     </HapticPressable>
   );
 }
@@ -178,17 +179,15 @@ export default function ReportsScreen() {
       />
 
       {/* Upload FAB — floats above the tab dock */}
-      <HapticPressable
-        haptic="medium"
-        scaleTo={0.95}
-        containerStyle={styles.fab}
-        style={styles.uploadBtn}
-        onPress={() => router.push('/reports/upload')}
-        accessibilityLabel="Upload lab report"
-      >
-        <Text style={styles.uploadIcon}>+</Text>
-        <Text style={styles.uploadText}>Upload report</Text>
-      </HapticPressable>
+      <View style={styles.fab}>
+        <SkeuButton
+          label="Upload report"
+          size="lg"
+          haptic="medium"
+          onPress={() => router.push('/reports/upload')}
+          accessibilityLabel="Upload lab report"
+        />
+      </View>
     </View>
   );
 }
@@ -269,27 +268,5 @@ const styles = StyleSheet.create({
     bottom: TAB_DOCK_CLEARANCE - spacing[6],
     left: spacing[6],
     right: spacing[6],
-  },
-  uploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    height: 56,
-    backgroundColor: colors.navyDeep,
-    borderRadius: borderRadius.xxl,
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
-  },
-  uploadIcon: {
-    fontFamily: fontFamily.body,
-    fontSize: 22,
-    color: colors.white,
-    lineHeight: 26,
-  },
-  uploadText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.white,
-    fontWeight: '700',
   },
 });

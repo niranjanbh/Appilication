@@ -21,19 +21,27 @@ from app.models.identity import User as UserModel
 from tests.conftest import create_admin_user, create_patient_user
 
 
-def _admin_session_cookie(user_id: uuid.UUID) -> str:
-    """Create an admin-portal session in Redis and return the cookie value."""
+def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
+    """Create an admin-portal session in Redis and return (session_id, csrf_token)."""
     from fastapi.responses import Response as FResponse
 
     from app.adminui.deps import create_admin_session
 
     dummy_response = FResponse()
     create_admin_session(dummy_response, user_id)
-    session_cookie = dummy_response.headers.get("set-cookie", "")
-    for part in session_cookie.split(";"):
-        if "kyros_admin_session=" in part:
-            return part.split("=", 1)[1].strip()
-    return ""
+    session_id = ""
+    csrf_token = ""
+    for header_val in dummy_response.raw_headers:
+        decoded = header_val[1].decode() if isinstance(header_val[1], bytes) else header_val[1]
+        if "kyros_admin_session=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_session=" in part:
+                    session_id = part.split("=", 1)[1].strip()
+        if "kyros_admin_csrf=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_csrf=" in part:
+                    csrf_token = part.split("=", 1)[1].strip()
+    return session_id, csrf_token
 
 
 async def test_admin_tier_hitting_super_admin_view_writes_denial_audit_row(
@@ -47,7 +55,7 @@ async def test_admin_tier_hitting_super_admin_view_writes_denial_audit_row(
     assert isinstance(admin, UserModel)
 
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return  # Redis unavailable in this environment — skip
     if not cookie:
@@ -56,7 +64,8 @@ async def test_admin_tier_hitting_super_admin_view_writes_denial_audit_row(
     content_id = uuid.uuid4()
     resp = await client.post(
         f"/admin/content/{content_id}/publish",
-        cookies={"kyros_admin_session": cookie},
+        data={"_csrf": csrf},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -128,7 +137,7 @@ async def test_disabling_phi_audit_middleware_skips_denial_write(
     assert isinstance(admin, UserModel)
 
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return
     if not cookie:
@@ -139,7 +148,8 @@ async def test_disabling_phi_audit_middleware_skips_denial_write(
     try:
         resp = await client.post(
             f"/admin/content/{content_id}/publish",
-            cookies={"kyros_admin_session": cookie},
+            data={"_csrf": csrf},
+            cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
             follow_redirects=False,
         )
     finally:

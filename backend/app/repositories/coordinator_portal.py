@@ -187,6 +187,35 @@ async def list_intake_queue(
     return [(row.Consultation, row.User) for row in result]
 
 
+async def list_requested_consultations(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+) -> list[tuple[Consultation, User]]:
+    """Patient-submitted requests awaiting a doctor + slot assignment.
+
+    Returns (Consultation, patient_user) for status='requested' patients assigned
+    to this coordinator. No clinical fields — only the requirement notes and
+    preferred time window the patient supplied.
+    """
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if not assigned:
+        return []
+
+    result = await db.execute(
+        select(Consultation, User)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .join(User, User.id == Patient.user_id)
+        .where(
+            Consultation.patient_id.in_(assigned),
+            Consultation.status == ConsultationStatus.REQUESTED,
+            Consultation.deleted_at.is_(None),
+        )
+        .order_by(Consultation.created_at)
+    )
+    return [(row.Consultation, row.User) for row in result]
+
+
 async def list_patient_consultations_restricted(
     db: AsyncSession,
     *,

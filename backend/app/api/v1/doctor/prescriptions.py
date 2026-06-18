@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.models.clinic import Prescription
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
@@ -43,7 +43,12 @@ class PrescriptionItemCreate(BaseModel):
     drug_generic_name: str
     drug_form: str
     dosage: str
-    frequency: str
+    # Structured dosing. `frequency` is an optional free-text fallback used only
+    # when frequency_code is OTHER; the display string is composed server-side.
+    frequency_code: str = "OTHER"
+    timing_slots: list[str] = []
+    food_relation: str | None = None
+    frequency: str | None = None
     duration_days: int | None = None
     instructions: str | None = None
     refill_allowed: bool = False
@@ -56,6 +61,53 @@ class PrescriptionItemCreate(BaseModel):
         if v not in valid:
             raise ValueError(f"drug_form must be one of: {', '.join(sorted(valid))}")
         return v
+
+    @field_validator("frequency_code")
+    @classmethod
+    def _validate_frequency_code(cls, v: str) -> str:
+        from app.db.enums import FrequencyCode
+        valid = {e.value for e in FrequencyCode}
+        if v not in valid:
+            raise ValueError(f"frequency_code must be one of: {', '.join(sorted(valid))}")
+        return v
+
+    @field_validator("timing_slots")
+    @classmethod
+    def _validate_timing_slots(cls, v: list[str]) -> list[str]:
+        from app.db.enums import TimingSlot
+        valid = {e.value for e in TimingSlot}
+        invalid = [s for s in v if s not in valid]
+        if invalid:
+            raise ValueError(
+                f"timing_slots must each be one of: {', '.join(sorted(valid))}"
+            )
+        # Dedupe while preserving caller order.
+        return list(dict.fromkeys(v))
+
+    @field_validator("food_relation")
+    @classmethod
+    def _validate_food_relation(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from app.db.enums import FoodRelation
+        valid = {e.value for e in FoodRelation}
+        if v not in valid:
+            raise ValueError(f"food_relation must be one of: {', '.join(sorted(valid))}")
+        return v
+
+    @model_validator(mode="after")
+    def _require_displayable_frequency(self) -> PrescriptionItemCreate:
+        """A line must yield a non-empty frequency: a real frequency_code, at least
+        one timing slot, or free-text when frequency_code is OTHER."""
+        has_code = self.frequency_code != "OTHER"
+        has_slots = bool(self.timing_slots)
+        has_text = bool(self.frequency and self.frequency.strip())
+        if not (has_code or has_slots or has_text):
+            raise ValueError(
+                "provide a frequency: choose a frequency_code, add a timing slot, "
+                "or enter free-text frequency"
+            )
+        return self
 
 
 class CreatePrescriptionRequest(BaseModel):
@@ -93,7 +145,10 @@ class PrescriptionItemRead(BaseModel):
     drug_generic_name: str
     drug_form: str
     dosage: str
-    frequency: str
+    frequency: str | None
+    frequency_code: str
+    timing_slots: list[str]
+    food_relation: str | None
     duration_days: int | None
     instructions: str | None
     refill_allowed: bool
@@ -156,6 +211,9 @@ async def _read_with_items(db: DbSession, rx: Prescription) -> PrescriptionRead:
                 drug_form=item.drug_form.value,
                 dosage=item.dosage,
                 frequency=item.frequency,
+                frequency_code=item.frequency_code.value,
+                timing_slots=list(item.timing_slots or []),
+                food_relation=item.food_relation.value if item.food_relation else None,
                 duration_days=item.duration_days,
                 instructions=item.instructions,
                 refill_allowed=item.refill_allowed,

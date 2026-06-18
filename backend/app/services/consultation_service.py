@@ -34,6 +34,9 @@ class ConsultationError(Exception):
 # confirm_payment/admin_cancel_consultation/cancel_consultation/admin_mark_no_show encode
 # equivalent checks ad-hoc and are consistent with it.
 _ALLOWED_TRANSITIONS: dict[ConsultationStatus, frozenset[ConsultationStatus]] = {
+    ConsultationStatus.REQUESTED: frozenset(
+        {ConsultationStatus.SCHEDULED, ConsultationStatus.CANCELLED}
+    ),
     ConsultationStatus.SCHEDULED: frozenset(
         {ConsultationStatus.CONFIRMED, ConsultationStatus.CANCELLED, ConsultationStatus.NO_SHOW}
     ),
@@ -57,38 +60,86 @@ def _assert_transition(
         raise ConsultationError(error_code)
 
 
-async def book_consultation(
+async def request_consultation(
     db: AsyncSession,
     *,
     patient_user_id: uuid.UUID,
-    doctor_id: uuid.UUID,
-    slot_id: uuid.UUID,
     condition_category: str,
     consultation_type: str,
-    notes: dict[str, object] | None = None,
-    coupon_code: str | None = None,
-) -> tuple[Consultation, Payment]:
-    """Lock slot → create consultation → create Razorpay order.
+    requirement_notes: str | None = None,
+    preferred_time_window: str | None = None,
+) -> Consultation:
+    """Patient submits a consultation request — no doctor, slot, or payment.
 
-    The fee is resolved server-side from pricing config (never client-supplied).
-    Returns (consultation, payment) within the same transaction.
-    The caller commits after this returns.
+    The request is routed to the patient's assigned coordinator (if any), who
+    later assigns a doctor + slot via ``assign_consultation``.
     """
-    from app.services import coupon_service, pricing_service
-    from app.services.coupon_service import CouponError
-
     patient = await consultations_repo.get_patient_record(db, user_id=patient_user_id)
     if patient is None:
         raise ConsultationError("patient_profile_not_found")
 
-    doctor = await db.get(Doctor, doctor_id)
+    consultation = await consultations_repo.create_consultation_request(
+        db,
+        patient_id=patient.id,
+        coordinator_id=patient.assigned_coordinator_id,
+        condition_category=condition_category,
+        consultation_type=consultation_type,
+        requirement_notes=requirement_notes,
+        preferred_time_window=preferred_time_window,
+    )
+    return consultation
+
+
+async def assign_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    coordinator_id: uuid.UUID,
+    slot_id: uuid.UUID,
+    coupon_code: str | None = None,
+) -> tuple[Consultation, Payment]:
+    """Coordinator assigns a doctor + slot to a REQUESTED consultation.
+
+    Scoped to the coordinator's assigned patients. Locks the slot, prices the fee
+    server-side, creates the Razorpay order the patient will pay, and moves the
+    consultation to SCHEDULED. Returns (consultation, payment).
+    The caller commits after this returns.
+    """
+    from sqlalchemy import select
+
+    from app.models.doctor import Availability
+    from app.repositories import coordinator_portal as coord_repo
+    from app.services import coupon_service, pricing_service
+    from app.services.coupon_service import CouponError
+
+    consultation = await db.get(Consultation, consultation_id)
+    if consultation is None or consultation.deleted_at is not None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status != ConsultationStatus.REQUESTED:
+        raise ConsultationError("consultation_not_assignable")
+
+    # Resource scope: the request's patient must be assigned to this coordinator.
+    assignment = await coord_repo.get_assigned_patient(
+        db, coordinator_id=coordinator_id, patient_id=consultation.patient_id
+    )
+    if assignment is None:
+        raise ConsultationError("patient_not_assigned")
+
+    slot_ref = (
+        await db.execute(select(Availability).where(Availability.id == slot_id))
+    ).scalar_one_or_none()
+    if slot_ref is None:
+        raise ConsultationError("slot_not_found")
+
+    doctor = await db.get(Doctor, slot_ref.doctor_id)
     if doctor is None or doctor.status != DoctorStatus.ACTIVE:
         raise ConsultationError("doctor_not_available")
 
     consultation_fee_paise = await pricing_service.get_consultation_fee_paise(
         db,
-        condition_category=condition_category,
-        consultation_type=ConsultationType(consultation_type),
+        condition_category=consultation.condition_category,
+        consultation_type=ConsultationType(consultation.consultation_type),
     )
 
     coupon_id: uuid.UUID | None = None
@@ -104,54 +155,47 @@ async def book_consultation(
 
     net_amount_paise = consultation_fee_paise - discount_paise
 
-    # Fetch slot metadata before locking (to get scheduled times)
-    from sqlalchemy import select
-
-    from app.models.doctor import Availability
-
-    slot_result = await db.execute(
-        select(Availability).where(Availability.id == slot_id)
-    )
-    slot_ref = slot_result.scalar_one_or_none()
-    if slot_ref is None:
-        raise ConsultationError("slot_not_found")
-
-    consultation = await consultations_repo.create_consultation(
-        db,
-        patient_id=patient.id,
-        doctor_id=doctor_id,
-        condition_category=condition_category,
-        consultation_type=consultation_type,
-        scheduled_start_at=slot_ref.slot_start,
-        scheduled_end_at=slot_ref.slot_end,
-        consultation_fee_paise=consultation_fee_paise,
-        coupon_id=coupon_id,
-        discount_paise=discount_paise,
-    )
-
-    # Lock and claim the slot — must happen after consultation row exists
-    # so the slot can reference it.
+    # Claim the slot before pricing-side effects so a lost race rolls everything back.
     booked = await consultations_repo.lock_and_book_slot(
         db, slot_id=slot_id, consultation_id=consultation.id
     )
     if booked is None:
         raise ConsultationError("slot_not_available")
 
+    patient_user = await consultations_repo.get_patient_user_for_consultation(
+        db, patient_id=consultation.patient_id
+    )
+    if patient_user is None:
+        raise ConsultationError("patient_profile_not_found")
+
     payment = await payment_service.create_order(
         db,
-        user_id=patient_user_id,
+        user_id=patient_user.id,
         amount_paise=net_amount_paise,
         consultation_id=consultation.id,
-        notes=notes or {"consultation_id": str(consultation.id)},
+        notes={"consultation_id": str(consultation.id)},
     )
 
-    # Link payment back to consultation
-    await consultations_repo.update_consultation(
-        db, consultation_id=consultation.id, payment_id=payment.id
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation.id,
+        doctor_id=slot_ref.doctor_id,
+        coordinator_id=coordinator_id,
+        scheduled_start_at=slot_ref.slot_start,
+        scheduled_end_at=slot_ref.slot_end,
+        consultation_fee_paise=consultation_fee_paise,
+        coupon_id=coupon_id,
+        discount_paise=discount_paise,
+        payment_id=payment.id,
+        status=ConsultationStatus.SCHEDULED,
     )
-    consultation.payment_id = payment.id
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
 
-    return consultation, payment
+    from app.services.notifications import notify_doctor_assigned
+    await notify_doctor_assigned(db, consultation_id=updated.id)
+
+    return updated, payment
 
 
 async def confirm_payment(
@@ -355,12 +399,22 @@ async def cancel_consultation(
     if consultation is None:
         raise ConsultationError("consultation_not_found")
 
-    if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
+    # A patient may withdraw a not-yet-assigned request, or cancel a scheduled/
+    # confirmed appointment (subject to the refund window below).
+    if consultation.status not in (
+        ConsultationStatus.REQUESTED,
+        ConsultationStatus.SCHEDULED,
+        ConsultationStatus.CONFIRMED,
+    ):
         raise ConsultationError("consultation_not_cancellable")
 
     now = datetime.now(UTC)
-    hours_until = (consultation.scheduled_start_at - now).total_seconds() / 3600
-    eligible_for_refund = hours_until > CANCELLATION_REFUND_WINDOW_HOURS
+    # A 'requested' consultation has no slot and no payment — nothing to refund.
+    if consultation.scheduled_start_at is None:
+        eligible_for_refund = False
+    else:
+        hours_until = (consultation.scheduled_start_at - now).total_seconds() / 3600
+        eligible_for_refund = hours_until > CANCELLATION_REFUND_WINDOW_HOURS
 
     refund_issued = False
     if eligible_for_refund and consultation.payment_id is not None:

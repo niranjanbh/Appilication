@@ -63,6 +63,9 @@ async def scheduling_view(
     upcoming = await coord_repo.list_upcoming_consultations(
         db, coordinator_id=coordinator.id
     )
+    requests = await coord_repo.list_requested_consultations(
+        db, coordinator_id=coordinator.id
+    )
 
     return templates.TemplateResponse(
         request,
@@ -73,6 +76,7 @@ async def scheduling_view(
             "slots": slots,
             "patients": patients,
             "upcoming": upcoming,
+            "requests": requests,
             "conditions": _CONDITIONS,
             "days_ahead": days_ahead,
             "error": None,
@@ -138,6 +142,60 @@ async def book_consultation(
     _notify_patient_booked(consultation, db)
 
     return RedirectResponse(url="/coord/scheduling?success=booked", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/scheduling/{consultation_id}/assign")
+async def assign_consultation(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    slot_id: uuid.UUID = Form(...),
+) -> RedirectResponse:
+    """Assign a doctor + slot to a patient's consultation request.
+
+    The doctor is determined by the chosen slot. Prices the fee, creates the
+    Razorpay order the patient pays, and moves the request to 'scheduled'.
+    """
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    from app.services import consultation_service
+
+    try:
+        consultation, _payment = await consultation_service.assign_consultation(
+            db,
+            consultation_id=consultation_id,
+            coordinator_id=coordinator.id,
+            slot_id=slot_id,
+        )
+    except consultation_service.ConsultationError as exc:
+        # Roll back any partial slot/payment work, then record the denial
+        # (audit rows must survive the rollback).
+        await db.rollback()
+        await write_audit(
+            db, ctx, action="coord_assign_consultation", resource_type="consultation",
+            resource_id=consultation_id, allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/coord/scheduling?error={exc.code}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await write_audit(
+        db, ctx, action="coord_assign_consultation", resource_type="consultation",
+        resource_id=consultation.id, allowed=True,
+        log_metadata={"slot_id": str(slot_id)},
+    )
+    return RedirectResponse(
+        url="/coord/scheduling?success=assigned", status_code=status.HTTP_302_FOUND
+    )
 
 
 @router.post("/scheduling/{consultation_id}/cancel")

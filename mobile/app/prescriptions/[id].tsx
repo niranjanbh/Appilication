@@ -32,21 +32,27 @@ function MedicationCard({ item, isDark, textPri, textSub, cardBg, cardBdr }: {
   item: PrescriptionItem; isDark: boolean; textPri: string; textSub: string; cardBg: string; cardBdr: string;
 }) {
   const duration = item.duration_days != null ? `${item.duration_days} days` : 'Ongoing';
+  // Composed timing string (frequency + time-of-day + food relation) — its own
+  // full-width row since it can be longer than the short Dose/Duration chips.
+  const frequency = item.frequency ?? '—';
   return (
     <View style={[med.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
       <Text style={[med.name, { color: textPri }]}>{item.drug_generic_name}</Text>
       <Text style={[med.form, { color: textSub }]}>{capitalize(item.drug_form)}</Text>
       <View style={[med.detailRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight }]}>
         {[
-          { label: 'Dose',      value: item.dosage },
-          { label: 'Frequency', value: item.frequency },
-          { label: 'Duration',  value: duration },
+          { label: 'Dose',     value: item.dosage },
+          { label: 'Duration', value: duration },
         ].map(({ label, value }) => (
           <View key={label} style={med.chip}>
             <Text style={[med.chipLabel, { color: textSub }]}>{label}</Text>
             <Text style={[med.chipValue, { color: textPri }]}>{value}</Text>
           </View>
         ))}
+      </View>
+      <View style={med.chip}>
+        <Text style={[med.chipLabel, { color: textSub }]}>How to take</Text>
+        <Text style={[med.chipValue, { color: textPri }]}>{frequency}</Text>
       </View>
       {item.instructions && <Text style={[med.instructions, { color: textSub }]}>{item.instructions}</Text>}
       {item.refill_allowed && <Text style={[med.refill, { color: colors.electricBlue }]}>↻ Refill allowed</Text>}

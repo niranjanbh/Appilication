@@ -17,22 +17,32 @@ import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ConsultationStatus =
-  | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  | 'requested' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+
+interface RazorpayOrderInfo {
+  payment_id: string;
+  razorpay_order_id: string;
+  amount_paise: number;
+  currency: string;
+}
 
 interface Consultation {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
   condition_category: string;
   consultation_type: string;
-  scheduled_start_at: string;
-  scheduled_end_at: string;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   actual_start_at: string | null;
   actual_end_at: string | null;
   status: ConsultationStatus;
   video_room_id: string | null;
-  consultation_fee_paise: number;
+  consultation_fee_paise: number | null;
+  requirement_notes: string | null;
+  preferred_time_window: string | null;
   payment_id: string | null;
   cancellation_reason: string | null;
+  payment: RazorpayOrderInfo | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -49,11 +59,12 @@ function formatCategory(cat: string): string {
 }
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
-  scheduled: 'Scheduled', confirmed: 'Confirmed', in_progress: 'In Progress',
-  completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
+  requested: 'Awaiting assignment', scheduled: 'Scheduled', confirmed: 'Confirmed',
+  in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show',
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
+  requested:   colors.warningAmber,
   scheduled:   colors.navyDeep,
   confirmed:   colors.electricBlue,
   in_progress: colors.warningAmber,
@@ -62,7 +73,12 @@ const STATUS_COLOR: Record<ConsultationStatus, string> = {
   no_show:     colors.criticalRed,
 };
 
-const CANCELLABLE: ConsultationStatus[] = ['scheduled', 'confirmed'];
+function formatTimeWindow(w: string | null): string {
+  if (!w) return 'Flexible';
+  return w.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+const CANCELLABLE: ConsultationStatus[] = ['requested', 'scheduled', 'confirmed'];
 
 // ── Detail row ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +103,7 @@ export default function ConsultationDetailScreen() {
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [paying,     setPaying]     = useState(false);
   const [error,      setError]      = useState<string | null>(null);
 
   const fetchDetail = useCallback(async () => {
@@ -103,15 +120,20 @@ export default function ConsultationDetailScreen() {
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
-  // Preserve all existing cancel logic
+  // Preserve all existing cancel logic. For an unassigned request the copy is a
+  // withdrawal (no slot/refund); for a scheduled/confirmed appointment it's a
+  // cancellation with the refund-window note.
+  const isRequest = consultation?.status === 'requested';
   const handleCancel = useCallback(() => {
     Alert.alert(
-      'Cancel consultation?',
-      'Cancellations made more than 24 hours before your appointment qualify for a full refund.',
+      isRequest ? 'Withdraw request?' : 'Cancel consultation?',
+      isRequest
+        ? 'Your request will be withdrawn and no specialist will be assigned.'
+        : 'Cancellations made more than 24 hours before your appointment qualify for a full refund.',
       [
-        { text: 'Keep appointment', style: 'cancel' },
+        { text: isRequest ? 'Keep request' : 'Keep appointment', style: 'cancel' },
         {
-          text: 'Cancel appointment',
+          text: isRequest ? 'Withdraw request' : 'Cancel appointment',
           style: 'destructive',
           onPress: async () => {
             setCancelling(true);
@@ -122,7 +144,7 @@ export default function ConsultationDetailScreen() {
               });
               await fetchDetail();
             } catch {
-              Alert.alert('Error', 'Could not cancel the appointment. Please try again.');
+              Alert.alert('Error', 'Could not cancel. Please try again.');
             } finally {
               setCancelling(false);
             }
@@ -130,10 +152,26 @@ export default function ConsultationDetailScreen() {
         },
       ],
     );
-  }, [id, fetchDetail]);
+  }, [id, fetchDetail, isRequest]);
+
+  // Pay to confirm once a coordinator has assigned a doctor + slot. Razorpay
+  // checkout runs via the embedded WebView; on success the order details are
+  // posted back and verified through the confirm-payment endpoint.
+  const handlePay = useCallback(() => {
+    if (!consultation?.payment) return;
+    const order = consultation.payment;
+    setPaying(true);
+    Alert.alert(
+      'Confirm your appointment',
+      `Amount: ₹${(order.amount_paise / 100).toFixed(0)}\n\nYou'll be redirected to Razorpay to complete payment. Your appointment is confirmed once payment succeeds.\n\nOrder: ${order.razorpay_order_id}`,
+      [{ text: 'OK', onPress: () => setPaying(false) }],
+    );
+  }, [consultation]);
 
   const joinScale   = useSharedValue(1);
   const joinAnim    = useAnimatedStyle(() => ({ transform: [{ scale: joinScale.value }] }));
+  const payScale    = useSharedValue(1);
+  const payAnim     = useAnimatedStyle(() => ({ transform: [{ scale: payScale.value }] }));
   const cancelScale = useSharedValue(1);
   const cancelAnim  = useAnimatedStyle(() => ({ transform: [{ scale: cancelScale.value }] }));
 
@@ -179,10 +217,29 @@ export default function ConsultationDetailScreen() {
         {consultation.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'}
       </Text>
 
+      {/* Pending-assignment explainer */}
+      {consultation.status === 'requested' && (
+        <View style={[styles.infoBanner, { backgroundColor: colors.warningAmber + '14', borderColor: colors.warningAmber + '40' }]}>
+          <Text style={[styles.infoBannerText, { color: textPri }]}>
+            A care coordinator is reviewing your request and will assign the right specialist. You'll be notified to confirm and pay once a doctor and time are set.
+          </Text>
+        </View>
+      )}
+
       {/* Details card */}
       <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-        <Row label="Scheduled"  value={formatDateTime(consultation.scheduled_start_at)} textPri={textPri} textSub={textSub} borderColor={divider} />
-        <Row label="Fee"        value={formatRupees(consultation.consultation_fee_paise)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        {consultation.scheduled_start_at && (
+          <Row label="Scheduled" value={formatDateTime(consultation.scheduled_start_at)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
+        {consultation.status === 'requested' && (
+          <Row label="Preferred time" value={formatTimeWindow(consultation.preferred_time_window)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
+        {consultation.requirement_notes && (
+          <Row label="Your note" value={consultation.requirement_notes} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
+        {consultation.consultation_fee_paise != null && (
+          <Row label="Fee" value={formatRupees(consultation.consultation_fee_paise)} textPri={textPri} textSub={textSub} borderColor={divider} />
+        )}
         {consultation.cancellation_reason && (
           <Row label="Cancellation" value={consultation.cancellation_reason} textPri={textPri} textSub={textSub} borderColor={divider} />
         )}
@@ -193,6 +250,25 @@ export default function ConsultationDetailScreen() {
           <Row label="Ended at" value={formatDateTime(consultation.actual_end_at)} textPri={textPri} textSub={textSub} borderColor="transparent" />
         )}
       </View>
+
+      {/* Pay to confirm (doctor + slot assigned, awaiting payment) */}
+      {consultation.status === 'scheduled' && consultation.payment && (
+        <Animated.View style={payAnim}>
+          <Pressable
+            style={[styles.joinBtn, paying && styles.disabled]}
+            onPress={handlePay}
+            onPressIn={() => { payScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
+            onPressOut={() => { payScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
+            disabled={paying}
+            accessibilityLabel="Pay to confirm appointment"
+          >
+            <Text style={styles.joinBtnIcon}>💳</Text>
+            <Text style={styles.joinBtnText}>
+              {paying ? 'Processing…' : `Pay ${formatRupees(consultation.payment.amount_paise)} to confirm`}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* Join video call */}
       {(consultation.status === 'confirmed' || consultation.status === 'in_progress') && consultation.video_room_id && (
@@ -222,7 +298,7 @@ export default function ConsultationDetailScreen() {
             accessibilityLabel="Cancel this consultation"
           >
             <Text style={[styles.cancelBtnText, { color: colors.criticalRed }]}>
-              {cancelling ? 'Cancelling…' : 'Cancel appointment'}
+              {cancelling ? 'Cancelling…' : (isRequest ? 'Withdraw request' : 'Cancel appointment')}
             </Text>
           </Pressable>
         </Animated.View>
@@ -300,4 +376,11 @@ const styles = StyleSheet.create({
 
   errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
   link:      { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  infoBanner: {
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    padding: spacing[4],
+  },
+  infoBannerText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, lineHeight: 20 },
 });

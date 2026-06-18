@@ -618,16 +618,10 @@ async def test_clinic_get_consultation_no_auth_returns_401(client: AsyncClient) 
     assert resp.status_code == 401
 
 
-async def test_clinic_book_consultation_no_auth_returns_401(client: AsyncClient) -> None:
-    import uuid
+async def test_clinic_request_consultation_no_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.post(
         "/v1/clinic/patient/consultations",
-        json={
-            "doctor_id": str(uuid.uuid4()),
-            "slot_id": str(uuid.uuid4()),
-            "condition_category": "thyroid",
-            "consultation_fee_paise": 60000,
-        },
+        json={"condition_category": "thyroid"},
     )
     assert resp.status_code == 401
 
@@ -2630,19 +2624,27 @@ async def test_admin_login_valid_admin_redirects_to_dashboard(
 # ── /admin/* — read-only 'admin' tier vs full 'super_admin' tier ──────────────
 
 
-def _admin_session_cookie(user_id: uuid.UUID) -> str:
-    """Create an admin-portal session in Redis and return the cookie value."""
+def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
+    """Create an admin-portal session in Redis and return (session_id, csrf_token)."""
     from fastapi.responses import Response as FResponse
 
     from app.adminui.deps import create_admin_session
 
     dummy_response = FResponse()
     create_admin_session(dummy_response, user_id)
-    session_cookie = dummy_response.headers.get("set-cookie", "")
-    for part in session_cookie.split(";"):
-        if "kyros_admin_session=" in part:
-            return part.split("=", 1)[1].strip()
-    return ""
+    session_id = ""
+    csrf_token = ""
+    for header_val in dummy_response.raw_headers:
+        decoded = header_val[1].decode() if isinstance(header_val[1], bytes) else header_val[1]
+        if "kyros_admin_session=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_session=" in part:
+                    session_id = part.split("=", 1)[1].strip()
+        if "kyros_admin_csrf=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_csrf=" in part:
+                    csrf_token = part.split("=", 1)[1].strip()
+    return session_id, csrf_token
 
 
 async def _create_readonly_admin(db: AsyncSession) -> object:
@@ -2669,14 +2671,14 @@ async def test_admin_tier_can_view_users(
     admin = await _create_readonly_admin(db_session)
     assert isinstance(admin, UserModel)
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return  # Redis unavailable in test — skip session creation path
     if not cookie:
         return
 
     for path in ("/admin/users", "/admin/doctors", "/admin/content"):
-        resp = await client.get(path, cookies={"kyros_admin_session": cookie})
+        resp = await client.get(path, cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf})
         assert resp.status_code == 200, path
 
 
@@ -2691,7 +2693,7 @@ async def test_admin_tier_cannot_suspend_user(
     assert isinstance(admin, UserModel)
     assert isinstance(patient, UserModel)
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return
     if not cookie:
@@ -2699,7 +2701,8 @@ async def test_admin_tier_cannot_suspend_user(
 
     resp = await client.post(
         f"/admin/users/{patient.id}/suspend",
-        cookies={"kyros_admin_session": cookie},
+        data={"_csrf": csrf},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -2716,7 +2719,7 @@ async def test_super_admin_tier_can_suspend_user(
     assert isinstance(super_admin, UserModel)
     assert isinstance(patient, UserModel)
     try:
-        cookie = _admin_session_cookie(super_admin.id)
+        cookie, csrf = _admin_session_cookie(super_admin.id)
     except Exception:
         return
     if not cookie:
@@ -2724,7 +2727,8 @@ async def test_super_admin_tier_can_suspend_user(
 
     resp = await client.post(
         f"/admin/users/{patient.id}/suspend",
-        cookies={"kyros_admin_session": cookie},
+        data={"_csrf": csrf},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -2749,7 +2753,7 @@ async def test_admin_tier_cannot_open_staff_form(
     admin = await _create_readonly_admin(db_session)
     assert isinstance(admin, UserModel)
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return
     if not cookie:
@@ -2757,7 +2761,7 @@ async def test_admin_tier_cannot_open_staff_form(
 
     for path in ("/admin/staff/new", "/admin/dsr"):
         resp = await client.get(
-            path, cookies={"kyros_admin_session": cookie}, follow_redirects=False
+            path, cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}, follow_redirects=False
         )
         assert resp.status_code == 403, path
 
@@ -2774,7 +2778,7 @@ async def test_super_admin_creates_coordinator_via_portal(
     super_admin = await create_super_admin_user(db_session)
     assert isinstance(super_admin, UserModel)
     try:
-        cookie = _admin_session_cookie(super_admin.id)  # login marks the session fresh
+        cookie, csrf = _admin_session_cookie(super_admin.id)  # login marks the session fresh
     except Exception:
         return
     if not cookie:
@@ -2789,8 +2793,9 @@ async def test_super_admin_creates_coordinator_via_portal(
             "email": _synth_email(),
             "phone": phone,
             "password": "PortalPass123!",
+            "_csrf": csrf,
         },
-        cookies={"kyros_admin_session": cookie},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -2814,7 +2819,7 @@ async def test_stale_super_admin_session_redirects_to_reauth(
     super_admin = await create_super_admin_user(db_session)
     assert isinstance(super_admin, UserModel)
     try:
-        cookie = _admin_session_cookie(super_admin.id)
+        cookie, csrf = _admin_session_cookie(super_admin.id)
         _redis().delete(_fresh_key(cookie))  # simulate the window lapsing
     except Exception:
         return
@@ -2829,8 +2834,9 @@ async def test_stale_super_admin_session_redirects_to_reauth(
             "email": _synth_email(),
             "phone": _synth_phone(),
             "password": "PortalPass123!",
+            "_csrf": csrf,
         },
-        cookies={"kyros_admin_session": cookie},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -2845,7 +2851,7 @@ async def test_admin_cancel_unknown_consultation_returns_404(
     super_admin = await create_super_admin_user(db_session)
     assert isinstance(super_admin, UserModel)
     try:
-        cookie = _admin_session_cookie(super_admin.id)
+        cookie, csrf = _admin_session_cookie(super_admin.id)
     except Exception:
         return
     if not cookie:
@@ -2853,8 +2859,8 @@ async def test_admin_cancel_unknown_consultation_returns_404(
 
     resp = await client.post(
         f"/admin/consultations/{uuid.uuid4()}/cancel",
-        data={"reason": "test"},
-        cookies={"kyros_admin_session": cookie},
+        data={"reason": "test", "_csrf": csrf},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 404
@@ -2870,7 +2876,7 @@ async def test_analytics_export_works_with_session_cookie(
     admin = await _create_readonly_admin(db_session)
     assert isinstance(admin, UserModel)
     try:
-        cookie = _admin_session_cookie(admin.id)
+        cookie, csrf = _admin_session_cookie(admin.id)
     except Exception:
         return
     if not cookie:
@@ -2878,7 +2884,7 @@ async def test_analytics_export_works_with_session_cookie(
 
     resp = await client.get(
         "/admin/analytics/export?report=funnel",
-        cookies={"kyros_admin_session": cookie},
+        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
     )
     assert resp.status_code == 200
     assert "text/csv" in resp.headers.get("content-type", "")
@@ -2949,19 +2955,27 @@ async def test_coord_inquiries_no_cookie_redirects(client: AsyncClient) -> None:
     assert resp.status_code == 302
 
 
-def _coord_session_cookie(user_id: uuid.UUID) -> str:
-    """Create a coordinator session in Redis and return the cookie value."""
+def _coord_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
+    """Create a coordinator session in Redis and return (session_id, csrf_token)."""
     from fastapi.responses import Response as FResponse
 
     from app.adminui.deps import create_coord_session
 
     dummy_response = FResponse()
     create_coord_session(dummy_response, user_id)
-    session_cookie = dummy_response.headers.get("set-cookie", "")
-    for part in session_cookie.split(";"):
-        if "kyros_coord_session=" in part:
-            return part.split("=", 1)[1].strip()
-    return ""
+    session_id = ""
+    csrf_token = ""
+    for header_val in dummy_response.raw_headers:
+        decoded = header_val[1].decode() if isinstance(header_val[1], bytes) else header_val[1]
+        if "kyros_coord_session=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_coord_session=" in part:
+                    session_id = part.split("=", 1)[1].strip()
+        if "kyros_coord_csrf=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_coord_csrf=" in part:
+                    csrf_token = part.split("=", 1)[1].strip()
+    return session_id, csrf_token
 
 
 async def test_coord_inquiry_contacted_first_coordinator_wins(
@@ -2990,8 +3004,8 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
     assert isinstance(coord_two, UserModel)
 
     try:
-        cookie_one = _coord_session_cookie(coord_one.id)
-        cookie_two = _coord_session_cookie(coord_two.id)
+        cookie_one, csrf_one = _coord_session_cookie(coord_one.id)
+        cookie_two, csrf_two = _coord_session_cookie(coord_two.id)
     except Exception:
         return  # Redis unavailable in test — skip session creation path
     if not cookie_one or not cookie_two:
@@ -2999,7 +3013,7 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
 
     # Queue lists the inquiry as not contacted
     queue = await client.get(
-        "/coord/inquiries", cookies={"kyros_coord_session": cookie_one}
+        "/coord/inquiries", cookies={"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one}
     )
     assert queue.status_code == 200
     assert b"Test Inquiry Patient" in queue.content
@@ -3008,7 +3022,8 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
     # First coordinator claims it
     first = await client.post(
         f"/coord/inquiries/{inquiry_id}/contacted",
-        cookies={"kyros_coord_session": cookie_one},
+        data={"_csrf": csrf_one},
+        cookies={"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one},
         follow_redirects=False,
     )
     assert first.status_code == 302
@@ -3016,7 +3031,8 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
     # Second coordinator cannot re-claim
     second = await client.post(
         f"/coord/inquiries/{inquiry_id}/contacted",
-        cookies={"kyros_coord_session": cookie_two},
+        data={"_csrf": csrf_two},
+        cookies={"kyros_coord_session": cookie_two, "kyros_coord_csrf": csrf_two},
         follow_redirects=False,
     )
     assert second.status_code == 404

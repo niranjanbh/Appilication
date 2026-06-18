@@ -13,7 +13,9 @@ export interface PrescriptionItem {
   drug_generic_name: string;
   drug_form: string;
   dosage: string;
-  frequency: string;
+  // Server-composed display string: frequency + time-of-day + food relation
+  // (e.g. "Twice daily · Morning, Night · after food"). Nullable for legacy rows.
+  frequency: string | null;
   duration_days: number | null;
   instructions: string | null;
   refill_allowed: boolean;

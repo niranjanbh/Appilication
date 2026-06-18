@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.enums import FoodRelation, FrequencyCode, TimingSlot
 from app.models.clinic import Prescription, PrescriptionItem
 from app.repositories import drug_catalogue as dc_repo
 from app.repositories import prescriptions as prescriptions_repo
@@ -17,6 +18,83 @@ class PrescriptionError(Exception):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+# ── Structured-timing display composition ───────────────────────────────────────
+
+_FREQUENCY_LABELS: dict[FrequencyCode, str] = {
+    FrequencyCode.OD: "Once daily",
+    FrequencyCode.BD: "Twice daily",
+    FrequencyCode.TDS: "Thrice daily",
+    FrequencyCode.QID: "Four times daily",
+    FrequencyCode.HS: "At bedtime",
+    FrequencyCode.SOS: "As needed",
+    FrequencyCode.ALTERNATE_DAYS: "Every alternate day",
+    FrequencyCode.WEEKLY: "Once weekly",
+    FrequencyCode.BIWEEKLY: "Once every two weeks",
+    FrequencyCode.MONTHLY: "Once monthly",
+    FrequencyCode.OTHER: "",
+}
+
+_FOOD_LABELS: dict[FoodRelation, str] = {
+    FoodRelation.BEFORE_FOOD: "before food",
+    FoodRelation.AFTER_FOOD: "after food",
+    FoodRelation.WITH_FOOD: "with food",
+    FoodRelation.EMPTY_STOMACH: "on an empty stomach",
+    FoodRelation.ANYTIME: "",
+}
+
+
+def compose_frequency_display(
+    *,
+    frequency_code: str | None,
+    timing_slots: list[str] | None,
+    food_relation: str | None,
+    fallback: str | None = None,
+) -> str:
+    """Build the human-readable frequency string shown on the PDF and mobile.
+
+    Composes from the structured fields; falls back to free text (the legacy
+    `frequency` value) when the code is OTHER with nothing else set.
+    """
+    parts: list[str] = []
+
+    if frequency_code:
+        label = _FREQUENCY_LABELS.get(FrequencyCode(frequency_code), "")
+        if label:
+            parts.append(label)
+
+    if timing_slots:
+        ordered = [s.value for s in TimingSlot if s.value in set(timing_slots)]
+        if ordered:
+            parts.append(", ".join(s.capitalize() for s in ordered))
+
+    if food_relation:
+        food = _FOOD_LABELS.get(FoodRelation(food_relation), "")
+        if food:
+            parts.append(food)
+
+    composed = " · ".join(parts)
+    if composed:
+        return composed
+    return (fallback or "").strip()
+
+
+def _apply_frequency_display(items: list[dict[str, Any]]) -> None:
+    """Compose each item's `frequency` display string from its structured fields.
+
+    Mutates each dict in place. Raises PrescriptionError when a line has no
+    displayable frequency at all (OTHER + no slots + no free text)."""
+    for item in items:
+        display = compose_frequency_display(
+            frequency_code=item.get("frequency_code"),
+            timing_slots=item.get("timing_slots"),
+            food_relation=item.get("food_relation"),
+            fallback=item.get("frequency"),
+        )
+        if not display:
+            raise PrescriptionError("frequency_required")
+        item["frequency"] = display
 
 
 # ── Drug schedule rule checker (pure — no async/DB, directly unit-testable) ──
@@ -138,6 +216,7 @@ async def create_draft(
     await _check_refill_gate(
         db, items, patient_id=consultation.patient_id, consultation_id=consultation_id
     )
+    _apply_frequency_display(items)
 
     return await prescriptions_repo.create_draft(
         db,
@@ -185,6 +264,7 @@ async def update_draft(
             patient_id=existing_rx.patient_id,
             consultation_id=existing_rx.consultation_id,
         )
+        _apply_frequency_display(items)
 
     rx = await prescriptions_repo.update_draft(
         db,
@@ -241,13 +321,21 @@ def render_prescription_html(
     items_html = ""
     for item in items:
         duration = f"{item.duration_days} days" if item.duration_days else "Ongoing"
+        # `frequency` is the server-composed display string (frequency code +
+        # time-of-day slots + food relation). Fall back to recomposing from the
+        # structured fields for safety, then to an em-dash.
+        frequency_display = item.frequency or compose_frequency_display(
+            frequency_code=item.frequency_code,
+            timing_slots=item.timing_slots or [],
+            food_relation=item.food_relation,
+        ) or "—"
         items_html += f"""
         <div class="rx-item">
             <div class="drug-name">{_esc(item.drug_generic_name)}</div>
             <div class="drug-form">{_esc(item.drug_form.capitalize())}</div>
             <div class="drug-detail">
                 <span class="label">Dose:</span> {_esc(item.dosage)} &nbsp;|&nbsp;
-                <span class="label">Frequency:</span> {_esc(item.frequency)} &nbsp;|&nbsp;
+                <span class="label">Frequency:</span> {_esc(frequency_display)} &nbsp;|&nbsp;
                 <span class="label">Duration:</span> {_esc(duration)}
             </div>
             {f'<div class="drug-instructions">{_esc(item.instructions)}</div>' if item.instructions else ''}

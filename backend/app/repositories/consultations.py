@@ -189,6 +189,38 @@ async def create_consultation(
     return consultation
 
 
+async def create_consultation_request(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    condition_category: str,
+    consultation_type: str,
+    coordinator_id: uuid.UUID | None = None,
+    requirement_notes: str | None = None,
+    preferred_time_window: str | None = None,
+) -> Consultation:
+    """Create a patient-submitted consultation request (status='requested').
+
+    No doctor, slot, fee, or payment yet — a coordinator assigns those later.
+    """
+    consultation = Consultation(
+        patient_id=patient_id,
+        doctor_id=None,
+        coordinator_id=coordinator_id,
+        condition_category=condition_category,
+        consultation_type=consultation_type,
+        scheduled_start_at=None,
+        scheduled_end_at=None,
+        consultation_fee_paise=None,
+        requirement_notes=requirement_notes,
+        preferred_time_window=preferred_time_window,
+        status=ConsultationStatus.REQUESTED,
+    )
+    db.add(consultation)
+    await db.flush()
+    return consultation
+
+
 async def update_consultation(
     db: AsyncSession,
     *,

@@ -58,6 +58,24 @@ export const glass = {
   blur:  tokens.glass.blur,
 } as const;
 
+/** Neumorphism surface tokens — shadow-based in light, glow-based in dark. */
+export const neumorph = {
+  light: tokens.neumorph.light,
+  dark:  tokens.neumorph.dark,
+} as const;
+
+/** Skeuomorphism tokens — highlight/shadow edges for tactile buttons. */
+export const skeu = {
+  light: tokens.skeu.light,
+  dark:  tokens.skeu.dark,
+} as const;
+
+/** Slider tokens — track, thumb, groove colors per scheme. */
+export const slider = {
+  light: tokens.slider.light,
+  dark:  tokens.slider.dark,
+} as const;
+
 /** Soft pastel tint pairs for icon chips and quick actions. */
 export const tintSoft = tokens.tintSoft;
 export type TintName = keyof typeof tintSoft;

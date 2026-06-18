@@ -16,10 +16,8 @@ import { useThemePreference } from '../../lib/theme-context';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
-import { IconChip } from '../../components/ui/IconChip';
 import { SkeletonCards } from '../../components/ui/Skeleton';
 import {
   createReminderApi,
@@ -34,6 +32,7 @@ import {
   requestNotificationPermissions,
   scheduleReminderNotification,
 } from '../../lib/native/notifications';
+import { KyrosSlider } from '../../components/ui/KyrosSlider';
 import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
 import { ReminderList } from '../../components/reminders/ReminderList';
 import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
@@ -174,35 +173,27 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
             />
           </View>
 
-          {/* Schedule time */}
-          <Text style={[m.fieldLabel, { color: textSub }]}>Daily time (HH : MM)</Text>
-          <View style={m.timeRow}>
-            <View style={[m.inputWrap, m.timeInput, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-              <TextInput
-                style={[m.input, m.timeCenter, { color: textPri }]}
-                value={form.scheduleHour}
-                onChangeText={v => setForm(f => ({ ...f, scheduleHour: v }))}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="08"
-                placeholderTextColor={textSub}
-                accessibilityLabel="Hour"
-              />
-            </View>
-            <Text style={[m.timeSep, { color: textSub }]}>:</Text>
-            <View style={[m.inputWrap, m.timeInput, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-              <TextInput
-                style={[m.input, m.timeCenter, { color: textPri }]}
-                value={form.scheduleMinute}
-                onChangeText={v => setForm(f => ({ ...f, scheduleMinute: v }))}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="00"
-                placeholderTextColor={textSub}
-                accessibilityLabel="Minute"
-              />
-            </View>
-          </View>
+          {/* Schedule time — skeuomorphic sliders */}
+          <KyrosSlider
+            label="Hour"
+            min={0}
+            max={23}
+            step={1}
+            value={parseInt(form.scheduleHour, 10) || 0}
+            onValueChange={v => setForm(f => ({ ...f, scheduleHour: String(v).padStart(2, '0') }))}
+            formatValue={v => `${String(v).padStart(2, '0')}:${form.scheduleMinute}`}
+            accessibilityLabel="Schedule hour"
+          />
+          <KyrosSlider
+            label="Minute"
+            min={0}
+            max={59}
+            step={5}
+            value={parseInt(form.scheduleMinute, 10) || 0}
+            onValueChange={v => setForm(f => ({ ...f, scheduleMinute: String(v).padStart(2, '0') }))}
+            formatValue={v => `${form.scheduleHour}:${String(v).padStart(2, '0')}`}
+            accessibilityLabel="Schedule minute"
+          />
 
           {/* Interval (water only) */}
           {form.type === 'water' && (
@@ -338,66 +329,6 @@ const ad = StyleSheet.create({
   btnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
   dismiss: { fontFamily: fontFamily.body, fontSize: fontSize.caption, textAlign: 'center', paddingTop: spacing[2] },
 });
-
-// ── Reminder card ─────────────────────────────────────────────────────────────
-
-interface ReminderCardProps {
-  reminder: Reminder;
-  isDark: boolean;
-  onEdit: (r: Reminder) => void;
-  onDelete: (r: Reminder) => void;
-}
-
-function ReminderCard({ reminder, isDark, onEdit, onDelete }: ReminderCardProps) {
-  const pct    = Math.round(reminder.adherence_rate * 100);
-  const pctColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
-
-  const textPri = isDark ? colors.ivoryText : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim  : colors.coolGray;
-  const type    = TYPE_ICON[reminder.type] ?? TYPE_ICON.custom;
-
-  function confirmDelete() {
-    Alert.alert('Delete reminder', `Remove "${reminder.label}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => onDelete(reminder) },
-    ]);
-  }
-
-  return (
-    <HapticPressable
-      scaleTo={0.98}
-      onLongPress={() => onEdit(reminder)}
-      accessibilityLabel={`Reminder: ${reminder.label}`}
-    >
-      <GlassCard unpadded>
-        <View style={styles.card}>
-          <IconChip icon={type.icon} tint={type.tint} size={44} />
-          <View style={styles.reminderContent}>
-            <Text style={[styles.reminderLabel, { color: textPri }]}>{reminder.label}</Text>
-            <Text style={[styles.reminderSub, { color: textSub }]}>
-              {reminder.schedule_cron
-                ? `Daily at ${reminder.schedule_cron.split(' ')[1]}:${reminder.schedule_cron.split(' ')[0].padStart(2, '0')}`
-                : reminder.schedule_interval_minutes
-                ? `Every ${reminder.schedule_interval_minutes} min`
-                : 'No schedule'}
-            </Text>
-          </View>
-          <View style={[styles.adherenceBadge, { backgroundColor: pctColor + '18' }]}>
-            <Text style={[styles.adherencePct, { color: pctColor }]}>{pct}%</Text>
-          </View>
-          <View style={styles.actions}>
-            <Pressable onPress={() => onEdit(reminder)} style={styles.actionBtn} accessibilityLabel="Edit reminder" hitSlop={6}>
-              <Ionicons name="create-outline" size={18} color={textSub} />
-            </Pressable>
-            <Pressable onPress={confirmDelete} style={styles.actionBtn} accessibilityLabel="Delete reminder" hitSlop={6}>
-              <Ionicons name="trash-outline" size={18} color={colors.criticalRed} />
-            </Pressable>
-          </View>
-        </View>
-      </GlassCard>
-    </HapticPressable>
-  );
-}
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 

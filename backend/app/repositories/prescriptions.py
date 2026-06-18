@@ -54,25 +54,34 @@ async def create_draft(
     await db.flush()  # get rx.id
 
     for idx, item in enumerate(items):
-        from app.db.enums import DrugForm
-
-        db.add(
-            PrescriptionItem(
-                prescription_id=rx.id,
-                drug_generic_name=item["drug_generic_name"],
-                drug_form=DrugForm(item["drug_form"]),
-                dosage=item["dosage"],
-                frequency=item["frequency"],
-                duration_days=item.get("duration_days"),
-                instructions=item.get("instructions"),
-                refill_allowed=bool(item.get("refill_allowed", False)),
-                order_index=idx,
-                drug_schedule=item.get("drug_schedule"),
-            )
-        )
+        db.add(_build_item(item, prescription_id=rx.id, order_index=idx))
 
     await db.flush()
     return rx
+
+
+def _build_item(
+    item: dict[str, Any], *, prescription_id: uuid.UUID, order_index: int
+) -> PrescriptionItem:
+    """Construct a PrescriptionItem ORM row from a validated item dict."""
+    from app.db.enums import DrugForm, FoodRelation, FrequencyCode
+
+    food = item.get("food_relation")
+    return PrescriptionItem(
+        prescription_id=prescription_id,
+        drug_generic_name=item["drug_generic_name"],
+        drug_form=DrugForm(item["drug_form"]),
+        dosage=item["dosage"],
+        frequency=item.get("frequency"),
+        frequency_code=FrequencyCode(item.get("frequency_code") or "OTHER"),
+        timing_slots=item.get("timing_slots") or [],
+        food_relation=FoodRelation(food) if food else None,
+        duration_days=item.get("duration_days"),
+        instructions=item.get("instructions"),
+        refill_allowed=bool(item.get("refill_allowed", False)),
+        order_index=order_index,
+        drug_schedule=item.get("drug_schedule"),
+    )
 
 
 async def get_for_doctor(
@@ -193,28 +202,13 @@ async def update_draft(
     if items is not None:
         from sqlalchemy import delete
 
-        from app.db.enums import DrugForm
-
         await db.execute(
             delete(PrescriptionItem).where(
                 PrescriptionItem.prescription_id == prescription_id
             )
         )
         for idx, item in enumerate(items):
-            db.add(
-                PrescriptionItem(
-                    prescription_id=rx.id,
-                    drug_generic_name=item["drug_generic_name"],
-                    drug_form=DrugForm(item["drug_form"]),
-                    dosage=item["dosage"],
-                    frequency=item["frequency"],
-                    duration_days=item.get("duration_days"),
-                    instructions=item.get("instructions"),
-                    refill_allowed=bool(item.get("refill_allowed", False)),
-                    order_index=idx,
-                    drug_schedule=item.get("drug_schedule"),
-                )
-            )
+            db.add(_build_item(item, prescription_id=rx.id, order_index=idx))
 
     await db.flush()
     return rx

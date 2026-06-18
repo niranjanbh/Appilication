@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { NeumorphCard } from '../../components/ui/NeumorphCard';
+import { SkeuToggle } from '../../components/ui/SkeuToggle';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { IconChip } from '../../components/ui/IconChip';
@@ -122,7 +124,7 @@ export default function ProfileScreen() {
         {/* ── Care section ────────────────────────────────────────────────── */}
         <View style={styles.group}>
           <Text style={[styles.groupLabel, { color: textSub }]}>Care</Text>
-          <GlassCard unpadded>
+          <NeumorphCard unpadded>
             <View style={styles.groupCard}>
               <MenuItem
                 icon="medkit-outline"
@@ -152,28 +154,22 @@ export default function ProfileScreen() {
                 onPress={() => router.push('/(tabs)/consultations' as never)}
               />
             </View>
-          </GlassCard>
+          </NeumorphCard>
         </View>
 
         {/* ── Preferences section ─────────────────────────────────────────── */}
         <View style={styles.group}>
           <Text style={[styles.groupLabel, { color: textSub }]}>Preferences</Text>
-          <GlassCard unpadded>
+          <NeumorphCard unpadded>
             <View style={styles.groupCard}>
 
               {/* Dark theme toggle (persisted via ThemeProvider) */}
               <View style={styles.menuRow}>
                 <IconChip icon={isDark ? 'moon-outline' : 'sunny-outline'} tint="amber" size={36} />
                 <Text style={[styles.menuLabel, { color: textPri }]}>Dark theme</Text>
-                <Switch
+                <SkeuToggle
                   value={isDark}
                   onValueChange={handleThemeToggle}
-                  trackColor={{
-                    false: colors.borderLight,
-                    true:  colors.electricBlue + '80',
-                  }}
-                  thumbColor={isDark ? colors.electricBlue : colors.white}
-                  ios_backgroundColor={colors.borderLight}
                   accessibilityLabel="Toggle dark theme"
                 />
               </View>
@@ -198,13 +194,13 @@ export default function ProfileScreen() {
                 onPress={() => router.push('/privacy-security')}
               />
             </View>
-          </GlassCard>
+          </NeumorphCard>
         </View>
 
         {/* ── Account section ─────────────────────────────────────────────── */}
         <View style={styles.group}>
           <Text style={[styles.groupLabel, { color: textSub }]}>Account</Text>
-          <GlassCard unpadded>
+          <NeumorphCard unpadded>
             <View style={styles.groupCard}>
               <MenuItem
                 icon="download-outline"
@@ -225,7 +221,7 @@ export default function ProfileScreen() {
                 accessibilityLabel="Delete my account"
               />
             </View>
-          </GlassCard>
+          </NeumorphCard>
         </View>
 
         {/* ── Sign out ────────────────────────────────────────────────────── */}

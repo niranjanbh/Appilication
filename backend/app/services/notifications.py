@@ -211,6 +211,65 @@ async def notify_appointment_confirmed(
         )
 
 
+# ── Doctor assigned to a request ──────────────────────────────────────────────
+
+
+async def notify_doctor_assigned(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Tell the patient a coordinator assigned a doctor + time to their request.
+
+    The patient must now pay to confirm. Push + inbox only — no clinical content,
+    no doctor identity in external channels.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                Consultation.scheduled_start_at,
+                User.name,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning("notify_doctor_assigned.consultation_not_found", consultation_id=str(consultation_id))
+        return
+
+    prefs = row.notification_preferences or {}
+    time_str = _ist_str(row.scheduled_start_at)
+    title = "A specialist has been assigned"
+    body = f"Your consultation is scheduled for {time_str}. Pay now to confirm your appointment."
+    data = {"screen": "consultation", "id": str(consultation_id)}
+
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="doctor_assigned",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
+
+
 # ── Staff alerts (ops inbox) ──────────────────────────────────────────────────
 
 

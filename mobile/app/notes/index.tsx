@@ -9,13 +9,13 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { GlassCard } from '../../components/ui/GlassCard';
+import { NeumorphCard } from '../../components/ui/NeumorphCard';
+import { NeumorphInput } from '../../components/ui/NeumorphInput';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import {
@@ -74,9 +74,6 @@ function NoteEditor({ visible, initialBody = '', onSave, onDismiss, isSaving }: 
     onSave(trimmed);
   };
 
-  const inputBg = t.isDark ? withAlpha(colors.white, 0.06) : withAlpha(colors.stone, 0.10);
-  const inputBorder = t.isDark ? withAlpha(colors.white, 0.10) : withAlpha(colors.stone, 0.25);
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onDismiss}>
       <View style={[styles.modalRoot, { backgroundColor: t.background }]}>
@@ -95,12 +92,11 @@ function NoteEditor({ visible, initialBody = '', onSave, onDismiss, isSaving }: 
           </HapticPressable>
         </View>
 
-        <TextInput
-          style={[styles.textInput, { color: t.text, backgroundColor: inputBg, borderColor: inputBorder }]}
+        <NeumorphInput
+          style={styles.textInput}
           value={body}
           onChangeText={setBody}
           placeholder="Write your question or note for the doctor…"
-          placeholderTextColor={t.textSub}
           multiline
           maxLength={MAX_BODY}
           autoFocus
@@ -140,7 +136,7 @@ function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
   };
 
   return (
-    <GlassCard>
+    <NeumorphCard>
       <View style={styles.noteRow}>
         <Text style={[styles.noteBody, { color: t.text }]}>{note.body}</Text>
         <View style={styles.noteActions}>
@@ -153,7 +149,7 @@ function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
         </View>
       </View>
       <Text style={[styles.noteTime, { color: t.textSub }]}>{formatRelative(note.created_at)}</Text>
-    </GlassCard>
+    </NeumorphCard>
   );
 }
 

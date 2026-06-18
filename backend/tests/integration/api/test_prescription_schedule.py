@@ -21,8 +21,8 @@ from app.db.enums import AvailabilityStatus, ConsultationStatus, DoctorStatus
 from app.models.clinic import Consultation, Patient
 from app.models.doctor import Availability, Doctor
 from app.models.identity import User as UserModel
+from app.services.prescription_service import compose_frequency_display
 from tests.conftest import create_doctor_user, create_patient_user, make_auth_headers
-
 
 # ── Fixtures helpers ─────────────────────────────────────────────────────────
 
@@ -117,6 +117,27 @@ def _rx_item(
         "duration_days": 30,
         "refill_allowed": refill,
     }
+
+
+def _structured_item(
+    *,
+    name: str = "levothyroxine",
+    frequency_code: str = "BD",
+    timing_slots: list[str] | None = None,
+    food_relation: str | None = "after_food",
+) -> dict:
+    """A prescription line using the structured timing fields (no free-text frequency)."""
+    item: dict = {
+        "drug_generic_name": name,
+        "drug_form": "tablet",
+        "dosage": "50mcg",
+        "frequency_code": frequency_code,
+        "timing_slots": timing_slots if timing_slots is not None else ["morning", "night"],
+        "duration_days": 30,
+    }
+    if food_relation is not None:
+        item["food_relation"] = food_relation
+    return item
 
 
 # ── Drug catalogue search ────────────────────────────────────────────────────
@@ -359,3 +380,163 @@ async def test_refill_allowed_after_prior_completed_consultation(
     assert resp.status_code == 201, resp.text
     item = resp.json()["items"][0]
     assert item["refill_allowed"] is True
+
+
+# ── Structured dosing timing ─────────────────────────────────────────────────
+
+
+def test_compose_frequency_display_combines_fields() -> None:
+    """Pure-function: code + slots + food compose into a readable string,
+    with slots emitted in canonical time-of-day order."""
+    assert (
+        compose_frequency_display(
+            frequency_code="BD",
+            timing_slots=["night", "morning"],  # caller order ignored
+            food_relation="after_food",
+        )
+        == "Twice daily · Morning, Night · after food"
+    )
+    # Weekly with nothing else
+    assert (
+        compose_frequency_display(frequency_code="WEEKLY", timing_slots=[], food_relation=None)
+        == "Once weekly"
+    )
+    # OTHER with no slots falls back to the free-text value; ANYTIME adds nothing.
+    assert (
+        compose_frequency_display(
+            frequency_code="OTHER", timing_slots=[], food_relation="anytime", fallback="SOS PRN"
+        )
+        == "SOS PRN"
+    )
+
+
+async def test_structured_timing_composes_frequency_on_create(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user = await create_doctor_user(db_session)
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(patient_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    consultation = await _create_consultation(db_session, patient=patient, doctor=doctor)
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/prescription",
+        json={"items": [_structured_item()]},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 201, resp.text
+    item = resp.json()["items"][0]
+    assert item["frequency_code"] == "BD"
+    assert item["timing_slots"] == ["morning", "night"]
+    assert item["food_relation"] == "after_food"
+    # Server composes the human-readable display string.
+    assert item["frequency"] == "Twice daily · Morning, Night · after food"
+
+
+async def test_invalid_frequency_code_rejected(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user = await create_doctor_user(db_session)
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(patient_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    consultation = await _create_consultation(db_session, patient=patient, doctor=doctor)
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/prescription",
+        json={"items": [_structured_item(frequency_code="EVERY_FORTNIGHT")]},
+        headers=make_auth_headers(doctor_user),
+    )
+    # Pydantic field validation → 422 before the service runs.
+    assert resp.status_code == 422, resp.text
+
+
+async def test_invalid_timing_slot_rejected(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user = await create_doctor_user(db_session)
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(patient_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    consultation = await _create_consultation(db_session, patient=patient, doctor=doctor)
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/prescription",
+        json={"items": [_structured_item(timing_slots=["dawn"])]},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_empty_frequency_rejected(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """OTHER + no slots + no free text yields no displayable frequency → 422."""
+    doctor_user = await create_doctor_user(db_session)
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(patient_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    consultation = await _create_consultation(db_session, patient=patient, doctor=doctor)
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/prescription",
+        json={
+            "items": [
+                {
+                    "drug_generic_name": "levothyroxine",
+                    "drug_form": "tablet",
+                    "dosage": "50mcg",
+                    "frequency_code": "OTHER",
+                    "timing_slots": [],
+                }
+            ]
+        },
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_structured_timing_survives_draft_edit(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor_user = await create_doctor_user(db_session)
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(patient_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    consultation = await _create_consultation(db_session, patient=patient, doctor=doctor)
+
+    create_resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/prescription",
+        json={"items": [_structured_item()]},
+        headers=make_auth_headers(doctor_user),
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    rx_id = create_resp.json()["id"]
+
+    # Edit to once-daily, morning, before food.
+    patch_resp = await client.patch(
+        f"/v1/doctor/prescriptions/{rx_id}",
+        json={
+            "items": [
+                _structured_item(
+                    frequency_code="OD", timing_slots=["morning"], food_relation="before_food"
+                )
+            ]
+        },
+        headers=make_auth_headers(doctor_user),
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+    item = patch_resp.json()["items"][0]
+    assert item["frequency_code"] == "OD"
+    assert item["timing_slots"] == ["morning"]
+    assert item["frequency"] == "Once daily · Morning · before food"

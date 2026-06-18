@@ -15,19 +15,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest import create_doctor_user, create_super_admin_user
 
 
-def _admin_session_cookie(user_id: uuid.UUID) -> str:
-    """Create an admin-portal session in Redis and return the cookie value."""
+def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
+    """Create an admin-portal session in Redis and return (session_id, csrf_token)."""
     from fastapi.responses import Response as FResponse
 
     from app.adminui.deps import create_admin_session
 
     dummy_response = FResponse()
     create_admin_session(dummy_response, user_id)
-    session_cookie = dummy_response.headers.get("set-cookie", "")
-    for part in session_cookie.split(";"):
-        if "kyros_admin_session=" in part:
-            return part.split("=", 1)[1].strip()
-    return ""
+    session_id = ""
+    csrf_token = ""
+    for header_val in dummy_response.raw_headers:
+        decoded = header_val[1].decode() if isinstance(header_val[1], bytes) else header_val[1]
+        if "kyros_admin_session=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_session=" in part:
+                    session_id = part.split("=", 1)[1].strip()
+        if "kyros_admin_csrf=" in decoded:
+            for part in decoded.split(";"):
+                if "kyros_admin_csrf=" in part:
+                    csrf_token = part.split("=", 1)[1].strip()
+    return session_id, csrf_token
 
 
 async def test_revoke_sessions_kills_jwt_and_portal_sessions(
@@ -52,8 +60,8 @@ async def test_revoke_sessions_kills_jwt_and_portal_sessions(
     await users_repo.update_phone_verified(db_session, doctor.id)
 
     try:
-        admin_cookie = _admin_session_cookie(super_admin.id)
-        doctor_portal_session_id = _admin_session_cookie(doctor.id)
+        admin_cookie, admin_csrf = _admin_session_cookie(super_admin.id)
+        doctor_portal_session_id, _ = _admin_session_cookie(doctor.id)
     except Exception:
         return  # Redis unavailable in test — skip session creation path
     if not admin_cookie or not doctor_portal_session_id:
@@ -74,7 +82,8 @@ async def test_revoke_sessions_kills_jwt_and_portal_sessions(
 
     resp = await client.post(
         f"/admin/users/{doctor.id}/revoke-sessions",
-        cookies={"kyros_admin_session": admin_cookie},
+        data={"_csrf": admin_csrf},
+        cookies={"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 302, resp.text
@@ -116,7 +125,7 @@ async def test_revoke_sessions_on_patient_returns_not_a_staff_role(
     assert isinstance(patient, UserModel)
 
     try:
-        admin_cookie = _admin_session_cookie(super_admin.id)
+        admin_cookie, admin_csrf = _admin_session_cookie(super_admin.id)
     except Exception:
         return
     if not admin_cookie:
@@ -124,7 +133,8 @@ async def test_revoke_sessions_on_patient_returns_not_a_staff_role(
 
     resp = await client.post(
         f"/admin/users/{patient.id}/revoke-sessions",
-        cookies={"kyros_admin_session": admin_cookie},
+        data={"_csrf": admin_csrf},
+        cookies={"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf},
         follow_redirects=False,
     )
     assert resp.status_code == 302

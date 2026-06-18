@@ -7,10 +7,21 @@ interface PrescriptionItem {
   drug_generic_name: string;
   drug_form: string;
   dosage: string;
-  frequency: string;
+  // Structured dosing. `frequency` is an optional free-text fallback used only
+  // when frequency_code is OTHER; the display string is composed server-side.
+  frequency_code: string;
+  timing_slots: string[];
+  food_relation: string | null;
+  frequency: string | null;
   duration_days: number | null;
   instructions: string | null;
   refill_allowed: boolean;
+}
+
+interface PrescriptionItemRead extends PrescriptionItem {
+  id: string;
+  order_index: number;
+  drug_schedule: string | null;
 }
 
 interface PrescriptionRead {
@@ -22,20 +33,108 @@ interface PrescriptionRead {
   version: number;
   diagnosis_note: string | null;
   general_instructions: string | null;
-  items: (PrescriptionItem & { id: string; order_index: number })[];
+  items: PrescriptionItemRead[];
+}
+
+interface DrugSearchResult {
+  drug_generic_name: string;
+  drug_schedule: string;
+  is_prohibited: boolean;
+  requires_vertical: string | null;
 }
 
 const DRUG_FORMS = ['tablet', 'capsule', 'syrup', 'injection', 'topical', 'other'] as const;
 
-const EMPTY_ITEM: PrescriptionItem = {
-  drug_generic_name: '',
-  drug_form: 'tablet',
-  dosage: '',
-  frequency: '',
-  duration_days: null,
-  instructions: null,
-  refill_allowed: false,
+const FREQUENCY_OPTIONS: { code: string; label: string }[] = [
+  { code: 'OD', label: 'Once daily (OD)' },
+  { code: 'BD', label: 'Twice daily (BD)' },
+  { code: 'TDS', label: 'Thrice daily (TDS)' },
+  { code: 'QID', label: 'Four times daily (QID)' },
+  { code: 'HS', label: 'At bedtime (HS)' },
+  { code: 'SOS', label: 'As needed (SOS)' },
+  { code: 'ALTERNATE_DAYS', label: 'Alternate days' },
+  { code: 'WEEKLY', label: 'Once weekly' },
+  { code: 'BIWEEKLY', label: 'Every two weeks' },
+  { code: 'MONTHLY', label: 'Once monthly' },
+  { code: 'OTHER', label: 'Other / custom' },
+];
+
+const TIMING_SLOTS = ['morning', 'afternoon', 'evening', 'night'] as const;
+
+const FOOD_RELATIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Food relation…' },
+  { value: 'before_food', label: 'Before food' },
+  { value: 'after_food', label: 'After food' },
+  { value: 'with_food', label: 'With food' },
+  { value: 'empty_stomach', label: 'Empty stomach' },
+  { value: 'anytime', label: 'Anytime' },
+];
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  OD: 'Once daily', BD: 'Twice daily', TDS: 'Thrice daily', QID: 'Four times daily',
+  HS: 'At bedtime', SOS: 'As needed', ALTERNATE_DAYS: 'Every alternate day',
+  WEEKLY: 'Once weekly', BIWEEKLY: 'Once every two weeks', MONTHLY: 'Once monthly', OTHER: '',
 };
+
+const FOOD_LABELS: Record<string, string> = {
+  before_food: 'before food', after_food: 'after food', with_food: 'with food',
+  empty_stomach: 'on an empty stomach', anytime: '',
+};
+
+function emptyItem(): PrescriptionItem {
+  return {
+    drug_generic_name: '',
+    drug_form: 'tablet',
+    dosage: '',
+    frequency_code: 'OD',
+    timing_slots: [],
+    food_relation: null,
+    frequency: null,
+    duration_days: null,
+    instructions: null,
+    refill_allowed: false,
+  };
+}
+
+function capitalize(s: string): string {
+  return s.length ? s[0]!.toUpperCase() + s.slice(1) : s;
+}
+
+/** Mirror of the backend `compose_frequency_display`, for previewing unsaved lines. */
+function formatTimingLocal(item: PrescriptionItem): string {
+  const parts: string[] = [];
+  const freqLabel = FREQUENCY_LABELS[item.frequency_code] ?? '';
+  if (freqLabel) parts.push(freqLabel);
+  else if (item.frequency?.trim()) parts.push(item.frequency.trim());
+  if (item.timing_slots.length) {
+    const ordered = TIMING_SLOTS.filter(s => item.timing_slots.includes(s));
+    parts.push(ordered.map(capitalize).join(', '));
+  }
+  const food = item.food_relation ? (FOOD_LABELS[item.food_relation] ?? '') : '';
+  if (food) parts.push(food);
+  return parts.join(' · ');
+}
+
+function hasFrequency(item: PrescriptionItem): boolean {
+  return (
+    item.frequency_code !== 'OTHER' ||
+    item.timing_slots.length > 0 ||
+    !!(item.frequency && item.frequency.trim())
+  );
+}
+
+function isItemComplete(item: PrescriptionItem): boolean {
+  return !!(item.drug_generic_name.trim() && item.dosage.trim() && hasFrequency(item));
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 function formatIST(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
@@ -45,8 +144,65 @@ function formatIST(iso: string) {
   });
 }
 
-function isItemComplete(item: PrescriptionItem): boolean {
-  return !!(item.drug_generic_name.trim() && item.dosage.trim() && item.frequency.trim());
+/** Drug-name field with catalogue autocomplete backed by GET /v1/doctor/drugs.
+ *  The catalogue already excludes prohibited and Schedule X/H1 drugs server-side. */
+function DrugNameInput({
+  value,
+  onChange,
+  onSelect,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSelect: (drug: DrugSearchResult) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const debounced = useDebouncedValue(value, 250);
+
+  const { data: results } = useQuery({
+    queryKey: ['drug-search', debounced],
+    queryFn: () =>
+      apiFetch<DrugSearchResult[]>(`/v1/doctor/drugs?q=${encodeURIComponent(debounced.trim())}`),
+    enabled: focused && debounced.trim().length >= 1,
+    staleTime: 60_000,
+  });
+
+  const showDropdown = focused && (results?.length ?? 0) > 0;
+
+  return (
+    <div className="relative flex-1">
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 120)}
+        placeholder="Search medication…"
+        aria-autocomplete="list"
+        className="w-full font-body text-body text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
+      />
+      {showDropdown && (
+        <ul className="absolute z-10 mt-1 w-full bg-white border border-stone/30 rounded shadow-lg max-h-56 overflow-auto">
+          {results!.map(d => (
+            <li key={d.drug_generic_name}>
+              <button
+                type="button"
+                // Prevent the input's onBlur firing before the click registers.
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { onSelect(d); setFocused(false); }}
+                className="w-full text-left px-3 py-1.5 hover:bg-sage/10 flex items-center justify-between gap-2"
+              >
+                <span className="font-body text-caption text-ink capitalize">{d.drug_generic_name}</span>
+                {d.drug_schedule && d.drug_schedule !== 'NONE' && (
+                  <span className="font-body text-caption font-semibold text-forest bg-sage/20 rounded px-1.5 py-0.5">
+                    Schedule {d.drug_schedule}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function SignedSummary({ rx }: { rx: PrescriptionRead }) {
@@ -64,7 +220,8 @@ function SignedSummary({ rx }: { rx: PrescriptionRead }) {
         {rx.items.map(item => (
           <li key={item.id} className="font-body text-caption text-ink py-0.5">
             <span className="font-semibold">{item.drug_generic_name}</span>
-            {' · '}{item.drug_form} · {item.dosage} · {item.frequency}
+            {' · '}{item.drug_form} · {item.dosage}
+            {item.frequency ? ` · ${item.frequency}` : ''}
             {item.duration_days ? ` · ${item.duration_days} days` : ''}
           </li>
         ))}
@@ -102,7 +259,7 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
 
   const [diagnosisNote, setDiagnosisNote] = useState('');
   const [generalInstructions, setGeneralInstructions] = useState('');
-  const [items, setItems] = useState<PrescriptionItem[]>([{ ...EMPTY_ITEM }]);
+  const [items, setItems] = useState<PrescriptionItem[]>([emptyItem()]);
   const [reviewing, setReviewing] = useState(false);
   const [hydratedDraftId, setHydratedDraftId] = useState<string | null>(null);
 
@@ -114,8 +271,11 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
       setGeneralInstructions(draft.general_instructions ?? '');
       setItems(
         draft.items.length > 0
-          ? draft.items.map(({ id: _id, order_index: _oi, ...item }) => ({ ...item }))
-          : [{ ...EMPTY_ITEM }],
+          ? draft.items.map(({ id: _id, order_index: _oi, drug_schedule: _ds, ...item }) => ({
+              ...item,
+              timing_slots: [...item.timing_slots],
+            }))
+          : [emptyItem()],
       );
       setHydratedDraftId(draft.id);
     }
@@ -128,11 +288,16 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
     diagnosis_note: diagnosisNote.trim() || null,
     general_instructions: generalInstructions.trim() || null,
     items: completeItems.map(item => ({
-      ...item,
       drug_generic_name: item.drug_generic_name.trim(),
+      drug_form: item.drug_form,
       dosage: item.dosage.trim(),
-      frequency: item.frequency.trim(),
+      frequency_code: item.frequency_code,
+      timing_slots: item.timing_slots,
+      food_relation: item.food_relation,
+      frequency: item.frequency?.trim() || null,
+      duration_days: item.duration_days,
       instructions: item.instructions?.trim() || null,
+      refill_allowed: item.refill_allowed,
     })),
   });
 
@@ -163,13 +328,27 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
       setHydratedDraftId(null);
       setDiagnosisNote('');
       setGeneralInstructions('');
-      setItems([{ ...EMPTY_ITEM }]);
+      setItems([emptyItem()]);
       qc.invalidateQueries({ queryKey: ['prescriptions', consultationId] });
     },
   });
 
   const updateItem = (index: number, patch: Partial<PrescriptionItem>) =>
     setItems(prev => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+
+  const toggleSlot = (index: number, slot: string) =>
+    setItems(prev =>
+      prev.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              timing_slots: item.timing_slots.includes(slot)
+                ? item.timing_slots.filter(s => s !== slot)
+                : [...item.timing_slots, slot],
+            }
+          : item,
+      ),
+    );
 
   if (isLoading) {
     return <p className="font-body text-caption text-stone">Loading prescription…</p>;
@@ -197,7 +376,7 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
             <div key={i} className="border border-stone/20 rounded px-3 py-2 mb-1.5">
               <p className="font-body text-body font-semibold text-ink">{item.drug_generic_name}</p>
               <p className="font-body text-caption text-stone">
-                {item.drug_form} · {item.dosage} · {item.frequency}
+                {item.drug_form} · {item.dosage} · {formatTimingLocal(item)}
                 {item.duration_days ? ` · ${item.duration_days} days` : ' · ongoing'}
               </p>
               {item.instructions && (
@@ -263,15 +442,15 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
         {items.map((item, i) => (
           <div key={i} className="border border-stone/20 rounded p-3 mb-2">
             <div className="flex gap-2 mb-2">
-              <input
+              <DrugNameInput
                 value={item.drug_generic_name}
-                onChange={e => updateItem(i, { drug_generic_name: e.target.value })}
-                placeholder="Generic drug name"
-                className="flex-1 font-body text-body text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
+                onChange={v => updateItem(i, { drug_generic_name: v })}
+                onSelect={d => updateItem(i, { drug_generic_name: d.drug_generic_name })}
               />
               <select
                 value={item.drug_form}
                 onChange={e => updateItem(i, { drug_form: e.target.value })}
+                aria-label="Drug form"
                 className="font-body text-caption text-ink border border-stone/30 rounded px-2 py-1.5 focus:outline-none"
               >
                 {DRUG_FORMS.map(form => (
@@ -288,6 +467,7 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
                 </button>
               )}
             </div>
+
             <div className="flex gap-2">
               <input
                 value={item.dosage}
@@ -295,32 +475,79 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
                 placeholder="Dose (e.g. 50mcg)"
                 className="flex-1 font-body text-caption text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
               />
-              <input
-                value={item.frequency}
-                onChange={e => updateItem(i, { frequency: e.target.value })}
-                placeholder="Frequency (e.g. once daily)"
-                className="flex-1 font-body text-caption text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
-              />
+              <select
+                value={item.frequency_code}
+                onChange={e => updateItem(i, { frequency_code: e.target.value })}
+                aria-label="Frequency"
+                className="flex-1 font-body text-caption text-ink border border-stone/30 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
+              >
+                {FREQUENCY_OPTIONS.map(f => (
+                  <option key={f.code} value={f.code}>{f.label}</option>
+                ))}
+              </select>
               <input
                 type="number"
                 min={1}
                 value={item.duration_days ?? ''}
                 onChange={e => updateItem(i, { duration_days: e.target.value ? Number(e.target.value) : null })}
                 placeholder="Days"
+                aria-label="Duration in days"
                 className="w-20 font-body text-caption text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
               />
             </div>
+
+            {item.frequency_code === 'OTHER' && (
+              <input
+                value={item.frequency ?? ''}
+                onChange={e => updateItem(i, { frequency: e.target.value || null })}
+                placeholder="Custom frequency (e.g. every 6 hours)"
+                className="w-full mt-2 font-body text-caption text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
+              />
+            )}
+
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="font-body text-caption text-stone mr-1">When:</span>
+              {TIMING_SLOTS.map(slot => {
+                const active = item.timing_slots.includes(slot);
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => toggleSlot(i, slot)}
+                    aria-pressed={active}
+                    className={`font-body text-caption rounded-full px-3 py-1 border capitalize transition-colors ${
+                      active
+                        ? 'bg-forest text-ivory border-forest'
+                        : 'text-stone border-stone/30 hover:border-forest/50'
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                );
+              })}
+              <select
+                value={item.food_relation ?? ''}
+                onChange={e => updateItem(i, { food_relation: e.target.value || null })}
+                aria-label="Food relation"
+                className="ml-auto font-body text-caption text-ink border border-stone/30 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-forest/50"
+              >
+                {FOOD_RELATIONS.map(f => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+
             <input
               value={item.instructions ?? ''}
               onChange={e => updateItem(i, { instructions: e.target.value || null })}
-              placeholder="Instructions (e.g. empty stomach)"
+              placeholder="Instructions (e.g. recheck TSH in 6 weeks)"
               className="w-full mt-2 font-body text-caption text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
             />
           </div>
         ))}
 
         <button
-          onClick={() => setItems(prev => [...prev, { ...EMPTY_ITEM }])}
+          onClick={() => setItems(prev => [...prev, emptyItem()])}
           className="inline-flex items-center gap-1.5 font-body text-caption font-semibold text-forest hover:underline mb-3"
         >
           <Plus size={12} /> Add medication
@@ -362,7 +589,7 @@ export function PrescriptionPanel({ consultationId }: PrescriptionPanelProps) {
         )}
         {!canSave && (
           <p className="font-body text-caption text-stone mt-2">
-            At least one medication with name, dose, and frequency is required.
+            At least one medication with name, dose, and a frequency is required.
           </p>
         )}
       </div>

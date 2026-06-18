@@ -173,6 +173,9 @@ class CoordinatorStatus(enum.StrEnum):
 
 
 class ConsultationStatus(enum.StrEnum):
+    # Patient-submitted request awaiting coordinator doctor+slot assignment.
+    # No doctor, slot, or fee is set yet; no payment exists.
+    REQUESTED = "requested"
     SCHEDULED = "scheduled"
     CONFIRMED = "confirmed"
     IN_PROGRESS = "in_progress"
@@ -247,6 +250,41 @@ class DrugForm(enum.StrEnum):
     INJECTION = "injection"
     TOPICAL = "topical"
     OTHER = "other"
+
+
+class FrequencyCode(enum.StrEnum):
+    """Structured dosing frequency for a prescription line."""
+
+    OD = "OD"  # once daily
+    BD = "BD"  # twice daily
+    TDS = "TDS"  # thrice daily
+    QID = "QID"  # four times daily
+    HS = "HS"  # at bedtime
+    SOS = "SOS"  # as needed
+    ALTERNATE_DAYS = "ALTERNATE_DAYS"
+    WEEKLY = "WEEKLY"
+    BIWEEKLY = "BIWEEKLY"
+    MONTHLY = "MONTHLY"
+    OTHER = "OTHER"
+
+
+class TimingSlot(enum.StrEnum):
+    """Time-of-day a dose is taken. Stored as a JSONB list of these values."""
+
+    MORNING = "morning"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+    NIGHT = "night"
+
+
+class FoodRelation(enum.StrEnum):
+    """Dose relation to meals."""
+
+    BEFORE_FOOD = "before_food"
+    AFTER_FOOD = "after_food"
+    WITH_FOOD = "with_food"
+    EMPTY_STOMACH = "empty_stomach"
+    ANYTIME = "anytime"
 
 
 # ── Education ──────────────────────────────────────────────────────────────────

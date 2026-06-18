@@ -36,7 +36,8 @@ class PrescriptionItemRead(BaseModel):
     drug_generic_name: str
     drug_form: str
     dosage: str
-    frequency: str
+    # Composed display string (frequency code + time-of-day + food relation).
+    frequency: str | None
     duration_days: int | None
     instructions: str | None
     refill_allowed: bool
