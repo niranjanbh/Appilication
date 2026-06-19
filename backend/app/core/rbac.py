@@ -46,6 +46,9 @@ async def get_current_user(
     # can be attributed to an actor even though they raise before any handler runs.
     request.state.actor_user_id = user.id
     request.state.actor_role = ActorRole(user.role.value)
+    # Expose the caller's session so handlers can flag the current device
+    # (e.g. session management) without re-decoding the token.
+    request.state.session_id = claims.session_id
     # Validate against the user's *current* role, not just the claim — a role change
     # (e.g. patient promoted to staff) invalidates outstanding tokens for the old
     # audience (staff-rbac-spec §1).

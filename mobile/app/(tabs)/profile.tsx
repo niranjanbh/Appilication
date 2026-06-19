@@ -193,6 +193,15 @@ export default function ProfileScreen() {
                 hintColor={textSub}
                 onPress={() => router.push('/privacy-security')}
               />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="phone-portrait-outline"
+                tint="violet"
+                label="Devices & sessions"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/sessions')}
+              />
             </View>
           </NeumorphCard>
         </View>

@@ -67,6 +67,71 @@ async def revoke_all_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
     return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
 
+async def list_active_sessions_for_user(
+    db: AsyncSession, *, user_id: uuid.UUID
+) -> list[dict[str, object]]:
+    """Return one entry per active session (live, unexpired token family).
+
+    Refresh tokens rotate within a ``session_id`` family, so this collapses the
+    family to a single device row: earliest token = session start, latest token =
+    last activity + current device metadata.
+    """
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .order_by(RefreshToken.session_id, RefreshToken.created_at)
+    )
+    sessions: dict[uuid.UUID, dict[str, object]] = {}
+    for t in result.scalars().all():
+        existing = sessions.get(t.session_id)
+        if existing is None:
+            sessions[t.session_id] = {
+                "session_id": t.session_id,
+                "ip_address": str(t.ip_address) if t.ip_address is not None else None,
+                "user_agent": t.user_agent,
+                "created_at": t.created_at,
+                "last_used_at": t.created_at,
+                "expires_at": t.expires_at,
+            }
+        else:
+            # Tokens are ordered by created_at asc, so each later row is more recent.
+            existing["last_used_at"] = t.created_at
+            existing["expires_at"] = t.expires_at
+            if t.ip_address is not None:
+                existing["ip_address"] = str(t.ip_address)
+            if t.user_agent is not None:
+                existing["user_agent"] = t.user_agent
+    return sorted(
+        sessions.values(),
+        key=lambda s: s["last_used_at"],  # type: ignore[arg-type, return-value]
+        reverse=True,
+    )
+
+
+async def session_belongs_to_user(
+    db: AsyncSession, *, session_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    """True if any token in the session family is owned by the user.
+
+    Checks ownership regardless of revoked/expired state so revoke is idempotent
+    and cross-user probes get the same answer as unknown sessions (404).
+    """
+    result = await db.execute(
+        select(RefreshToken.id)
+        .where(
+            RefreshToken.session_id == session_id,
+            RefreshToken.user_id == user_id,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def revoke_session_family(db: AsyncSession, session_id: uuid.UUID) -> int:
     """Revoke all tokens in a session family. Returns number of rows updated."""
     result = await db.execute(

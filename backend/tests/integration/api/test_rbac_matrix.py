@@ -127,6 +127,48 @@ async def test_list_consents_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+# ── /v1/users/me/sessions — patient device-session management ─────────────────
+# Role matrix: patient=200, no-auth=401, doctor/coordinator=403.
+
+
+async def test_list_sessions_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/users/me/sessions")
+    assert resp.status_code == 401
+
+
+async def test_list_sessions_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/users/me/sessions", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
+async def test_revoke_session_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.delete(f"/v1/users/me/sessions/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+async def test_revoke_session_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.delete(
+        f"/v1/users/me/sessions/{uuid.uuid4()}", headers=make_auth_headers(doctor)
+    )
+    assert resp.status_code == 403
+
+
+async def test_revoke_session_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.delete(
+        f"/v1/users/me/sessions/{uuid.uuid4()}", headers=make_auth_headers(coord)
+    )
+    assert resp.status_code == 403
+
+
 # ── /v1/users/me/push-token — patient only ───────────────────────────────────
 
 

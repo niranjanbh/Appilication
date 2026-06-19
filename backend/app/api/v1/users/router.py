@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
@@ -10,11 +12,15 @@ from app.api.v1.users.schemas import (
     ConsentRequest,
     DataExportResponse,
     ErasureResponse,
+    SessionListResponse,
+    SessionRead,
+    SessionRevokeResponse,
     UserMeRead,
 )
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import get_patient_user
 from app.db.enums import ActorRole
+from app.repositories import auth as auth_repo
 from app.services import consent as consent_service
 
 
@@ -208,3 +214,80 @@ async def request_erasure(
         ),
         request_id=dsr.id,
     )
+
+
+def _audit_ctx(request: Request, user: object) -> AuditContext:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    return AuditContext(
+        actor_user_id=user.id,
+        actor_role=ActorRole(user.role.value),
+        ip_address=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", ""),
+        request_id=getattr(request.state, "request_id", ""),
+    )
+
+
+@router.get("/me/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> SessionListResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    current_session = getattr(request.state, "session_id", None)
+    rows = await auth_repo.list_active_sessions_for_user(db, user_id=user.id)
+    await write_audit(
+        db, ctx, action="list_sessions", resource_type="session", allowed=True
+    )
+    return SessionListResponse(
+        items=[
+            SessionRead(
+                session_id=r["session_id"],  # type: ignore[arg-type]
+                ip_address=r["ip_address"],  # type: ignore[arg-type]
+                user_agent=r["user_agent"],  # type: ignore[arg-type]
+                created_at=r["created_at"],  # type: ignore[arg-type]
+                last_used_at=r["last_used_at"],  # type: ignore[arg-type]
+                expires_at=r["expires_at"],  # type: ignore[arg-type]
+                is_current=str(r["session_id"]) == str(current_session),
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.delete("/me/sessions/{session_id}", response_model=SessionRevokeResponse)
+async def revoke_session(
+    session_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> SessionRevokeResponse:
+    """Revoke (sign out) a session family. Cross-user/unknown sessions return 404."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    owns = await auth_repo.session_belongs_to_user(
+        db, session_id=session_id, user_id=user.id
+    )
+    if not owns:
+        await write_audit(
+            db, ctx, action="revoke_session", resource_type="session",
+            resource_id=session_id, allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    revoked = await auth_repo.revoke_session_family(db, session_id)
+    await write_audit(
+        db, ctx, action="revoke_session", resource_type="session",
+        resource_id=session_id, allowed=True,
+    )
+    return SessionRevokeResponse(revoked=revoked)

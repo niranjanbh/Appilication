@@ -66,3 +66,21 @@ class DataExportResponse(BaseModel):
 class ErasureResponse(BaseModel):
     message: str
     request_id: uuid.UUID
+
+
+class SessionRead(BaseModel):
+    session_id: uuid.UUID
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    last_used_at: datetime
+    expires_at: datetime
+    is_current: bool
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionRead]
+
+
+class SessionRevokeResponse(BaseModel):
+    revoked: int
