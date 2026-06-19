@@ -4296,3 +4296,114 @@ async def test_patch_dsr_status_read_only_admin_returns_403(
         headers=make_auth_headers(admin),
     )
     assert resp.status_code == 403
+
+
+# ── /v1/doctor/consultations/{id}/care-plan (POST) ──────────────────────────
+
+
+async def test_create_care_plan_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/care-plan",
+        json={"title": "X", "items": [{"category": "medication", "title": "Y"}]},
+    )
+    assert resp.status_code == 401
+
+
+async def test_create_care_plan_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/care-plan",
+        json={"title": "X", "items": [{"category": "medication", "title": "Y"}]},
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+async def test_create_care_plan_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/care-plan",
+        json={"title": "X", "items": [{"category": "medication", "title": "Y"}]},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/doctor/consultations/{id}/care-plans (GET) ──────────────────────────
+
+
+async def test_list_doctor_care_plans_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/doctor/consultations/{uuid.uuid4()}/care-plans")
+    assert resp.status_code == 401
+
+
+async def test_list_doctor_care_plans_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/consultations/{uuid.uuid4()}/care-plans",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/doctor/care-plans/{id}/activate (POST) ──────────────────────────────
+
+
+async def test_activate_care_plan_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/doctor/care-plans/{uuid.uuid4()}/activate")
+    assert resp.status_code == 401
+
+
+async def test_activate_care_plan_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        f"/v1/doctor/care-plans/{uuid.uuid4()}/activate",
+        headers=make_auth_headers(patient),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/clinic/patient/care-plans (GET) ──────────────────────────────────────
+
+
+async def test_list_patient_care_plans_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/clinic/patient/care-plans")
+    assert resp.status_code == 401
+
+
+async def test_list_patient_care_plans_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        "/v1/clinic/patient/care-plans",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/clinic/patient/care-plans/{id} (GET) ────────────────────────────────
+
+
+async def test_get_patient_care_plan_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/clinic/patient/care-plans/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+async def test_get_patient_care_plan_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        f"/v1/clinic/patient/care-plans/{uuid.uuid4()}",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.v1.doctor.care_plans import router as care_plans_router
 from app.api.v1.doctor.consultations import router as consultations_router
 from app.api.v1.doctor.content import router as content_router
 from app.api.v1.doctor.drugs import router as drugs_router
@@ -17,6 +18,7 @@ from app.api.v1.doctor.video import router as video_router
 
 doctor_router = APIRouter()
 doctor_router.include_router(me_router)
+doctor_router.include_router(care_plans_router)
 doctor_router.include_router(content_router)
 doctor_router.include_router(patients_router)
 doctor_router.include_router(consultations_router)

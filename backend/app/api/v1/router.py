@@ -12,6 +12,7 @@ from app.api.v1.admin.pricing import router as admin_pricing_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.clinic.abha import router as abha_router
 from app.api.v1.clinic.biomarker_trends import router as biomarker_trends_router
+from app.api.v1.clinic.care_plans import router as patient_care_plans_router
 from app.api.v1.clinic.consultations import router as clinic_router
 from app.api.v1.clinic.doctors import router as patient_doctors_router
 from app.api.v1.clinic.education import router as patient_education_router
@@ -41,6 +42,7 @@ api_v1_router.include_router(clinic_router, prefix="/clinic/patient")
 api_v1_router.include_router(lab_reports_router, prefix="/clinic/patient")
 api_v1_router.include_router(biomarker_trends_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_prescriptions_router, prefix="/clinic/patient")
+api_v1_router.include_router(patient_care_plans_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_pre_consult_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_education_router, prefix="/clinic/patient")
 api_v1_router.include_router(patient_notes_router, prefix="/clinic/patient")

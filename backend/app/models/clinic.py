@@ -11,6 +11,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.db.enums import (
+    CarePlanItemCategory,
+    CarePlanItemPriority,
+    CarePlanStatus,
     ConsultationStatus,
     ConsultationType,
     DrugForm,
@@ -457,6 +460,77 @@ class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     drug_schedule: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+
+class CarePlan(Base, UUIDMixin, TimestampMixin):
+    """Doctor-authored treatment plan for a patient.
+
+    Draft care plans are NEVER visible to patients — filtered at the SQL layer
+    in the patient-scoped repository query, same pattern as prescriptions.
+    """
+
+    __tablename__ = "kc_care_plans"
+
+    consultation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_consultations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    doctor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("dr_doctors.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_patients.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[CarePlanStatus] = mapped_column(
+        SAEnum(CarePlanStatus, name="care_plan_status", create_type=False, values_callable=enum_values),
+        nullable=False,
+        server_default=text("'draft'"),
+        index=True,
+    )
+    condition_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    goals: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class CarePlanItem(Base, UUIDMixin, TimestampMixin):
+    """A single component of a care plan (medication, exercise, diet, etc.)."""
+
+    __tablename__ = "kc_care_plan_items"
+
+    care_plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_care_plans.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[CarePlanItemCategory] = mapped_column(
+        SAEnum(CarePlanItemCategory, name="care_plan_item_category", create_type=False, values_callable=enum_values),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    frequency: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    duration: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    priority: Mapped[CarePlanItemPriority] = mapped_column(
+        SAEnum(CarePlanItemPriority, name="care_plan_item_priority", create_type=False, values_callable=enum_values),
+        nullable=False,
+        server_default=text("'normal'"),
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
 class DrugCatalogue(Base):

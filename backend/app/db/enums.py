@@ -318,3 +318,28 @@ class NotificationChannel(enum.StrEnum):
     PUSH = "push"
     WHATSAPP = "whatsapp"
     EMAIL = "email"
+
+
+# ── Care Plans ────────────────────────────────────────────────────────────────
+
+
+class CarePlanStatus(enum.StrEnum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class CarePlanItemCategory(enum.StrEnum):
+    MEDICATION = "medication"
+    EXERCISE = "exercise"
+    DIET = "diet"
+    LIFESTYLE = "lifestyle"
+    FOLLOW_UP = "follow_up"
+    LAB_TEST = "lab_test"
+
+
+class CarePlanItemPriority(enum.StrEnum):
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"

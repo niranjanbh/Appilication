@@ -5,6 +5,7 @@ import { NotesPanel } from './NotesPanel';
 import { LabOrderBuilder } from './LabOrderBuilder';
 import { PreConsultReport } from './PreConsultReport';
 import { PrescriptionPanel } from './PrescriptionPanel';
+import { CarePlanPanel } from './CarePlanPanel';
 
 interface ConsultationDetail {
   id: string;
@@ -84,13 +85,14 @@ function VideoArea({ consultation }: VideoAreaProps) {
   );
 }
 
-type SideTab = 'notes' | 'context' | 'labs' | 'prep' | 'rx';
+type SideTab = 'notes' | 'context' | 'labs' | 'prep' | 'rx' | 'careplan';
 
 const SIDE_TABS: { id: SideTab; label: string }[] = [
   { id: 'prep', label: 'Pre-consult' },
   { id: 'notes', label: 'Notes' },
   { id: 'context', label: 'Patient context' },
   { id: 'rx', label: 'Prescription' },
+  { id: 'careplan', label: 'Care plan' },
   { id: 'labs', label: 'Order labs' },
 ];
 
@@ -144,6 +146,8 @@ export function ConsultationVideoLayout({ consultation }: ConsultationVideoLayou
           )}
 
           {sideTab === 'rx' && <PrescriptionPanel consultationId={consultation.id} />}
+
+          {sideTab === 'careplan' && <CarePlanPanel consultationId={consultation.id} />}
 
           {sideTab === 'labs' && <LabOrderBuilder consultationId={consultation.id} />}
         </div>

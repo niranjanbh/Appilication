@@ -32,6 +32,8 @@ class Permission(enum.StrEnum):
     CLINICAL_NOTE_WRITE = "clinical_note:write"
     PRESCRIPTION_CREATE = "prescription:create"
     PRESCRIPTION_SIGN = "prescription:sign"
+    CARE_PLAN_CREATE = "care_plan:create"
+    CARE_PLAN_ACTIVATE = "care_plan:activate"
 
     # Content sign-off / publication (separation of duties)
     CONTENT_APPROVE = "content:approve"
@@ -61,6 +63,8 @@ _DOCTOR: frozenset[Permission] = frozenset(
         Permission.CLINICAL_NOTE_WRITE,
         Permission.PRESCRIPTION_CREATE,
         Permission.PRESCRIPTION_SIGN,
+        Permission.CARE_PLAN_CREATE,
+        Permission.CARE_PLAN_ACTIVATE,
         Permission.CONTENT_APPROVE,
     }
 )
