@@ -19,6 +19,13 @@ export function listConsentsApi(): Promise<{ consents: ConsentRecord[] }> {
   return apiFetch('/v1/users/me/consents');
 }
 
+export function withdrawConsentApi(consentType: ConsentType): Promise<ConsentRecord> {
+  return apiFetch('/v1/users/me/consent/withdraw', {
+    method: 'POST',
+    body: JSON.stringify({ consent_type: consentType }),
+  });
+}
+
 export interface DataSubjectResponse {
   message: string;
   request_id: string;

@@ -10,6 +10,7 @@ from app.api.v1.users.schemas import (
     ConsentListResponse,
     ConsentRead,
     ConsentRequest,
+    ConsentWithdrawRequest,
     DataExportResponse,
     ErasureResponse,
     SessionListResponse,
@@ -126,6 +127,43 @@ async def list_consents(
         allowed=True,
     )
     return ConsentListResponse(consents=[ConsentRead.model_validate(r) for r in records])
+
+
+@router.post("/me/consent/withdraw", response_model=ConsentRead)
+async def withdraw_consent(
+    body: ConsentWithdrawRequest,
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> ConsentRead:
+    """Withdraw an active consent (DPDP right to withdraw). 404 if none active."""
+    from app.core.exceptions import NotFoundError
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    try:
+        record = await consent_service.revoke_consent(
+            db, user_id=user.id, consent_type=body.consent_type
+        )
+    except NotFoundError as exc:
+        await write_audit(
+            db, ctx, action="withdraw_consent", resource_type="consent_record",
+            allowed=False, reason="active_consent_not_found",
+            log_metadata={"consent_type": body.consent_type.value},
+        )
+        await db.commit()
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="active_consent_not_found"
+        ) from exc
+
+    await write_audit(
+        db, ctx, action="withdraw_consent", resource_type="consent_record",
+        resource_id=record.id, allowed=True,
+        log_metadata={"consent_type": body.consent_type.value},
+    )
+    return ConsentRead.model_validate(record)
 
 
 @router.post("/me/data-export", response_model=DataExportResponse, status_code=202)

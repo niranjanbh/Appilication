@@ -169,3 +169,108 @@ async def test_patient_cannot_see_another_patients_consents(
     resp = await client.get("/v1/users/me/consents", headers=make_auth_headers(alice))
     assert resp.status_code == 200
     assert resp.json()["consents"] == []
+
+
+# ── Consent withdrawal (DPDP right to withdraw) ──────────────────────────────────
+
+
+async def test_withdraw_consent_marks_revoked(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await create_patient_user(db_session)
+    headers = make_auth_headers(user)
+    await client.post(
+        "/v1/users/me/consent",
+        json={"consent_type": "marketing", "version": "1.0", "granted": True, "consent_text": "Marketing."},
+        headers=headers,
+    )
+
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["consent_type"] == "marketing"
+    assert data["revoked_at"] is not None
+
+    # No longer counts as active: a second withdraw is a 404.
+    again = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+        headers=headers,
+    )
+    assert again.status_code == 404
+
+
+async def test_withdraw_consent_without_active_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await create_patient_user(db_session)
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "research"},
+        headers=make_auth_headers(user),
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "active_consent_not_found"
+
+
+async def test_withdraw_consent_invalid_type_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await create_patient_user(db_session)
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "not_a_real_type"},
+        headers=make_auth_headers(user),
+    )
+    assert resp.status_code == 422
+
+
+async def test_withdraw_consent_scoped_to_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Withdrawing only affects the caller's own consent, not another patient's."""
+    alice = await create_patient_user(db_session)
+    bob = await create_patient_user(db_session)
+    for u in (alice, bob):
+        await client.post(
+            "/v1/users/me/consent",
+            json={"consent_type": "marketing", "version": "1.0", "granted": True, "consent_text": "M."},
+            headers=make_auth_headers(u),
+        )
+
+    # alice withdraws hers
+    await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+        headers=make_auth_headers(alice),
+    )
+
+    # bob's marketing consent is still active
+    resp = await client.get("/v1/users/me/consents", headers=make_auth_headers(bob))
+    bob_marketing = [c for c in resp.json()["consents"] if c["consent_type"] == "marketing"]
+    assert len(bob_marketing) == 1
+    assert bob_marketing[0]["revoked_at"] is None
+
+
+async def test_withdraw_consent_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_withdraw_consent_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+    )
+    assert resp.status_code == 401

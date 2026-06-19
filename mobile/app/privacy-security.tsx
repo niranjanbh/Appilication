@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
+  Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +14,7 @@ import {
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';
 import { HapticPressable } from '../components/ui/HapticPressable';
-import { listConsentsApi } from '../lib/api/consent';
+import { listConsentsApi, withdrawConsentApi } from '../lib/api/consent';
 import {
   borderRadius,
   colors,
@@ -43,7 +45,15 @@ function formatDate(iso: string): string {
   });
 }
 
-function ConsentCard({ consent }: { consent: ConsentRecord }) {
+function ConsentCard({
+  consent,
+  onWithdraw,
+  withdrawing,
+}: {
+  consent: ConsentRecord;
+  onWithdraw?: (consent: ConsentRecord) => void;
+  withdrawing?: boolean;
+}) {
   const t = useTheme();
   const isActive = consent.granted && !consent.revoked_at;
   const statusColor = isActive ? colors.successGreen : colors.stone;
@@ -73,6 +83,18 @@ function ConsentCard({ consent }: { consent: ConsentRecord }) {
           <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
         </View>
       </View>
+      {isActive && onWithdraw && (
+        <Pressable
+          onPress={() => onWithdraw(consent)}
+          disabled={withdrawing}
+          accessibilityLabel={`Withdraw ${CONSENT_LABELS[consent.consent_type] ?? consent.consent_type}`}
+          style={[styles.withdrawBtn, withdrawing && styles.withdrawDisabled]}
+        >
+          <Text style={[styles.withdrawText, { color: colors.criticalRed }]}>
+            {withdrawing ? 'Withdrawing…' : 'Withdraw consent'}
+          </Text>
+        </Pressable>
+      )}
     </GlassCard>
   );
 }
@@ -81,15 +103,40 @@ export default function PrivacySecurityScreen() {
   const t = useTheme();
   const router = useRouter();
 
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['consents'],
     queryFn: listConsentsApi,
     staleTime: 60_000,
   });
 
+  const withdrawMutation = useMutation({
+    mutationFn: (consent: ConsentRecord) => withdrawConsentApi(consent.consent_type),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['consents'] }); },
+    onError: () => { Alert.alert('Error', 'Could not withdraw consent. Please try again.'); },
+  });
+
+  const handleWithdraw = (consent: ConsentRecord) => {
+    Alert.alert(
+      'Withdraw consent?',
+      `You are withdrawing "${CONSENT_LABELS[consent.consent_type] ?? consent.consent_type}". `
+        + 'Some features that rely on this consent may stop working.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: () => withdrawMutation.mutate(consent),
+        },
+      ],
+    );
+  };
+
   const consents = data?.consents ?? [];
   const active = consents.filter(c => c.granted && !c.revoked_at);
   const inactive = consents.filter(c => !c.granted || c.revoked_at);
+  const withdrawingType =
+    withdrawMutation.isPending ? withdrawMutation.variables?.consent_type : undefined;
 
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
@@ -107,7 +154,14 @@ export default function PrivacySecurityScreen() {
             {active.length > 0 && (
               <View style={styles.section}>
                 <Text style={[styles.sectionLabel, { color: t.textSub }]}>Active consents</Text>
-                {active.map(c => <ConsentCard key={c.id} consent={c} />)}
+                {active.map(c => (
+                  <ConsentCard
+                    key={c.id}
+                    consent={c}
+                    onWithdraw={handleWithdraw}
+                    withdrawing={withdrawingType === c.consent_type}
+                  />
+                ))}
               </View>
             )}
 
@@ -211,6 +265,16 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: borderRadius.full,
   },
+  withdrawBtn: {
+    marginTop: spacing[3],
+    alignSelf: 'flex-start',
+  },
+  withdrawText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+  withdrawDisabled: { opacity: 0.5 },
   statusText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,

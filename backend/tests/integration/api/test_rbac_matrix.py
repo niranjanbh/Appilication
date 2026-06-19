@@ -127,6 +127,25 @@ async def test_list_consents_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+async def test_withdraw_consent_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw", json={"consent_type": "marketing"}
+    )
+    assert resp.status_code == 401
+
+
+async def test_withdraw_consent_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        "/v1/users/me/consent/withdraw",
+        json={"consent_type": "marketing"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
 # ── /v1/users/me/sessions — patient device-session management ─────────────────
 # Role matrix: patient=200, no-auth=401, doctor/coordinator=403.
 

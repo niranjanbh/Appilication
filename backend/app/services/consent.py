@@ -49,9 +49,13 @@ async def revoke_consent(
     )
     if record is None:
         raise NotFoundError("active_consent_not_found")
+    revoked_at = datetime.now(UTC)
     await consent_repo.revoke_consent_record(
-        db, consent_id=record.id, revoked_at=datetime.now(UTC)
+        db, consent_id=record.id, revoked_at=revoked_at
     )
+    # Reflect the revocation on the returned ORM object (the repo issues a Core
+    # UPDATE, which does not refresh the instance) so callers see revoked_at.
+    record.revoked_at = revoked_at
     return record
 
 

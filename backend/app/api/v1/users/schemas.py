@@ -58,6 +58,10 @@ class ConsentListResponse(BaseModel):
     consents: list[ConsentRead]
 
 
+class ConsentWithdrawRequest(BaseModel):
+    consent_type: ConsentType
+
+
 class DataExportResponse(BaseModel):
     message: str
     request_id: uuid.UUID
