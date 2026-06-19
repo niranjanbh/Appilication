@@ -5,7 +5,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.db.enums import ConsentType, UserGender, UserRole
+from app.db.enums import (
+    ConsentType,
+    DataSubjectRequestStatus,
+    UserGender,
+    UserRole,
+)
 
 
 class UserMeRead(BaseModel):
@@ -65,6 +70,23 @@ class ConsentWithdrawRequest(BaseModel):
 class DataExportResponse(BaseModel):
     message: str
     request_id: uuid.UUID
+
+
+class DataExportSummary(BaseModel):
+    id: uuid.UUID
+    status: DataSubjectRequestStatus
+    requested_at: datetime
+    completed_at: datetime | None = None
+
+
+class DataExportListResponse(BaseModel):
+    items: list[DataExportSummary]
+
+
+class DataExportStatusRead(DataExportSummary):
+    # Present only when the export is COMPLETED. Short-lived presigned GET URL.
+    download_url: str | None = None
+    download_expires_in_seconds: int | None = None
 
 
 class ErasureResponse(BaseModel):

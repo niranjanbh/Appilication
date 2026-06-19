@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
+  Linking,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,7 +14,13 @@ import {
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';
 import { HapticPressable } from '../components/ui/HapticPressable';
-import { requestDataExportApi } from '../lib/api/consent';
+import {
+  getDataExportApi,
+  listDataExportsApi,
+  requestDataExportApi,
+  type DataExportStatus,
+  type DataExportSummary,
+} from '../lib/api/consent';
 import {
   borderRadius,
   colors,
@@ -30,12 +39,50 @@ function showAlert(title: string, message: string) {
   }
 }
 
+const STATUS_META: Record<DataExportStatus, { label: string; color: string }> = {
+  received:    { label: 'Queued',     color: colors.warningAmber },
+  in_progress: { label: 'Preparing',  color: colors.warningAmber },
+  completed:   { label: 'Ready',      color: colors.successGreen },
+  rejected:    { label: 'Unavailable', color: colors.criticalRed },
+};
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+async function openExportDownload(id: string): Promise<void> {
+  const detail = await getDataExportApi(id);
+  if (!detail.download_url) {
+    showAlert('Not ready', 'This export is not ready to download yet.');
+    return;
+  }
+  if (Platform.OS === 'web') {
+    window.open(detail.download_url, '_blank');
+  } else {
+    await Linking.openURL(detail.download_url);
+  }
+}
+
 export default function DownloadDataScreen() {
   const t = useTheme();
+  const queryClient = useQueryClient();
+
+  const { data: exportsData } = useQuery({
+    queryKey: ['data-exports'],
+    queryFn: listDataExportsApi,
+    staleTime: 30_000,
+  });
+  const exports = exportsData?.items ?? [];
+
+  const downloadMutation = useMutation({
+    mutationFn: openExportDownload,
+    onError: () => { showAlert('Error', 'Could not start the download. Please try again.'); },
+  });
 
   const mutation = useMutation({
     mutationFn: requestDataExportApi,
     onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['data-exports'] });
       showAlert(
         'Export requested',
         data.message,
@@ -66,7 +113,7 @@ export default function DownloadDataScreen() {
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
       <AmbientBackground />
-      <View style={styles.container}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={[styles.heading, { color: t.text }]}>Download my data</Text>
 
         <GlassCard>
@@ -125,7 +172,45 @@ export default function DownloadDataScreen() {
             You will be notified when your data is ready for download.
           </Text>
         )}
-      </View>
+
+        {exports.length > 0 && (
+          <GlassCard>
+            <View style={styles.requestsSection}>
+              <Text style={[styles.bulletTitle, { color: t.text }]}>Your requests</Text>
+              {exports.map((ex: DataExportSummary) => {
+                const meta = STATUS_META[ex.status];
+                const downloading =
+                  downloadMutation.isPending && downloadMutation.variables === ex.id;
+                return (
+                  <View key={ex.id} style={styles.requestRow}>
+                    <View style={styles.requestInfo}>
+                      <Text style={[styles.requestDate, { color: t.text }]}>
+                        Requested {formatDate(ex.requested_at)}
+                      </Text>
+                      <View style={[styles.statusPill, { backgroundColor: meta.color + '18' }]}>
+                        <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+                      </View>
+                    </View>
+                    {ex.status === 'completed' && (
+                      <Pressable
+                        onPress={() => downloadMutation.mutate(ex.id)}
+                        disabled={downloading}
+                        accessibilityLabel="Download export"
+                        style={[styles.downloadLink, downloading && styles.btnDisabled]}
+                      >
+                        <Ionicons name="download-outline" size={16} color={colors.electricBlue} />
+                        <Text style={[styles.downloadLinkText, { color: colors.electricBlue }]}>
+                          {downloading ? 'Opening…' : 'Download'}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </GlassCard>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -133,9 +218,10 @@ export default function DownloadDataScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[6],
+    paddingBottom: spacing[12],
     gap: spacing[5],
   },
   heading: {
@@ -195,5 +281,39 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
     textAlign: 'center',
+  },
+  requestsSection: { gap: spacing[3] },
+  requestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  requestInfo: { flex: 1, gap: spacing[1], flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  requestDate: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+  },
+  statusPill: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  statusText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+  },
+  downloadLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+  },
+  downloadLinkText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
   },
 });

@@ -11,7 +11,10 @@ from app.api.v1.users.schemas import (
     ConsentRead,
     ConsentRequest,
     ConsentWithdrawRequest,
+    DataExportListResponse,
     DataExportResponse,
+    DataExportStatusRead,
+    DataExportSummary,
     ErasureResponse,
     SessionListResponse,
     SessionRead,
@@ -188,6 +191,88 @@ async def request_data_export(
     return DataExportResponse(
         message="Data export request received. You will be notified when it is ready.",
         request_id=dsr.id,
+    )
+
+
+@router.get("/me/data-exports", response_model=DataExportListResponse)
+async def list_data_exports(
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> DataExportListResponse:
+    from app.db.enums import DataSubjectRequestType
+    from app.models.identity import User as UserModel
+    from app.repositories import consent as consent_repo
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    rows = await consent_repo.list_data_subject_requests_for_user(
+        db, user_id=user.id, request_type=DataSubjectRequestType.ACCESS
+    )
+    await write_audit(
+        db, ctx, action="list_data_exports", resource_type="data_subject_request",
+        allowed=True,
+    )
+    return DataExportListResponse(
+        items=[
+            DataExportSummary(
+                id=r.id,
+                status=r.status,
+                requested_at=r.received_at,
+                completed_at=r.completed_at,
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.get("/me/data-exports/{request_id}", response_model=DataExportStatusRead)
+async def get_data_export(
+    request_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> DataExportStatusRead:
+    from app.db.enums import DataSubjectRequestStatus, DataSubjectRequestType
+    from app.integrations import s3
+    from app.models.identity import User as UserModel
+    from app.repositories import consent as consent_repo
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dsr = await consent_repo.get_data_subject_request_for_user(
+        db, request_id=request_id, user_id=user.id
+    )
+    # Treat erasure requests as non-existent on this export-only surface.
+    if dsr is None or dsr.request_type != DataSubjectRequestType.ACCESS:
+        await write_audit(
+            db, ctx, action="view_data_export", resource_type="data_subject_request",
+            resource_id=request_id, allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    download_url: str | None = None
+    expires_in: int | None = None
+    if dsr.status == DataSubjectRequestStatus.COMPLETED:
+        download_url = s3.generate_download_url(
+            s3_key=s3.data_export_s3_key(user.id, dsr.id)
+        )
+        expires_in = 600  # matches generate_download_url TTL
+
+    await write_audit(
+        db, ctx, action="view_data_export", resource_type="data_subject_request",
+        resource_id=request_id, allowed=True,
+    )
+    return DataExportStatusRead(
+        id=dsr.id,
+        status=dsr.status,
+        requested_at=dsr.received_at,
+        completed_at=dsr.completed_at,
+        download_url=download_url,
+        download_expires_in_seconds=expires_in,
     )
 
 

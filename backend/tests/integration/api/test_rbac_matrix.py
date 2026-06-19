@@ -112,6 +112,34 @@ async def test_data_export_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+async def test_list_data_exports_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/users/me/data-exports")
+    assert resp.status_code == 401
+
+
+async def test_list_data_exports_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/users/me/data-exports", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
+async def test_get_data_export_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/users/me/data-exports/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+async def test_get_data_export_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        f"/v1/users/me/data-exports/{uuid.uuid4()}", headers=make_auth_headers(doctor)
+    )
+    assert resp.status_code == 403
+
+
 async def test_delete_no_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.post("/v1/users/me/delete")
     assert resp.status_code == 401

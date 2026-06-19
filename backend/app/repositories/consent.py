@@ -115,6 +115,24 @@ async def get_data_subject_request_for_user(
     return result.scalar_one_or_none()
 
 
+async def list_data_subject_requests_for_user(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    request_type: DataSubjectRequestType,
+) -> list[DataSubjectRequest]:
+    """List a user's DSRs of a given type, newest first."""
+    result = await db.execute(
+        select(DataSubjectRequest)
+        .where(
+            DataSubjectRequest.user_id == user_id,
+            DataSubjectRequest.request_type == request_type,
+        )
+        .order_by(DataSubjectRequest.received_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def update_data_subject_request_status(
     db: AsyncSession,
     *,
