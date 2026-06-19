@@ -203,6 +203,15 @@ export default function ProfileScreen() {
           <NeumorphCard unpadded>
             <View style={styles.groupCard}>
               <MenuItem
+                icon="card-outline"
+                tint="green"
+                label="Payments & refunds"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/payments')}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
                 icon="download-outline"
                 tint="blue"
                 label="Download my data"

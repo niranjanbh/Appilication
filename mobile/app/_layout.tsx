@@ -90,6 +90,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
       <Stack.Screen name="notes/index" options={{ title: 'My Notes' }} />
+      <Stack.Screen name="payments" options={{ title: 'Payments & refunds' }} />
     </Stack>
   );
 }

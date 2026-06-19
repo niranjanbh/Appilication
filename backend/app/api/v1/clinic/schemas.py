@@ -173,6 +173,17 @@ class ConsultationCancelResponse(BaseModel):
     refund_issued: bool
 
 
+class ConsultationRescheduleRequest(BaseModel):
+    slot_id: uuid.UUID
+
+
+class ConsultationRescheduleResponse(BaseModel):
+    consultation_id: uuid.UUID
+    status: ConsultationStatus
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime
+
+
 class ConsultationJoinResponse(BaseModel):
     room_id: str
     token: str

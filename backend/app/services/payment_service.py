@@ -4,10 +4,18 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import PaymentStatus
+from app.db.enums import PaymentStatus, RefundStatus
 from app.integrations import razorpay as razorpay_integration
 from app.models.payment import Payment
 from app.repositories import payments as payments_repo
+from app.repositories import refunds as refunds_repo
+
+# Razorpay refund.status → our RefundStatus. Unknown values fall back to PENDING.
+_RAZORPAY_REFUND_STATUS = {
+    "pending": RefundStatus.PENDING,
+    "processed": RefundStatus.PROCESSED,
+    "failed": RefundStatus.FAILED,
+}
 
 
 class PaymentError(Exception):
@@ -90,8 +98,9 @@ async def initiate_refund(
     payment_id: uuid.UUID,
     user_id: uuid.UUID,
     amount_paise: int | None = None,
+    reason: str | None = None,
 ) -> Payment:
-    """Initiate a Razorpay refund for a paid payment."""
+    """Initiate a Razorpay refund for a paid payment and record a kc_refunds row."""
     payment = await payments_repo.get_payment_for_user(
         db, payment_id=payment_id, user_id=user_id
     )
@@ -109,6 +118,22 @@ async def initiate_refund(
     )
     if "error" in result:
         raise PaymentError("razorpay_refund_failed", str(result.get("error")))
+
+    # Persist the refund so its Razorpay id, amount, and status outlive the
+    # payment's status flip. Partial refunds each get their own row.
+    refund_status = _RAZORPAY_REFUND_STATUS.get(
+        str(result.get("status", "")), RefundStatus.PENDING
+    )
+    await refunds_repo.create_refund(
+        db,
+        payment_id=payment.id,
+        user_id=payment.user_id,
+        amount_paise=refund_amount,
+        currency=payment.currency,
+        status=refund_status,
+        razorpay_refund_id=result.get("id"),
+        reason=reason,
+    )
 
     new_status = (
         PaymentStatus.PARTIAL_REFUNDED

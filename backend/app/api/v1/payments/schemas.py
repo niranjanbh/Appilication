@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.enums import PaymentStatus
+from app.db.enums import PaymentStatus, RefundStatus
 
 
 class CreateOrderRequest(BaseModel):
@@ -35,3 +36,24 @@ class PaymentRead(BaseModel):
     status: PaymentStatus
     gst_invoice_number: str | None
     gst_invoice_url: str | None
+
+
+class RefundRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    payment_id: uuid.UUID
+    razorpay_refund_id: str | None
+    amount_paise: int
+    currency: str
+    status: RefundStatus
+    reason: str | None
+    created_at: datetime
+
+
+class RefundListResponse(BaseModel):
+    items: list[RefundRead]
+    total: int
+    page: int
+    page_size: int
+    pages: int

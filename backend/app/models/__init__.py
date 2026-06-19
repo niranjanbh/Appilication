@@ -25,7 +25,7 @@ from app.models.doctor import Availability, Credential, Doctor
 from app.models.education import EducationAssignment, EducationContent
 from app.models.identity import RefreshToken, User
 from app.models.notifications import Notification
-from app.models.payment import Payment
+from app.models.payment import Payment, Refund
 from app.models.pricing import Coupon, PricingConfig
 from app.models.public import BookingInquiry, Lead
 from app.models.sign_off import SignOffRecord
@@ -62,6 +62,7 @@ __all__ = [
     "PrescriptionItem",
     "PricingConfig",
     "RefreshToken",
+    "Refund",
     "Reminder",
     "ReminderLog",
     "SignOffRecord",

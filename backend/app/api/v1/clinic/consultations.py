@@ -15,6 +15,8 @@ from app.api.v1.clinic.schemas import (
     ConsultationJoinResponse,
     ConsultationRequestCreate,
     ConsultationRequestResponse,
+    ConsultationRescheduleRequest,
+    ConsultationRescheduleResponse,
     PatientConsultationListResponse,
     PatientConsultationRead,
     RazorpayOrderInfo,
@@ -283,6 +285,55 @@ async def cancel_consultation(
         consultation_id=consultation.id,
         status=consultation.status,
         refund_issued=refund_issued,
+    )
+
+
+@router.post(
+    "/consultations/{consultation_id}/reschedule",
+    response_model=ConsultationRescheduleResponse,
+)
+async def reschedule_consultation(
+    consultation_id: uuid.UUID,
+    body: ConsultationRescheduleRequest,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> ConsultationRescheduleResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    try:
+        consultation = await consultation_service.reschedule_consultation(
+            db,
+            consultation_id=consultation_id,
+            patient_user_id=user.id,
+            slot_id=body.slot_id,
+        )
+    except consultation_service.ConsultationError as exc:
+        # The service may have released the old slot before failing — undo that
+        # first, then record the denial so the audit row survives the rollback.
+        await db.rollback()
+        await write_audit(
+            db, ctx, action="reschedule_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        if exc.code == "consultation_not_found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=exc.code) from exc
+
+    await write_audit(
+        db, ctx, action="reschedule_consultation",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+    )
+    return ConsultationRescheduleResponse(
+        consultation_id=consultation.id,
+        status=consultation.status,
+        scheduled_start_at=consultation.scheduled_start_at,
+        scheduled_end_at=consultation.scheduled_end_at,
     )
 
 

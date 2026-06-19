@@ -208,6 +208,12 @@ class PaymentStatus(enum.StrEnum):
     PARTIAL_REFUNDED = "partial_refunded"
 
 
+class RefundStatus(enum.StrEnum):
+    PENDING = "pending"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
 # ── Lab reports ────────────────────────────────────────────────────────────────
 
 

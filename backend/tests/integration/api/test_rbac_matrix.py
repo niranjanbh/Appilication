@@ -591,6 +591,46 @@ async def test_get_payment_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+# ── /v1/payments/refunds — patient-scoped refund tracking ────────────────────
+# Role matrix: patient=200, no-auth=401, doctor/coordinator=403.
+
+
+async def test_list_refunds_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/payments/refunds")
+    assert resp.status_code == 401
+
+
+async def test_list_refunds_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/payments/refunds", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
+async def test_list_refunds_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get("/v1/payments/refunds", headers=make_auth_headers(coord))
+    assert resp.status_code == 403
+
+
+async def test_get_refund_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/payments/refunds/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+async def test_get_refund_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        f"/v1/payments/refunds/{uuid.uuid4()}", headers=make_auth_headers(doctor)
+    )
+    assert resp.status_code == 403
+
+
 # ── /v1/clinic/patient/* — patient-scoped consultation endpoints ──────────────
 # Role matrix: patient=200/201, no-auth=401, doctor/coordinator=403.
 
@@ -646,6 +686,45 @@ async def test_clinic_cancel_consultation_no_auth_returns_401(client: AsyncClien
         json={"reason": "test"},
     )
     assert resp.status_code == 401
+
+
+# ── /v1/clinic/patient/consultations/{id}/reschedule — patient only ──────────
+# Role matrix: patient=200/400/404, no-auth=401, doctor/coordinator=403.
+
+
+async def test_clinic_reschedule_consultation_no_auth_returns_401(client: AsyncClient) -> None:
+    import uuid
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{uuid.uuid4()}/reschedule",
+        json={"slot_id": str(uuid.uuid4())},
+    )
+    assert resp.status_code == 401
+
+
+async def test_clinic_reschedule_consultation_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    import uuid
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{uuid.uuid4()}/reschedule",
+        json={"slot_id": str(uuid.uuid4())},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_clinic_reschedule_consultation_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    import uuid
+    coord = await create_coordinator_user(db_session)
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{uuid.uuid4()}/reschedule",
+        json={"slot_id": str(uuid.uuid4())},
+        headers=make_auth_headers(coord),
+    )
+    assert resp.status_code == 403
 
 
 async def test_clinic_list_slots_no_auth_returns_401(client: AsyncClient) -> None:

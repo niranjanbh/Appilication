@@ -45,6 +45,13 @@ interface Consultation {
   payment: RazorpayOrderInfo | null;
 }
 
+interface AvailableSlot {
+  id: string;
+  doctor_id: string;
+  slot_start: string;
+  slot_end: string;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDateTime(iso: string): string {
@@ -80,6 +87,21 @@ function formatTimeWindow(w: string | null): string {
 
 const CANCELLABLE: ConsultationStatus[] = ['requested', 'scheduled', 'confirmed'];
 
+// Reschedule requires an assigned doctor + slot, so it only applies once the
+// consultation is scheduled/confirmed (a 'requested' consult has no slot yet).
+const RESCHEDULABLE: ConsultationStatus[] = ['scheduled', 'confirmed'];
+
+// Mirror the backend RESCHEDULE_NOTICE_WINDOW_HOURS (24h): only offer the action
+// while the appointment is still far enough out for the server to accept it.
+const RESCHEDULE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function formatSlotDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function formatSlotTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 // ── Detail row ─────────────────────────────────────────────────────────────────
 
 function Row({ label, value, textPri, textSub, borderColor }: {
@@ -105,6 +127,13 @@ export default function ConsultationDetailScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [paying,     setPaying]     = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+
+  // Reschedule panel state
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [slots,        setSlots]        = useState<AvailableSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError,   setSlotsError]   = useState<string | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -168,6 +197,60 @@ export default function ConsultationDetailScreen() {
     );
   }, [consultation]);
 
+  const openReschedule = useCallback(async () => {
+    if (!consultation) return;
+    setShowReschedule(true);
+    setSlotsLoading(true);
+    setSlotsError(null);
+    try {
+      const now    = new Date();
+      const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const data = await apiFetch<AvailableSlot[]>(
+        `/v1/clinic/patient/consultations/slots?doctor_id=${consultation.doctor_id}` +
+        `&date_from=${now.toISOString()}&date_to=${future.toISOString()}`,
+      );
+      setSlots(data);
+    } catch {
+      setSlotsError('Could not load available slots.');
+    } finally {
+      setSlotsLoading(false);
+    }
+  }, [consultation]);
+
+  const handleReschedule = useCallback(async (slot: AvailableSlot) => {
+    Alert.alert(
+      'Move appointment?',
+      `Reschedule to ${formatSlotDate(slot.slot_start)} at ${formatSlotTime(slot.slot_start)}?`,
+      [
+        { text: 'Keep current time', style: 'cancel' },
+        {
+          text: 'Reschedule',
+          onPress: async () => {
+            setRescheduling(true);
+            try {
+              await apiFetch(`/v1/clinic/patient/consultations/${id}/reschedule`, {
+                method: 'POST',
+                body: JSON.stringify({ slot_id: slot.id }),
+              });
+              setShowReschedule(false);
+              await fetchDetail();
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : '';
+              const friendly = msg.includes('reschedule_window_closed')
+                ? 'Appointments can only be rescheduled more than 24 hours in advance.'
+                : msg.includes('slot_not_available')
+                  ? 'That slot was just taken. Please pick another time.'
+                  : 'Could not reschedule. Please try again.';
+              Alert.alert('Error', friendly);
+            } finally {
+              setRescheduling(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [id, fetchDetail]);
+
   const joinScale   = useSharedValue(1);
   const joinAnim    = useAnimatedStyle(() => ({ transform: [{ scale: joinScale.value }] }));
   const payScale    = useSharedValue(1);
@@ -199,6 +282,10 @@ export default function ConsultationDetailScreen() {
 
   const sc        = STATUS_COLOR[consultation.status];
   const canCancel = CANCELLABLE.includes(consultation.status);
+  const canReschedule =
+    RESCHEDULABLE.includes(consultation.status) &&
+    consultation.scheduled_start_at !== null &&
+    new Date(consultation.scheduled_start_at).getTime() - Date.now() > RESCHEDULE_WINDOW_MS;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
@@ -284,6 +371,62 @@ export default function ConsultationDetailScreen() {
             <Text style={styles.joinBtnText}>Join video call</Text>
           </Pressable>
         </Animated.View>
+      )}
+
+      {/* Reschedule */}
+      {canReschedule && !showReschedule && (
+        <Pressable
+          style={[styles.secondaryBtn, { borderColor: colors.electricBlue + '60' }]}
+          onPress={openReschedule}
+          accessibilityLabel="Reschedule this consultation"
+        >
+          <Text style={[styles.secondaryBtnText, { color: colors.electricBlue }]}>Reschedule appointment</Text>
+        </Pressable>
+      )}
+
+      {/* Reschedule slot picker */}
+      {showReschedule && (
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr, padding: spacing[5] }]}>
+          <Text style={[styles.panelTitle, { color: textPri }]}>Pick a new time</Text>
+
+          {slotsLoading && <ActivityIndicator color={colors.electricBlue} style={{ marginVertical: spacing[4] }} />}
+
+          {slotsError && (
+            <Text style={[styles.errorText, { color: colors.criticalRed }]}>{slotsError}</Text>
+          )}
+
+          {!slotsLoading && !slotsError && slots.length === 0 && (
+            <Text style={[styles.panelEmpty, { color: textSub }]}>
+              No open slots in the next 14 days. Please try again later.
+            </Text>
+          )}
+
+          {!slotsLoading && slots.length > 0 && (
+            <View style={styles.slotGrid}>
+              {slots.map(slot => (
+                <Pressable
+                  key={slot.id}
+                  onPress={() => handleReschedule(slot)}
+                  disabled={rescheduling}
+                  accessibilityLabel={`Move to ${formatSlotDate(slot.slot_start)} at ${formatSlotTime(slot.slot_start)}`}
+                  style={[styles.slotCard, { borderColor: cardBdr }, rescheduling && styles.disabled]}
+                >
+                  <Text style={[styles.slotDate, { color: textSub }]}>{formatSlotDate(slot.slot_start)}</Text>
+                  <Text style={[styles.slotTime, { color: textPri }]}>{formatSlotTime(slot.slot_start)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <Pressable
+            onPress={() => setShowReschedule(false)}
+            disabled={rescheduling}
+            accessibilityLabel="Cancel rescheduling"
+            style={styles.panelBack}
+          >
+            <Text style={[styles.backBtnText, { color: textSub }]}>Keep current time</Text>
+          </Pressable>
+        </View>
       )}
 
       {/* Cancel */}
@@ -373,6 +516,31 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
   disabled: { opacity: 0.50 },
+
+  secondaryBtn: {
+    height: 52,
+    borderWidth: 1.5,
+    borderRadius: borderRadius.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
+
+  panelTitle: { fontFamily: fontFamily.display, fontSize: fontSize.bodyLg, fontWeight: '600', marginBottom: spacing[3] },
+  panelEmpty: { fontFamily: fontFamily.body, fontSize: fontSize.sm, lineHeight: 20, paddingVertical: spacing[2] },
+  panelBack:  { alignItems: 'center', paddingTop: spacing[4] },
+  backBtnText:{ fontFamily: fontFamily.body, fontSize: fontSize.sm },
+
+  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
+  slotCard: {
+    borderRadius: borderRadius.xl,
+    padding: spacing[4],
+    borderWidth: 1,
+    minWidth: 130,
+    gap: spacing[1],
+  },
+  slotDate: { fontFamily: fontFamily.body, fontSize: fontSize.sm },
+  slotTime: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
 
   errorText: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center' },
   link:      { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },

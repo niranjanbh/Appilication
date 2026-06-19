@@ -3,14 +3,21 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import DbSession
-from app.api.v1.payments.schemas import CreateOrderRequest, PaymentRead, VerifyPaymentRequest
+from app.api.v1.payments.schemas import (
+    CreateOrderRequest,
+    PaymentRead,
+    RefundListResponse,
+    RefundRead,
+    VerifyPaymentRequest,
+)
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import cross_user_404, get_patient_user
 from app.db.enums import ActorRole
 from app.repositories import payments as payments_repo
+from app.repositories import refunds as refunds_repo
 from app.services import payment_service
 from app.services.payment_service import PaymentError
 
@@ -109,6 +116,61 @@ async def verify_payment(
         resource_id=payment.id, allowed=True,
     )
     return PaymentRead.model_validate(payment)
+
+
+@router.get("/refunds", response_model=RefundListResponse)
+async def list_refunds(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> RefundListResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    items, total = await refunds_repo.list_refunds_for_user(
+        db, user_id=user.id, page=page, page_size=page_size
+    )
+    await write_audit(
+        db, ctx, action="list_refunds", resource_type="refund", allowed=True
+    )
+    pages = (total + page_size - 1) // page_size
+    return RefundListResponse(
+        items=[RefundRead.model_validate(r) for r in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+    )
+
+
+@router.get("/refunds/{refund_id}", response_model=RefundRead)
+async def get_refund(
+    refund_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> RefundRead:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    refund = await refunds_repo.get_refund_for_user(
+        db, refund_id=refund_id, user_id=user.id
+    )
+    refund = await cross_user_404(
+        db, refund, ctx,
+        action="view_refund", resource_type="refund", resource_id=refund_id,
+    )
+    await write_audit(
+        db, ctx, action="view_refund", resource_type="refund",
+        resource_id=refund_id, allowed=True,
+    )
+    return RefundRead.model_validate(refund)
 
 
 @router.get("/{payment_id}", response_model=PaymentRead)

@@ -732,6 +732,212 @@ async def test_patient_can_withdraw_requested_consultation(
     assert data["refund_issued"] is False
 
 
+# ── Rescheduling ───────────────────────────────────────────────────────────────
+
+
+async def test_reschedule_consultation_happy_path(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Reschedule > 24 h out to another open slot with the same doctor."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=48)
+    slot_b = await _create_slot(db_session, doctor, hours_from_now=72)
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot_a
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(slot_b.id)},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["consultation_id"] == consult_id
+    assert data["scheduled_start_at"][:19] == slot_b.slot_start.isoformat()[:19]
+
+    # Old slot released, new slot claimed
+    loaded_a = await db_session.get(Availability, slot_a.id)
+    loaded_b = await db_session.get(Availability, slot_b.id)
+    assert loaded_a is not None and loaded_a.status == AvailabilityStatus.AVAILABLE
+    assert loaded_b is not None and loaded_b.status == AvailabilityStatus.BOOKED
+
+
+async def test_reschedule_cross_user_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Patient A cannot reschedule Patient B's consultation — 404, denial audited."""
+    patient_a = await create_patient_user(db_session)
+    patient_b = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_a, UserModel)
+    assert isinstance(patient_b, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient_profile_b = await _create_patient_profile(db_session, patient_b.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=48)
+    slot_b = await _create_slot(db_session, doctor, hours_from_now=72)
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_b, patient_profile_b, doctor, slot_a
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(slot_b.id)},
+        headers=make_auth_headers(patient_a),
+    )
+    assert resp.status_code == 404
+
+    audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.actor_user_id == patient_a.id,
+            AuditLog.action == "reschedule_consultation",
+            AuditLog.allowed == False,  # noqa: E712
+        )
+    )
+    assert audit is not None
+    assert audit.reason == "consultation_not_found"
+
+
+async def test_reschedule_within_window_returns_400(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Reschedule ≤ 24 h before slot is rejected."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=12)  # ≤ 24 h away
+    slot_b = await _create_slot(db_session, doctor, hours_from_now=72)
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot_a
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(slot_b.id)},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "reschedule_window_closed"
+
+
+async def test_reschedule_to_other_doctor_slot_returns_400(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The target slot must belong to the consultation's existing doctor."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    other_doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+    assert isinstance(other_doctor_user, UserModel)
+
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    other_doctor = await _create_doctor_profile(db_session, other_doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=48)
+    foreign_slot = await _create_slot(db_session, other_doctor, hours_from_now=72)
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot_a
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(foreign_slot.id)},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "slot_wrong_doctor"
+
+
+async def test_reschedule_to_taken_slot_returns_400(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A slot already booked cannot be claimed by a reschedule."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=48)
+    slot_b = await _create_slot(db_session, doctor, hours_from_now=72)
+    slot_b.status = AvailabilityStatus.BOOKED
+    await db_session.flush()
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot_a
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(slot_b.id)},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "slot_not_available"
+
+
+async def test_reschedule_cancelled_consultation_returns_400(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A cancelled consultation can no longer be rescheduled."""
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    from app.models.identity import User as UserModel
+
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient_profile = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    slot_a = await _create_slot(db_session, doctor, hours_from_now=48)
+    slot_b = await _create_slot(db_session, doctor, hours_from_now=72)
+
+    consult_id, _ = await _request_and_assign(
+        client, db_session, patient_user, patient_profile, doctor, slot_a
+    )
+    await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/cancel",
+        json={"reason": "cancel first"},
+        headers=make_auth_headers(patient_user),
+    )
+
+    resp = await client.post(
+        f"/v1/clinic/patient/consultations/{consult_id}/reschedule",
+        json={"slot_id": str(slot_b.id)},
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "consultation_not_reschedulable"
+
+
 # ── Slot listing ───────────────────────────────────────────────────────────────
 
 

@@ -21,6 +21,7 @@ from app.repositories import payments as payments_repo
 from app.services import payment_service
 
 CANCELLATION_REFUND_WINDOW_HOURS = 24
+RESCHEDULE_NOTICE_WINDOW_HOURS = 24
 
 
 class ConsultationError(Exception):
@@ -448,6 +449,70 @@ async def cancel_consultation(
         raise ConsultationError("consultation_update_failed")
 
     return updated, refund_issued
+
+
+async def reschedule_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    patient_user_id: uuid.UUID,
+    slot_id: uuid.UUID,
+) -> Consultation:
+    """Move a patient's consultation to a new slot with the same doctor.
+
+    Payment and status carry over — the patient is not pushed through a refund +
+    rebook cycle. Constrained to the existing doctor; switching doctors is a
+    re-triage concern handled by cancel + rebook. Returns the updated consultation.
+    """
+    from sqlalchemy import select
+
+    from app.models.doctor import Availability
+
+    consultation = await consultations_repo.get_consultation_for_patient(
+        db, consultation_id=consultation_id, patient_user_id=patient_user_id
+    )
+    if consultation is None:
+        raise ConsultationError("consultation_not_found")
+
+    if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
+        raise ConsultationError("consultation_not_reschedulable")
+
+    now = datetime.now(UTC)
+    hours_until = (consultation.scheduled_start_at - now).total_seconds() / 3600
+    if hours_until <= RESCHEDULE_NOTICE_WINDOW_HOURS:
+        raise ConsultationError("reschedule_window_closed")
+
+    # Verify the target slot exists and belongs to the same doctor before touching
+    # the current booking.
+    slot_result = await db.execute(select(Availability).where(Availability.id == slot_id))
+    slot_ref = slot_result.scalar_one_or_none()
+    if slot_ref is None:
+        raise ConsultationError("slot_not_found")
+    if slot_ref.doctor_id != consultation.doctor_id:
+        raise ConsultationError("slot_wrong_doctor")
+
+    # Free the old slot first: if claiming the new one fails we raise, and the
+    # transaction rollback restores the old booking.
+    await consultations_repo.release_slot(db, consultation_id=consultation_id)
+
+    slot = await consultations_repo.lock_and_book_slot(
+        db, slot_id=slot_id, consultation_id=consultation_id
+    )
+    if slot is None:
+        raise ConsultationError("slot_not_available")
+
+    updated = await consultations_repo.update_consultation(
+        db,
+        consultation_id=consultation_id,
+        scheduled_start_at=slot.slot_start,
+        scheduled_end_at=slot.slot_end,
+        # Drop any provisioned room so a stale 100ms room can't be reused.
+        video_room_id=None,
+    )
+    if updated is None:
+        raise ConsultationError("consultation_update_failed")
+
+    return updated
 
 
 async def open_consultation(
