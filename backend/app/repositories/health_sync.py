@@ -4,11 +4,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import HealthSyncSource, HealthSyncStatus
+from app.db.enums import HealthDatapointSource, HealthDatapointType, HealthSyncSource, HealthSyncStatus
 from app.models.wellness import HealthDatapoint, HealthSyncSession
 
 
@@ -72,3 +72,22 @@ async def upsert_datapoints(
     result = await db.execute(stmt)
     inserted = len(result.fetchall())
     return inserted, len(rows) - inserted
+
+
+async def list_manual_datapoints(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    types: list[HealthDatapointType] | None = None,
+    limit: int = 100,
+) -> list[HealthDatapoint]:
+    """List a patient's manually-entered datapoints, newest first."""
+    stmt = select(HealthDatapoint).where(
+        HealthDatapoint.user_id == user_id,
+        HealthDatapoint.source == HealthDatapointSource.MANUAL,
+    )
+    if types:
+        stmt = stmt.where(HealthDatapoint.type.in_(types))
+    stmt = stmt.order_by(HealthDatapoint.measured_at.desc()).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

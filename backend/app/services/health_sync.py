@@ -103,3 +103,52 @@ async def process_health_sync(
         skipped_count=skipped,
         status=final_status,
     )
+
+
+async def log_manual_vitals(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    measured_at: datetime,
+    weight_kg: float | None = None,
+    blood_pressure_systolic: int | None = None,
+    blood_pressure_diastolic: int | None = None,
+    blood_glucose_mg_dl: float | None = None,
+) -> int:
+    """Record patient-entered vitals as MANUAL-source health datapoints.
+
+    Unlike device sync this needs no health_sync consent — the patient is
+    volunteering their own readings. Returns the number of datapoints written.
+    """
+    def _row(dp_type: HealthDatapointType, value: dict[str, object]) -> dict[str, object]:
+        return {
+            "user_id": user_id,
+            "source": HealthDatapointSource.MANUAL,
+            "source_session_id": None,
+            "source_record_id": uuid.uuid4().hex,
+            "type": dp_type,
+            "value": value,
+            "measured_at": measured_at,
+        }
+
+    rows: list[dict[str, object]] = []
+    if weight_kg is not None:
+        rows.append(_row(HealthDatapointType.WEIGHT, {"value": weight_kg, "unit": "kg"}))
+    if blood_pressure_systolic is not None:
+        rows.append(_row(
+            HealthDatapointType.BLOOD_PRESSURE_SYSTOLIC,
+            {"value": blood_pressure_systolic, "unit": "mmHg"},
+        ))
+    if blood_pressure_diastolic is not None:
+        rows.append(_row(
+            HealthDatapointType.BLOOD_PRESSURE_DIASTOLIC,
+            {"value": blood_pressure_diastolic, "unit": "mmHg"},
+        ))
+    if blood_glucose_mg_dl is not None:
+        rows.append(_row(
+            HealthDatapointType.BLOOD_GLUCOSE,
+            {"value": blood_glucose_mg_dl, "unit": "mg/dL"},
+        ))
+
+    inserted, _skipped = await health_sync_repo.upsert_datapoints(db, rows=rows)
+    return inserted

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import DbSession
 from app.api.v1.wellness.schemas import (
@@ -15,10 +15,15 @@ from app.api.v1.wellness.schemas import (
     ReminderListResponse,
     ReminderRead,
     ReminderUpdate,
+    VitalReadItem,
+    VitalsListResponse,
+    VitalsLogRequest,
+    VitalsLogResponse,
 )
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import cross_user_404, get_patient_user
-from app.db.enums import ActorRole
+from app.db.enums import ActorRole, HealthDatapointType
+from app.repositories import health_sync as health_sync_repo
 from app.repositories import reminders as reminders_repo
 from app.services import health_sync as health_sync_service
 from app.services import reminders as reminders_service
@@ -237,6 +242,56 @@ async def health_sync(
         skipped_count=result.skipped_count,
         status=result.status,
     )
+
+
+@router.post("/vitals", response_model=VitalsLogResponse, status_code=status.HTTP_201_CREATED)
+async def log_vitals(
+    body: VitalsLogRequest,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> VitalsLogResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    count = await health_sync_service.log_manual_vitals(
+        db,
+        user_id=user.id,
+        measured_at=body.measured_at,
+        weight_kg=body.weight_kg,
+        blood_pressure_systolic=body.blood_pressure_systolic,
+        blood_pressure_diastolic=body.blood_pressure_diastolic,
+        blood_glucose_mg_dl=body.blood_glucose_mg_dl,
+    )
+    await write_audit(
+        db, ctx, action="log_vitals", resource_type="health_datapoint",
+        allowed=True, log_metadata={"count": count},
+    )
+    return VitalsLogResponse(logged_count=count)
+
+
+@router.get("/vitals", response_model=VitalsListResponse)
+async def list_vitals(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+    type: HealthDatapointType | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> VitalsListResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    rows = await health_sync_repo.list_manual_datapoints(
+        db, user_id=user.id, types=[type] if type is not None else None, limit=limit
+    )
+    await write_audit(
+        db, ctx, action="list_vitals", resource_type="health_datapoint", allowed=True
+    )
+    return VitalsListResponse(items=[VitalReadItem.model_validate(r) for r in rows])
 
 
 @router.post(

@@ -146,6 +146,15 @@ export default function ProfileScreen() {
               />
               <Separator isDark={isDark} />
               <MenuItem
+                icon="pulse-outline"
+                tint="green"
+                label="Log vitals"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/vitals')}
+              />
+              <Separator isDark={isDark} />
+              <MenuItem
                 icon="calendar-outline"
                 tint="green"
                 label="Appointments"

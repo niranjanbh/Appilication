@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.db.enums import (
     HealthDatapointType,
@@ -96,3 +96,44 @@ class HealthSyncResponse(BaseModel):
     inserted_count: int
     skipped_count: int
     status: HealthSyncStatus
+
+
+# ── Manual vitals ────────────────────────────────────────────────────────────────
+
+
+class VitalsLogRequest(BaseModel):
+    measured_at: datetime
+    weight_kg: float | None = Field(None, gt=0, le=500)
+    blood_pressure_systolic: int | None = Field(None, ge=40, le=300)
+    blood_pressure_diastolic: int | None = Field(None, ge=20, le=250)
+    blood_glucose_mg_dl: float | None = Field(None, gt=0, le=2000)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "VitalsLogRequest":
+        provided = (
+            self.weight_kg,
+            self.blood_pressure_systolic,
+            self.blood_pressure_diastolic,
+            self.blood_glucose_mg_dl,
+        )
+        if all(v is None for v in provided):
+            raise ValueError("at least one vital must be provided")
+        if (self.blood_pressure_systolic is None) != (self.blood_pressure_diastolic is None):
+            raise ValueError("blood pressure requires both systolic and diastolic")
+        return self
+
+
+class VitalsLogResponse(BaseModel):
+    logged_count: int
+
+
+class VitalReadItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    type: HealthDatapointType
+    value: dict[str, Any]
+    measured_at: datetime
+
+
+class VitalsListResponse(BaseModel):
+    items: list[VitalReadItem]

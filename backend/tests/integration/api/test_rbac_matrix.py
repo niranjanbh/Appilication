@@ -683,6 +683,42 @@ async def test_log_adherence_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+# ── /v1/wellness/vitals — patient-scoped manual vitals ───────────────────────
+
+
+async def test_log_vitals_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/wellness/vitals",
+        json={"measured_at": "2026-06-19T08:00:00Z", "weight_kg": 70.0},
+    )
+    assert resp.status_code == 401
+
+
+async def test_log_vitals_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        "/v1/wellness/vitals",
+        json={"measured_at": "2026-06-19T08:00:00Z", "weight_kg": 70.0},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_list_vitals_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/wellness/vitals")
+    assert resp.status_code == 401
+
+
+async def test_list_vitals_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/wellness/vitals", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
 # ── /v1/payments — patient-scoped endpoints ──────────────────────────────────
 # Role matrix: patient=201/200, no-auth=401, doctor=403.
 
