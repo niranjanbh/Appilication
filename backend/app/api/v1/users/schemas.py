@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.enums import (
     ConsentType,
@@ -92,6 +92,20 @@ class DataExportStatusRead(DataExportSummary):
 class ErasureResponse(BaseModel):
     message: str
     request_id: uuid.UUID
+
+
+class EmergencyContactWrite(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    relationship: str = Field(min_length=1, max_length=60)
+    phone: str = Field(min_length=4, max_length=20)
+    email: str | None = Field(default=None, max_length=255)
+
+
+class EmergencyContactRead(BaseModel):
+    name: str | None = None
+    relationship: str | None = None
+    phone: str | None = None
+    email: str | None = None
 
 
 class SessionRead(BaseModel):

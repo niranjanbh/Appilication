@@ -153,6 +153,15 @@ export default function ProfileScreen() {
                 hintColor={textSub}
                 onPress={() => router.push('/(tabs)/consultations' as never)}
               />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="people-outline"
+                tint="amber"
+                label="Emergency contact"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/emergency-contact')}
+              />
             </View>
           </NeumorphCard>
         </View>

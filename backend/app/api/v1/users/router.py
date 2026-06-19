@@ -15,6 +15,8 @@ from app.api.v1.users.schemas import (
     DataExportResponse,
     DataExportStatusRead,
     DataExportSummary,
+    EmergencyContactRead,
+    EmergencyContactWrite,
     ErasureResponse,
     SessionListResponse,
     SessionRead,
@@ -274,6 +276,70 @@ async def get_data_export(
         download_url=download_url,
         download_expires_in_seconds=expires_in,
     )
+
+
+_EMERGENCY_FIELDS = ("name", "relationship", "phone", "email")
+
+
+@router.get("/me/emergency-contact", response_model=EmergencyContactRead)
+async def get_emergency_contact(
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> EmergencyContactRead:
+    from app.models.identity import User as UserModel
+    from app.repositories import patients as patients_repo
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    patient = await patients_repo.get_patient_for_user(db, user_id=user.id)
+    if patient is None:
+        await write_audit(
+            db, ctx, action="view_emergency_contact", resource_type="patient",
+            allowed=False, reason="patient_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="patient_profile_not_found")
+
+    ec = patient.emergency_contact or {}
+    await write_audit(
+        db, ctx, action="view_emergency_contact", resource_type="patient",
+        resource_id=patient.id, allowed=True,
+    )
+    return EmergencyContactRead(**{k: ec.get(k) for k in _EMERGENCY_FIELDS})
+
+
+@router.put("/me/emergency-contact", response_model=EmergencyContactRead)
+async def set_emergency_contact(
+    body: EmergencyContactWrite,
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+) -> EmergencyContactRead:
+    from app.models.identity import User as UserModel
+    from app.repositories import patients as patients_repo
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    patient = await patients_repo.get_patient_for_user(db, user_id=user.id)
+    if patient is None:
+        await write_audit(
+            db, ctx, action="set_emergency_contact", resource_type="patient",
+            allowed=False, reason="patient_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="patient_profile_not_found")
+
+    await patients_repo.update_emergency_contact(
+        db, patient_id=patient.id, emergency_contact=body.model_dump()
+    )
+    await write_audit(
+        db, ctx, action="set_emergency_contact", resource_type="patient",
+        resource_id=patient.id, allowed=True,
+    )
+    return EmergencyContactRead(**body.model_dump())
 
 
 @router.put("/me/push-token", response_model=PushTokenResponse)

@@ -34,3 +34,20 @@ async def update_abha_number(
     result = await db.execute(select(Patient).where(Patient.id == patient_id))
     patient = result.scalar_one()
     return patient
+
+
+async def update_emergency_contact(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    emergency_contact: dict[str, object] | None,
+) -> Patient:
+    """Set (or clear, with None) the patient's emergency contact. Flushes, no commit."""
+    await db.execute(
+        update(Patient)
+        .where(Patient.id == patient_id)
+        .values(emergency_contact=emergency_contact)
+    )
+    await db.flush()
+    result = await db.execute(select(Patient).where(Patient.id == patient_id))
+    return result.scalar_one()
