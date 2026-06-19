@@ -94,6 +94,7 @@ function RootLayoutNav() {
       <Stack.Screen name="sessions" options={{ title: 'Devices & sessions' }} />
       <Stack.Screen name="emergency-contact" options={{ title: 'Emergency contact' }} />
       <Stack.Screen name="vitals" options={{ title: 'Log vitals' }} />
+      <Stack.Screen name="activity" options={{ title: 'Activity' }} />
     </Stack>
   );
 }

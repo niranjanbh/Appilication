@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
 from app.api.v1.users.schemas import (
+    ActivityItem,
+    ActivityListResponse,
     ConsentListResponse,
     ConsentRead,
     ConsentRequest,
@@ -26,6 +28,7 @@ from app.api.v1.users.schemas import (
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import get_patient_user
 from app.db.enums import ActorRole
+from app.repositories import audit as audit_repo
 from app.repositories import auth as auth_repo
 from app.services import consent as consent_service
 
@@ -480,3 +483,75 @@ async def revoke_session(
         resource_id=session_id, allowed=True,
     )
     return SessionRevokeResponse(revoked=revoked)
+
+
+# Friendly labels for the patient-facing activity feed. Unmapped actions fall
+# back to a humanized form of the action string.
+_ACTIVITY_DESCRIPTIONS: dict[str, str] = {
+    "capture_consent": "Consent granted",
+    "withdraw_consent": "Consent withdrawn",
+    "capture_recording_consent": "Recording consent captured",
+    "request_data_export": "Requested a data export",
+    "request_erasure": "Requested account deletion",
+    "register_push_token": "Registered this device for notifications",
+    "revoke_session": "Signed out a device",
+    "set_emergency_contact": "Updated emergency contact",
+    "log_vitals": "Logged vitals",
+    "health_sync": "Synced health data",
+    "book_consultation": "Booked a consultation",
+    "request_consultation": "Requested a consultation",
+    "cancel_consultation": "Cancelled a consultation",
+    "reschedule_consultation": "Rescheduled a consultation",
+    "confirm_payment": "Confirmed a payment",
+    "create_payment_order": "Started a payment",
+    "abha_link": "Linked an ABHA number",
+    "abha_create_confirm": "Created an ABHA number",
+    "finalize_lab_report": "Uploaded a lab report",
+}
+
+
+def _describe_activity(action: str) -> str:
+    mapped = _ACTIVITY_DESCRIPTIONS.get(action)
+    if mapped is not None:
+        return mapped
+    return action.replace("_", " ").capitalize()
+
+
+@router.get("/me/activity", response_model=ActivityListResponse)
+async def list_activity(
+    request: Request,
+    db: DbSession,
+    user: object = Depends(get_patient_user),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ActivityListResponse:
+    """The patient's own account activity history, derived from the audit log."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    rows, total = await audit_repo.list_activity_for_user(
+        db, user_id=user.id, page=page, page_size=page_size
+    )
+    await write_audit(
+        db, ctx, action="view_activity", resource_type="audit_log", allowed=True
+    )
+    pages = (total + page_size - 1) // page_size
+    return ActivityListResponse(
+        items=[
+            ActivityItem(
+                action=r.action,
+                description=_describe_activity(r.action),
+                resource_type=r.resource_type,
+                allowed=r.allowed,
+                ip_address=str(r.ip_address) if r.ip_address is not None else None,
+                timestamp=r.timestamp,
+            )
+            for r in rows
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+    )

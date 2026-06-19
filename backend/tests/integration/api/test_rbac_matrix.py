@@ -145,6 +145,19 @@ async def test_delete_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+async def test_activity_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/users/me/activity")
+    assert resp.status_code == 401
+
+
+async def test_activity_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/users/me/activity", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
 async def test_get_emergency_contact_no_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.get("/v1/users/me/emergency-contact")
     assert resp.status_code == 401

@@ -220,6 +220,15 @@ export default function ProfileScreen() {
                 hintColor={textSub}
                 onPress={() => router.push('/sessions')}
               />
+              <Separator isDark={isDark} />
+              <MenuItem
+                icon="shield-checkmark-outline"
+                tint="blue"
+                label="Activity"
+                labelColor={textPri}
+                hintColor={textSub}
+                onPress={() => router.push('/activity')}
+              />
             </View>
           </NeumorphCard>
         </View>

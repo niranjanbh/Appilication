@@ -124,3 +124,20 @@ class SessionListResponse(BaseModel):
 
 class SessionRevokeResponse(BaseModel):
     revoked: int
+
+
+class ActivityItem(BaseModel):
+    action: str
+    description: str
+    resource_type: str | None = None
+    allowed: bool
+    ip_address: str | None = None
+    timestamp: datetime
+
+
+class ActivityListResponse(BaseModel):
+    items: list[ActivityItem]
+    total: int
+    page: int
+    page_size: int
+    pages: int
