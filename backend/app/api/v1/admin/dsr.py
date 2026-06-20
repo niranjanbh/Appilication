@@ -15,7 +15,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
@@ -23,22 +22,9 @@ from app.core.permissions import Permission
 from app.core.rbac import permission_audit_fields, require_permission
 from app.db.enums import ActorRole, DataSubjectRequestStatus
 from app.models.consent import DataSubjectRequest
-from app.models.identity import User
+from app.repositories import dsr as dsr_repo
 
 router = APIRouter(tags=["admin-dsr"])
-
-_TRANSITIONS: dict[DataSubjectRequestStatus, tuple[DataSubjectRequestStatus, ...]] = {
-    DataSubjectRequestStatus.RECEIVED: (
-        DataSubjectRequestStatus.IN_PROGRESS,
-        DataSubjectRequestStatus.REJECTED,
-    ),
-    DataSubjectRequestStatus.IN_PROGRESS: (
-        DataSubjectRequestStatus.COMPLETED,
-        DataSubjectRequestStatus.REJECTED,
-    ),
-    DataSubjectRequestStatus.COMPLETED: (),
-    DataSubjectRequestStatus.REJECTED: (),
-}
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -89,6 +75,19 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 
+def _serialize(dsr: DataSubjectRequest, user_name: str) -> DsrAdminRead:
+    return DsrAdminRead(
+        id=dsr.id,
+        user_id=dsr.user_id,
+        user_name=user_name,
+        request_type=dsr.request_type.value,
+        status=dsr.status.value,
+        received_at=dsr.received_at,
+        completed_at=dsr.completed_at,
+        notes=dsr.notes,
+    )
+
+
 @router.get("/dsr", response_model=DsrListResponse)
 async def list_dsrs(
     request: Request,
@@ -98,16 +97,12 @@ async def list_dsrs(
     page_size: int = 50,
     status_filter: str | None = None,
 ) -> DsrListResponse:
-    from sqlalchemy import func
-
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
 
-    base = select(DataSubjectRequest, User.name).join(
-        User, User.id == DataSubjectRequest.user_id
-    )
+    sf: DataSubjectRequestStatus | None = None
     if status_filter:
         try:
             sf = DataSubjectRequestStatus(status_filter)
@@ -115,32 +110,11 @@ async def list_dsrs(
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_status_filter"
             ) from exc
-        base = base.where(DataSubjectRequest.status == sf)
 
-    count_result = await db.execute(
-        select(func.count()).select_from(base.subquery())
+    pairs, total = await dsr_repo.list_dsr_requests(
+        db, status_filter=sf, page=page, page_size=page_size
     )
-    total: int = count_result.scalar_one()
-
-    offset = (page - 1) * page_size
-    rows_result = await db.execute(
-        base.order_by(DataSubjectRequest.received_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
-    items = [
-        DsrAdminRead(
-            id=row.DataSubjectRequest.id,
-            user_id=row.DataSubjectRequest.user_id,
-            user_name=row.name,
-            request_type=row.DataSubjectRequest.request_type.value,
-            status=row.DataSubjectRequest.status.value,
-            received_at=row.DataSubjectRequest.received_at,
-            completed_at=row.DataSubjectRequest.completed_at,
-            notes=row.DataSubjectRequest.notes,
-        )
-        for row in rows_result
-    ]
+    items = [_serialize(dsr, user_name) for dsr, user_name in pairs]
 
     await write_audit(
         db, ctx, action="admin_list_dsr",
@@ -157,14 +131,10 @@ async def patch_dsr_status(
     db: DbSession,
     user: Annotated[object, Depends(require_permission(Permission.DSR_PROCESS))],
 ) -> DsrAdminRead:
-    from datetime import UTC, datetime
-
     from app.models.identity import User as UserModel
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
-
-    dsr = await db.get(DataSubjectRequest, dsr_id)
 
     try:
         target = DataSubjectRequestStatus(body.new_status)
@@ -173,43 +143,28 @@ async def patch_dsr_status(
             status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_status"
         ) from exc
 
-    if dsr is None or target not in _TRANSITIONS.get(dsr.status, ()):
+    # Distinguish 404 (missing) from 409 (invalid transition) before mutating.
+    pair = await dsr_repo.get_dsr_request(db, dsr_id)
+    if pair is None or not dsr_repo.is_valid_transition(pair[0].status, target):
         await write_audit(
             db, ctx, action="admin_dsr_status_change",
             resource_type="data_subject_request", resource_id=dsr_id,
             allowed=False, reason="not_found_or_invalid_transition",
         )
         await db.commit()
-        if dsr is None:
+        if pair is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
         raise HTTPException(status.HTTP_409_CONFLICT, detail="invalid_transition")
 
-    dsr.status = target
-    now = datetime.now(UTC)
-    if target == DataSubjectRequestStatus.COMPLETED:
-        dsr.completed_at = now
-    if body.note.strip():
-        stamp = now.strftime("%d %b %Y")
-        appended = f"[{stamp}] {body.note.strip()[:400]}"
-        dsr.notes = f"{dsr.notes}\n{appended}" if dsr.notes else appended
-    await db.flush()
-
-    # Need user name for response
-    user_row = await db.get(User, dsr.user_id)
-    user_name = user_row.name if user_row else "Unknown"
+    updated = await dsr_repo.update_dsr_status(
+        db, dsr_id, target, note=body.note
+    )
+    assert updated is not None  # validated above
+    dsr, user_name = updated
 
     await write_audit(
         db, ctx, action="admin_dsr_status_change",
         resource_type="data_subject_request", resource_id=dsr_id,
         allowed=True, log_metadata={"new_status": target.value},
     )
-    return DsrAdminRead(
-        id=dsr.id,
-        user_id=dsr.user_id,
-        user_name=user_name,
-        request_type=dsr.request_type.value,
-        status=dsr.status.value,
-        received_at=dsr.received_at,
-        completed_at=dsr.completed_at,
-        notes=dsr.notes,
-    )
+    return _serialize(dsr, user_name)

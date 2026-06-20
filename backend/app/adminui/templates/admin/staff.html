@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}Staff — Kyros Clinic Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Staff <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+  {% if admin and admin.role.value == 'super_admin' %}
+  <a href="/admin/staff/new" class="btn btn-primary">Add staff</a>
+  {% endif %}
+</div>
+
+<form class="filter-bar"
+      hx-get="/admin/staff"
+      hx-target="#staff-tbody"
+      hx-trigger="change, submit"
+      hx-push-url="true">
+  <div>
+    <label>Role</label>
+    <select name="role">
+      <option value="">All roles</option>
+      {% for r in roles %}
+      <option value="{{ r }}" {% if r == role %}selected{% endif %}>{{ r.replace('_', ' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <input type="hidden" name="page" value="1">
+  <button type="submit" class="btn btn-primary">Filter</button>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="staff-tbody">
+      {% include "admin/_staff_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<div class="pagination">
+  {% if page > 1 %}<a href="/admin/staff?role={{ role }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ ((total - 1) // page_size) + 1 }}</span>
+  {% if page * page_size < total %}<a href="/admin/staff?role={{ role }}&page={{ page + 1 }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

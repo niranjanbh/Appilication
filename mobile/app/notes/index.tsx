@@ -144,7 +144,7 @@ function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
             <Ionicons name="pencil-outline" size={16} color={t.textSub} />
           </HapticPressable>
           <HapticPressable onPress={handleDelete} accessibilityLabel="Delete note" style={styles.iconBtn}>
-            <Ionicons name="trash-outline" size={16} color={colors.criticalRed} />
+            <Ionicons name="trash-outline" size={16} color={colors.alert} />
           </HapticPressable>
         </View>
       </View>
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 6px 18px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 6px 18px ${withAlpha(colors.forest, 0.30)}`,
   },
 
   // Editor modal

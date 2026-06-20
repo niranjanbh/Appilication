@@ -68,7 +68,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[16],
     paddingBottom: spacing[8],
@@ -79,13 +79,13 @@ const styles = StyleSheet.create({
   wordmark: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h2,
-    color: colors.electricBlue,
+    color: colors.jade,
     fontWeight: '500',
   },
   headline: {
     fontFamily: fontFamily.display,
     fontSize: 40,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
     lineHeight: 48,
   },
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   pillarTitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
   pillarBody: {
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.navyDeep,
+    color: colors.ink,
     fontWeight: '700',
   },
   privacyNote: {

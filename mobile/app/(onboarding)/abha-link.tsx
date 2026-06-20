@@ -94,11 +94,11 @@ export default function AbhaLinkScreen() {
   const skipScale = useSharedValue(1);
   const skipAnim  = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
 
-  const bg       = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg       = isDark ? colors.forestInk     : colors.ivory;
+  const textPri  = isDark ? colors.ivoryText        : colors.ink;
+  const textSub  = isDark ? colors.stoneDim    : colors.stone;
   const cardBg   = isDark ? colors.forestSurface : colors.white;
-  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.ivory;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   // ── Success state ─────────────────────────────────────────────────────────
@@ -106,8 +106,8 @@ export default function AbhaLinkScreen() {
   if (success) {
     return (
       <View style={[styles.container, { backgroundColor: bg }]}>
-        <View style={[styles.successCard, { backgroundColor: cardBg, borderColor: colors.successGreen + '30' }]}>
-          <View style={[styles.successIconWrap, { backgroundColor: colors.successGreen }]}>
+        <View style={[styles.successCard, { backgroundColor: cardBg, borderColor: colors.jade + '30' }]}>
+          <View style={[styles.successIconWrap, { backgroundColor: colors.jade }]}>
             <Text style={styles.successIconText}>✓</Text>
           </View>
           <Text style={[styles.successTitle, { color: textPri }]}>ABHA linked</Text>
@@ -275,12 +275,12 @@ export default function AbhaLinkScreen() {
             onPress={() => { setCreateStep('aadhaar'); setOtp(''); setError(null); }}
             accessibilityLabel="Change Aadhaar number"
           >
-            <Text style={[styles.secondaryBtnText, { color: colors.electricBlue }]}>Change Aadhaar number</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.jade }]}>Change Aadhaar number</Text>
           </Pressable>
         </View>
       )}
 
-      {error && <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>}
+      {error && <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>}
 
       {/* Skip */}
       <Animated.View style={skipAnim}>
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
 
   stepRow: { gap: spacing[2] },
   progressTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  progressFill:  { height: 4, backgroundColor: colors.electricBlue, borderRadius: 2 },
+  progressFill:  { height: 4, backgroundColor: colors.jade, borderRadius: 2 },
   stepLabel: { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
 
   header: { gap: spacing[2] },
@@ -327,14 +327,14 @@ const styles = StyleSheet.create({
 
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
   },
   buttonBusy: { opacity: 0.70 },
-  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
 
   secondaryBtn:     { height: 48, alignItems: 'center', justifyContent: 'center' },
   secondaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },
@@ -360,10 +360,10 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.successGreen, 0.35)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.jade, 0.35)}`,
     marginBottom: spacing[2],
   },
-  successIconText: { fontSize: 36, color: colors.white },
+  successIconText: { fontSize: 36, color: colors.ivoryText },
   successTitle:    { fontFamily: fontFamily.display, fontSize: fontSize.h2, fontWeight: '600', textAlign: 'center' },
   successBody:     { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600', textAlign: 'center' },
   successNote:     { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', lineHeight: 22 },

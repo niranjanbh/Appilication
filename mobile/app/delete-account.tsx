@@ -82,10 +82,10 @@ export default function DeleteAccountScreen() {
 
         <GlassCard>
           <View style={styles.warningSection}>
-            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.criticalRed, 0.12) }]}>
-              <Ionicons name="warning" size={28} color={colors.criticalRed} />
+            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.alert, 0.12) }]}>
+              <Ionicons name="warning" size={28} color={colors.alert} />
             </View>
-            <Text style={[styles.warningTitle, { color: colors.criticalRed }]}>
+            <Text style={[styles.warningTitle, { color: colors.alert }]}>
               This is permanent
             </Text>
             <Text style={[styles.warningBody, { color: t.textSub }]}>
@@ -122,7 +122,7 @@ export default function DeleteAccountScreen() {
                 color: t.text,
                 backgroundColor: inputBg,
                 borderColor: confirmText.trim().toUpperCase() === CONFIRM_PHRASE
-                  ? colors.criticalRed
+                  ? colors.alert
                   : inputBorder,
               }]}
               value={confirmText}
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   confirmPhrase: {
     fontWeight: '700',
-    color: colors.criticalRed,
+    color: colors.alert,
   },
   confirmInput: {
     borderRadius: borderRadius.lg,
@@ -229,15 +229,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[2],
     height: 52,
-    backgroundColor: colors.criticalRed,
+    backgroundColor: colors.alert,
     borderRadius: borderRadius.xxl,
-    boxShadow: `0 6px 14px ${withAlpha(colors.criticalRed, 0.30)}`,
+    boxShadow: `0 6px 14px ${withAlpha(colors.alert, 0.30)}`,
   },
   btnDisabled: { opacity: 0.4 },
   deleteBtnText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '700',
   },
 });

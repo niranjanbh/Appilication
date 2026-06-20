@@ -41,9 +41,9 @@ function ChannelRow({ icon, iconBg, label, description, value, onToggle, disable
         disabled={disabled}
         trackColor={{
           false: colors.borderLight,
-          true:  colors.electricBlue + '80',
+          true:  colors.jade + '80',
         }}
-        thumbColor={value ? colors.electricBlue : colors.white}
+        thumbColor={value ? colors.jade : colors.white}
         ios_backgroundColor={colors.borderLight}
         accessibilityLabel={`${label} notifications ${value ? 'enabled' : 'disabled'}`}
       />
@@ -105,9 +105,9 @@ export default function NotificationPreferencesScreen() {
 
   const isPending = mutation.isPending;
 
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const iconBlue = isDark ? '#0F1E38' : '#EBF3FF';
@@ -120,7 +120,7 @@ export default function NotificationPreferencesScreen() {
       <View style={[styles.container, { backgroundColor: bg }]}>
         {isLoading ? (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.electricBlue} />
+            <ActivityIndicator size="large" color={colors.jade} />
           </View>
         ) : (
           <>

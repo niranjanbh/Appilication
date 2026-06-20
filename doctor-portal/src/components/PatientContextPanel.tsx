@@ -74,14 +74,14 @@ function NotesTab({ consultationId }: { consultationId: string }) {
   );
 }
 
-function PrescriptionsTab({ patientId }: { patientId: string }) {
-  const { data, isLoading } = useQuery<{ items: Prescription[] }>({
-    queryKey: ['doctor-patient-prescriptions', patientId],
-    queryFn: () => apiFetch<{ items: Prescription[] }>(`/v1/doctor/patients/${patientId}/prescriptions`),
+function PrescriptionsTab({ consultationId }: { consultationId: string }) {
+  const { data, isLoading } = useQuery<Prescription[]>({
+    queryKey: ['consultation-prescriptions', consultationId],
+    queryFn: () => apiFetch<Prescription[]>(`/v1/doctor/consultations/${consultationId}/prescriptions`),
   });
 
   if (isLoading) return <p className="font-body text-caption text-stone">Loading…</p>;
-  const prescriptions = data?.items ?? [];
+  const prescriptions = data ?? [];
   if (prescriptions.length === 0) return <p className="font-body text-caption text-stone">No prescriptions.</p>;
 
   return (
@@ -101,13 +101,13 @@ function PrescriptionsTab({ patientId }: { patientId: string }) {
 }
 
 function LabsTab({ patientId }: { patientId: string }) {
-  const { data, isLoading } = useQuery<{ items: LabReport[] }>({
+  const { data, isLoading } = useQuery<LabReport[]>({
     queryKey: ['doctor-patient-labs', patientId],
-    queryFn: () => apiFetch<{ items: LabReport[] }>(`/v1/doctor/patients/${patientId}/labs`),
+    queryFn: () => apiFetch<LabReport[]>(`/v1/doctor/patients/${patientId}/lab-reports`),
   });
 
   if (isLoading) return <p className="font-body text-caption text-stone">Loading…</p>;
-  const reports = data?.items ?? [];
+  const reports = data ?? [];
   if (reports.length === 0) return <p className="font-body text-caption text-stone">No lab reports.</p>;
 
   return (
@@ -210,7 +210,7 @@ export function PatientContextPanel({ consultationId, patientId, patientUserId, 
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === 'notes' && <NotesTab consultationId={consultationId} />}
         {activeTab === 'patient-notes' && <PatientNotesTab patientUserId={patientUserId} />}
-        {activeTab === 'prescriptions' && <PrescriptionsTab patientId={patientId} />}
+        {activeTab === 'prescriptions' && <PrescriptionsTab consultationId={consultationId} />}
         {activeTab === 'labs' && <LabsTab patientId={patientId} />}
         {activeTab === 'wearables' && <WearablesTab patientId={patientId} />}
       </div>

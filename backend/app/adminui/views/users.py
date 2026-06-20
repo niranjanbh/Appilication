@@ -15,6 +15,7 @@ from app.adminui.deps import (
     require_fresh_super_admin,
     require_super_admin_session,
 )
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, OtpResetChannel
 from app.db.session import get_db
@@ -65,7 +66,7 @@ async def user_list(
         template,
         {
             "admin": admin,
-            "users": users,
+            "users": admin_schemas.user_list(users),
             "total": total,
             "page": page,
             "search": search,
@@ -115,8 +116,12 @@ async def user_detail(
         "admin/user_detail.html",
         {
             "admin": admin,
-            "user": user,
-            "doctor": doctor,
+            "user": admin_schemas.AdminUserView.model_validate(user),
+            "doctor": (
+                admin_schemas.AdminDoctorView.model_validate(doctor)
+                if doctor is not None
+                else None
+            ),
             "patient": patient,
             "coordinators": coordinators,
             "reset_error": reset_errors.get(request.query_params.get("reset_error", "")),
@@ -289,7 +294,11 @@ async def user_edit_form(
     return templates.TemplateResponse(
         request,
         "admin/user_edit.html",
-        {"admin": admin, "user": user, "error": None},
+        {
+            "admin": admin,
+            "user": admin_schemas.AdminUserView.model_validate(user),
+            "error": None,
+        },
     )
 
 
@@ -339,7 +348,11 @@ async def user_edit_submit(
         return templates.TemplateResponse(
             request,
             "admin/user_edit.html",
-            {"admin": admin, "user": user, "error": error},
+            {
+                "admin": admin,
+                "user": admin_schemas.AdminUserView.model_validate(user),
+                "error": error,
+            },
             status_code=status.HTTP_200_OK,
         )
     return RedirectResponse(url=f"/admin/users/{user_id}", status_code=status.HTTP_302_FOUND)

@@ -42,9 +42,9 @@ export default function ConditionsScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
@@ -74,10 +74,10 @@ export default function ConditionsScreen() {
                 styles.chip,
                 {
                   backgroundColor: active
-                    ? colors.navyDeep
+                    ? colors.forest
                     : isDark ? colors.forestSurface : colors.white,
                   borderColor: active
-                    ? colors.navyDeep
+                    ? colors.forest
                     : isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight,
                 },
               ]}
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: 4,
-    backgroundColor: colors.electricBlue,
+    backgroundColor: colors.jade,
     borderRadius: 2,
   },
   stepLabel: {
@@ -182,17 +182,17 @@ const styles = StyleSheet.create({
   footer: { marginTop: 'auto' as never },
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
 });

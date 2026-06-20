@@ -247,6 +247,48 @@ async def list_patient_consultations_restricted(
     return [(row[0], row[1]) for row in result]
 
 
+async def get_patient_intake_responses(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    patient_id: uuid.UUID,
+) -> dict[str, object] | None:
+    """Return the patient's self-reported intake answers, assigned patients only.
+
+    Sourced from the booking inquiry the patient submitted at sign-up (matched by
+    the patient user's phone). These are the patient's own triage/scheduling
+    answers — the same operational data already shown on the inquiries queue —
+    never clinical content (lab values, prescriptions, doctor notes).
+
+    Returns None when the patient is not assigned to this coordinator; returns an
+    empty dict when no intake answers are on file.
+    """
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if patient_id not in assigned:
+        return None
+
+    phone = await db.scalar(
+        select(User.phone)
+        .join(Patient, Patient.user_id == User.id)
+        .where(Patient.id == patient_id)
+    )
+    if not phone:
+        return {}
+
+    inquiry = await db.scalar(
+        select(BookingInquiry)
+        .where(
+            BookingInquiry.phone == phone,
+            BookingInquiry.deleted_at.is_(None),
+        )
+        .order_by(BookingInquiry.created_at.desc())
+        .limit(1)
+    )
+    if inquiry is None or not inquiry.intake_responses:
+        return {}
+    return dict(inquiry.intake_responses)
+
+
 # ── Scheduling ─────────────────────────────────────────────────────────────────
 
 
@@ -494,6 +536,105 @@ async def reschedule_consultation_for_coordinator(
         .returning(Consultation)
     )
     return updated.scalar_one_or_none()
+
+
+async def confirm_intake_consultation(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    consultation_id: uuid.UUID,
+    note: str | None = None,
+) -> Consultation | None:
+    """Confirm a SCHEDULED intake consultation for an assigned patient.
+
+    Returns the updated consultation, or None if the consultation is not found or
+    not one of this coordinator's assigned patients (caller raises 404).
+
+    An optional coordinator note is recorded as an operational PatientInteraction
+    (channel='note') rather than written onto a clinical/cancellation field — it is
+    handover context for the doctor, never clinical content.
+    """
+    from sqlalchemy import update
+
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if not assigned:
+        return None
+
+    consultation = await db.scalar(
+        select(Consultation).where(
+            Consultation.id == consultation_id,
+            Consultation.patient_id.in_(assigned),
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    if consultation is None:
+        return None
+
+    updated = await db.execute(
+        update(Consultation)
+        .where(Consultation.id == consultation_id)
+        .values(
+            status=ConsultationStatus.CONFIRMED,
+            updated_at=datetime.now(UTC),
+        )
+        .returning(Consultation)
+    )
+    result = updated.scalar_one_or_none()
+    if result is None:
+        return None
+
+    note_text = (note or "").strip()
+    if note_text:
+        db.add(
+            PatientInteraction(
+                coordinator_id=coordinator_id,
+                patient_id=consultation.patient_id,
+                channel="note",
+                summary=f"Intake confirmed — coordinator note: {note_text[:980]}",
+            )
+        )
+        await db.flush()
+
+    return result
+
+
+async def escalate_intake_consultation(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    consultation_id: uuid.UUID,
+    reason: str,
+) -> tuple[Consultation, PatientInteraction] | None:
+    """Persist an escalation for an assigned patient's consultation.
+
+    Records a PatientInteraction (channel='escalation') as the durable artifact —
+    the email alert is best-effort on top. The reason is operational handover text,
+    never clinical content. Returns None if the consultation is not found or not one
+    of this coordinator's assigned patients (caller raises 404).
+    """
+    assigned = await _get_assigned_ids(db, coordinator_id)
+    if not assigned:
+        return None
+
+    consultation = await db.scalar(
+        select(Consultation).where(
+            Consultation.id == consultation_id,
+            Consultation.patient_id.in_(assigned),
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    if consultation is None:
+        return None
+
+    interaction = PatientInteraction(
+        coordinator_id=coordinator_id,
+        patient_id=consultation.patient_id,
+        channel="escalation",
+        summary=f"Escalated to super admin: {reason[:980]}",
+    )
+    db.add(interaction)
+    await db.flush()
+    return consultation, interaction
 
 
 # ── Follow-ups ──────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useThemePreference } from '../lib/theme-context';
 import { listSessions, revokeSession, type Session } from '../lib/api/sessions';
-import { borderRadius, colors, fontFamily, fontSize, spacing } from '../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, shadow, spacing } from '../lib/design-tokens';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -46,10 +46,10 @@ function SessionCard({
   busy: boolean;
   onRevoke: () => void;
 }) {
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,61,46,0.06)';
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim  : colors.stone;
 
   return (
     <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
@@ -59,8 +59,8 @@ function SessionCard({
             {deviceLabel(session.user_agent)}
           </Text>
           {session.is_current && (
-            <View style={[styles.currentPill, { backgroundColor: colors.successGreen + '18' }]}>
-              <Text style={[styles.currentText, { color: colors.successGreen }]}>This device</Text>
+            <View style={[styles.currentPill, { backgroundColor: colors.jade + '18' }]}>
+              <Text style={[styles.currentText, { color: colors.jade }]}>This device</Text>
             </View>
           )}
         </View>
@@ -76,7 +76,7 @@ function SessionCard({
           accessibilityLabel={`Sign out ${deviceLabel(session.user_agent)}`}
           style={[styles.revokeBtn, busy && styles.disabled]}
         >
-          <Text style={[styles.revokeText, { color: colors.criticalRed }]}>Sign out</Text>
+          <Text style={[styles.revokeText, { color: colors.alert }]}>Sign out</Text>
         </Pressable>
       )}
     </View>
@@ -138,20 +138,20 @@ export default function SessionsScreen() {
     );
   }, [fetchSessions]);
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg      = isDark ? colors.forestInk : colors.ivory;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim  : colors.stone;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchSessions()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -161,7 +161,7 @@ export default function SessionsScreen() {
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.electricBlue} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
     >
       {sessions.length === 0 ? (
         <View style={styles.emptyState}>
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     borderWidth: 1,
     marginBottom: spacing[2],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
+    boxShadow: shadow.sm,
   },
   cardBody: { flex: 1, gap: spacing[1] },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },

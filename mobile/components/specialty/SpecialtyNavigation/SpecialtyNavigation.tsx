@@ -183,7 +183,7 @@ const card = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ivoryText,
   },
 });
 

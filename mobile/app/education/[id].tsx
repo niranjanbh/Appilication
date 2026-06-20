@@ -23,7 +23,7 @@ function MarkdownLine({ line, textPri }: { line: string; textPri: string; textSu
   if (line.startsWith('- ') || line.startsWith('* ')) {
     return (
       <View style={md.bulletRow}>
-        <Text style={[md.bullet, { color: colors.electricBlue }]}>•</Text>
+        <Text style={[md.bullet, { color: colors.jade }]}>•</Text>
         <Text style={[md.bulletText, { color: textPri }]}>{line.slice(2)}</Text>
       </View>
     );
@@ -98,21 +98,21 @@ export default function EducationContentScreen() {
   const markScale = useSharedValue(1);
   const markAnim  = useAnimatedStyle(() => ({ transform: [{ scale: markScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.jade} /></View>;
   }
   if (error || !content) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Content unavailable.'}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Content unavailable.'}</Text>
         <Pressable onPress={() => router.back()} style={{ marginTop: spacing[4] }} accessibilityLabel="Go back">
-          <Text style={[styles.backLink, { color: colors.electricBlue }]}>← Back</Text>
+          <Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text>
         </Pressable>
       </View>
     );
@@ -126,15 +126,15 @@ export default function EducationContentScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={[styles.typePill, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-          <Text style={[styles.typePillText, { color: colors.electricBlue }]}>{content.content_type.toUpperCase()}</Text>
+        <View style={[styles.typePill, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
+          <Text style={[styles.typePillText, { color: colors.jade }]}>{content.content_type.toUpperCase()}</Text>
         </View>
         <Text style={[styles.title, { color: textPri }]}>{content.title}</Text>
         {content.condition_categories.length > 0 && (
           <View style={styles.tagRow}>
             {content.condition_categories.map(cat => (
-              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-                <Text style={[styles.tagText, { color: colors.electricBlue }]}>{cat.replace('_', ' ')}</Text>
+              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
+                <Text style={[styles.tagText, { color: colors.jade }]}>{cat.replace('_', ' ')}</Text>
               </View>
             ))}
           </View>
@@ -143,7 +143,7 @@ export default function EducationContentScreen() {
 
       {/* AI disclosure */}
       {content.ai_disclosure && (
-        <View style={[styles.disclosureBanner, { backgroundColor: colors.warningAmber + '15', borderColor: colors.warningAmber + '40' }]}>
+        <View style={[styles.disclosureBanner, { backgroundColor: colors.saffron + '15', borderColor: colors.saffron + '40' }]}>
           <Text style={[styles.disclosureText, { color: textPri }]}>
             This content was AI-assisted and has been reviewed by a qualified doctor before publication.
           </Text>
@@ -163,7 +163,7 @@ export default function EducationContentScreen() {
           <MarkdownView content={content.body_md} textPri={textPri} textSub={textSub} />
         ) : (isVideo || content.content_url) ? (
           <View style={styles.mediaCard}>
-            <View style={[styles.mediaIconWrap, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
+            <View style={[styles.mediaIconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
               <Text style={styles.mediaIcon}>{isVideo ? '▶' : '📑'}</Text>
             </View>
             <Text style={[styles.mediaLabel, { color: textSub }]}>{isVideo ? 'Video content' : 'PDF document'}</Text>
@@ -190,7 +190,7 @@ export default function EducationContentScreen() {
             disabled={markedRead || markingRead}
             style={[
               styles.readBtn,
-              markedRead ? { backgroundColor: colors.successGreen } : { backgroundColor: colors.navyDeep },
+              markedRead ? { backgroundColor: colors.jade } : { backgroundColor: colors.forest },
               (markedRead || markingRead) && styles.readBtnDone,
             ]}
             accessibilityLabel="Mark as read"
@@ -240,20 +240,20 @@ const styles = StyleSheet.create({
   mediaBtn: {
     height: 48,
     paddingHorizontal: spacing[6],
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mediaBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.white, fontWeight: '600' },
+  mediaBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.ivoryText, fontWeight: '600' },
 
   readBtn: {
     height: 56,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.25)}`,
   },
   readBtnDone: { opacity: 0.70, boxShadow: '0 0 0 rgba(0,0,0,0)' },
-  readBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  readBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
 });

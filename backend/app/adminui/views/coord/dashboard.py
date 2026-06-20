@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_coord_session
+from app.adminui.schemas import coordinator as coord_schemas
 from app.db.session import get_db
 from app.repositories import coordinator_portal as coord_repo
 
@@ -34,7 +35,7 @@ async def dashboard(
             "coord/dashboard.html",
             {"coord": coord, "error": "Coordinator profile not found.",
              "today_consultations": [], "intake_queue": [],
-             "assigned_count": 0, "pending_intake": 0},
+             "assigned_count": 0, "pending_intake": 0, "pending_followups": 0},
         )
 
     today_consultations = await coord_repo.list_today_consultations(
@@ -45,6 +46,7 @@ async def dashboard(
     )
     assigned_count = await coord_repo.count_assigned_patients(db, coordinator.id)
     pending_intake = await coord_repo.count_pending_intake(db, coordinator.id)
+    pending_followups = await coord_repo.count_pending_followups(db, coordinator.id)
 
     return templates.TemplateResponse(
         request,
@@ -52,10 +54,13 @@ async def dashboard(
         {
             "coord": coord,
             "coordinator": coordinator,
-            "today_consultations": today_consultations,
-            "intake_queue": intake_queue,
+            "today_consultations": coord_schemas.consultation_user_user_triples(
+                today_consultations
+            ),
+            "intake_queue": coord_schemas.consultation_user_pairs(intake_queue),
             "assigned_count": assigned_count,
             "pending_intake": pending_intake,
+            "pending_followups": pending_followups,
             "error": None,
         },
     )

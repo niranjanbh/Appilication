@@ -32,8 +32,8 @@ const CATEGORY_ORDER = ['medication', 'exercise', 'diet', 'lifestyle', 'follow_u
 function priorityBadge(priority: string, isDark: boolean) {
   if (priority === 'normal') return null;
   const isHigh = priority === 'high';
-  const bg = isHigh ? colors.criticalRed + '15' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
-  const color = isHigh ? colors.criticalRed : (isDark ? colors.stoneDim : colors.coolGray);
+  const bg = isHigh ? colors.alert + '15' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
+  const color = isHigh ? colors.alert : (isDark ? colors.stoneDim : colors.stone);
   return (
     <View style={[badge.container, { backgroundColor: bg }]}>
       <Text style={[badge.text, { color }]}>{priority}</Text>
@@ -139,22 +139,22 @@ export default function CarePlanDetailScreen() {
 
   useEffect(() => { void fetchPlan(); }, [fetchPlan]);
 
-  const bg = isDark ? colors.midnight : colors.skyMist;
-  const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
-  const cardBg = isDark ? colors.nightSurface : colors.white;
+  const bg = isDark ? colors.forestInk : colors.ivory;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
+  const cardBg = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const divider = isDark ? 'rgba(255,255,255,0.08)' : colors.borderLight;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
   if (error || !plan) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Care plan not found.'}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Care plan not found.'}</Text>
         <Pressable onPress={() => router.back()}>
-          <Text style={[styles.backLink, { color: colors.electricBlue }]}>← Back</Text>
+          <Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text>
         </Pressable>
       </View>
     );
@@ -168,9 +168,9 @@ export default function CarePlanDetailScreen() {
       <CaptureGuard />
 
       {/* Clinic letterhead */}
-      <View style={[styles.letterhead, { borderBottomColor: isDark ? colors.electricBlue + '40' : colors.navyDeep }]}>
+      <View style={[styles.letterhead, { borderBottomColor: isDark ? colors.jade + '40' : colors.forest }]}>
         <View>
-          <Text style={[styles.clinicName, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>Kyros Clinic</Text>
+          <Text style={[styles.clinicName, { color: isDark ? colors.jade : colors.ink }]}>Kyros Clinic</Text>
           <Text style={[styles.clinicSub, { color: textSub }]}>Care Plan</Text>
         </View>
         <View style={styles.clinicRight}>
@@ -181,8 +181,8 @@ export default function CarePlanDetailScreen() {
       </View>
 
       {/* Status chip */}
-      <View style={[styles.statusChip, { backgroundColor: isActive ? colors.successGreen + '15' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }]}>
-        <Text style={[styles.statusText, { color: isActive ? colors.successGreen : textSub }]}>
+      <View style={[styles.statusChip, { backgroundColor: isActive ? colors.jade + '15' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') }]}>
+        <Text style={[styles.statusText, { color: isActive ? colors.jade : textSub }]}>
           {isActive ? '● Active' : '○ Completed'}
         </Text>
       </View>
@@ -190,8 +190,8 @@ export default function CarePlanDetailScreen() {
       {/* Title & condition */}
       <Text style={[styles.planTitle, { color: textPri }]}>{plan.title}</Text>
       {plan.condition_category && (
-        <View style={[styles.condBadge, { backgroundColor: isDark ? colors.electricBlue + '15' : colors.navyDeep + '10' }]}>
-          <Text style={[styles.condText, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>
+        <View style={[styles.condBadge, { backgroundColor: isDark ? colors.jade + '15' : colors.forest + '10' }]}>
+          <Text style={[styles.condText, { color: isDark ? colors.jade : colors.ink }]}>
             {plan.condition_category.replace(/_/g, ' ')}
           </Text>
         </View>
@@ -217,7 +217,7 @@ export default function CarePlanDetailScreen() {
       {/* Items grouped by category */}
       {groups.map(group => (
         <View key={group.category} style={styles.categorySection}>
-          <Text style={[styles.categoryHeader, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>
+          <Text style={[styles.categoryHeader, { color: isDark ? colors.jade : colors.ink }]}>
             {CATEGORY_LABELS[group.category] ?? group.category}
           </Text>
           {group.items.map(item => (

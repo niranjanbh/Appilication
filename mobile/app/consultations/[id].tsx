@@ -12,7 +12,18 @@ import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
+import {
+  confirmConsultationPayment,
+  type RazorpayCheckoutResult,
+} from '../../lib/api/payments';
+import { useAuth } from '../../lib/auth/context';
+import { RazorpayCheckout } from '../../components/ui/RazorpayCheckout';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+
+// Razorpay publishable key — substituted at bundle time by Expo. The secret
+// stays server-side; this key is safe to ship in the client bundle.
+declare const process: { env: Record<string, string | undefined> };
+const RAZORPAY_KEY_ID = process.env['EXPO_PUBLIC_RAZORPAY_KEY_ID'] ?? '';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -71,13 +82,13 @@ const STATUS_LABEL: Record<ConsultationStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
-  requested:   colors.warningAmber,
-  scheduled:   colors.navyDeep,
-  confirmed:   colors.electricBlue,
-  in_progress: colors.warningAmber,
-  completed:   colors.successGreen,
-  cancelled:   colors.criticalRed,
-  no_show:     colors.criticalRed,
+  requested:   colors.saffron,
+  scheduled:   colors.forest,
+  confirmed:   colors.jade,
+  in_progress: colors.saffron,
+  completed:   colors.jade,
+  cancelled:   colors.alert,
+  no_show:     colors.alert,
 };
 
 function formatTimeWindow(w: string | null): string {
@@ -121,12 +132,17 @@ export default function ConsultationDetailScreen() {
   const { id }   = useLocalSearchParams<{ id: string }>();
   const router   = useRouter();
   const isDark   = useThemePreference().colorScheme === 'dark';
+  const auth     = useAuth();
+  const me       = auth.state.status === 'authenticated' ? auth.state.user : null;
 
   const [consultation, setConsultation] = useState<Consultation | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [paying,     setPaying]     = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+
+  // Razorpay checkout WebView visibility.
+  const [checkoutVisible, setCheckoutVisible] = useState(false);
 
   // Reschedule panel state
   const [showReschedule, setShowReschedule] = useState(false);
@@ -183,19 +199,63 @@ export default function ConsultationDetailScreen() {
     );
   }, [id, fetchDetail, isRequest]);
 
-  // Pay to confirm once a coordinator has assigned a doctor + slot. Razorpay
-  // checkout runs via the embedded WebView; on success the order details are
-  // posted back and verified through the confirm-payment endpoint.
+  // Pay to confirm once a coordinator has assigned a doctor + slot. The
+  // patient confirms the amount, then Razorpay checkout runs inside the
+  // embedded WebView.
   const handlePay = useCallback(() => {
     if (!consultation?.payment) return;
     const order = consultation.payment;
-    setPaying(true);
+    if (!RAZORPAY_KEY_ID) {
+      Alert.alert('Payments unavailable', 'Payment is not configured. Please try again later or contact support.');
+      return;
+    }
     Alert.alert(
       'Confirm your appointment',
-      `Amount: ₹${(order.amount_paise / 100).toFixed(0)}\n\nYou'll be redirected to Razorpay to complete payment. Your appointment is confirmed once payment succeeds.\n\nOrder: ${order.razorpay_order_id}`,
-      [{ text: 'OK', onPress: () => setPaying(false) }],
+      `You'll pay ${formatRupees(order.amount_paise)} via Razorpay. Your appointment is confirmed once payment succeeds.`,
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Proceed to pay', onPress: () => setCheckoutVisible(true) },
+      ],
     );
   }, [consultation]);
+
+  // Razorpay reported a signed, successful payment. The confirm-payment
+  // endpoint verifies the signature server-side, captures the payment, and
+  // transitions the consultation to 'confirmed' in one atomic call (it is
+  // idempotent on an already-confirmed consultation).
+  const handleCheckoutSuccess = useCallback(async (result: RazorpayCheckoutResult) => {
+    setCheckoutVisible(false);
+    if (!consultation?.payment) return;
+    setPaying(true);
+    try {
+      await confirmConsultationPayment(consultation.id, result);
+      await fetchDetail();
+      Alert.alert('Payment successful', 'Your appointment is confirmed. We will see you at your scheduled time.');
+    } catch {
+      // Payment may have been captured even if confirmation failed; tell the
+      // patient not to retry blindly.
+      Alert.alert(
+        'Payment received, confirmation pending',
+        'Your payment went through but we could not confirm the appointment automatically. Please refresh in a moment or contact support — do not pay again.',
+      );
+    } finally {
+      setPaying(false);
+    }
+  }, [consultation, fetchDetail]);
+
+  const handleCheckoutFailure = useCallback((err: { code: string; description: string }) => {
+    setCheckoutVisible(false);
+    setPaying(false);
+    Alert.alert(
+      'Payment failed',
+      err.description || 'Your payment could not be completed. No amount was charged. Please try again.',
+    );
+  }, []);
+
+  const handleCheckoutDismiss = useCallback(() => {
+    setCheckoutVisible(false);
+    setPaying(false);
+  }, []);
 
   const openReschedule = useCallback(async () => {
     if (!consultation) return;
@@ -258,23 +318,23 @@ export default function ConsultationDetailScreen() {
   const cancelScale = useSharedValue(1);
   const cancelAnim  = useAnimatedStyle(() => ({ transform: [{ scale: cancelScale.value }] }));
 
-  const bg        = isDark ? colors.midnight     : colors.skyMist;
-  const textPri   = isDark ? colors.white        : colors.navyDeep;
-  const textSub   = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg    = isDark ? colors.nightSurface : colors.white;
+  const bg        = isDark ? colors.forestInk     : colors.ivory;
+  const textPri   = isDark ? colors.ivoryText        : colors.ink;
+  const textSub   = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg    = isDark ? colors.forestSurface : colors.white;
   const cardBdr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const divider   = isDark ? 'rgba(255,255,255,0.06)' : colors.borderLight;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error || !consultation) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Consultation not found.'}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Consultation not found.'}</Text>
         <Pressable onPress={() => router.back()} accessibilityLabel="Go back">
-          <Text style={[styles.link, { color: colors.electricBlue }]}>Go back</Text>
+          <Text style={[styles.link, { color: colors.jade }]}>Go back</Text>
         </Pressable>
       </View>
     );
@@ -306,7 +366,7 @@ export default function ConsultationDetailScreen() {
 
       {/* Pending-assignment explainer */}
       {consultation.status === 'requested' && (
-        <View style={[styles.infoBanner, { backgroundColor: colors.warningAmber + '14', borderColor: colors.warningAmber + '40' }]}>
+        <View style={[styles.infoBanner, { backgroundColor: colors.saffron + '14', borderColor: colors.saffron + '40' }]}>
           <Text style={[styles.infoBannerText, { color: textPri }]}>
             A care coordinator is reviewing your request and will assign the right specialist. You'll be notified to confirm and pay once a doctor and time are set.
           </Text>
@@ -376,11 +436,11 @@ export default function ConsultationDetailScreen() {
       {/* Reschedule */}
       {canReschedule && !showReschedule && (
         <Pressable
-          style={[styles.secondaryBtn, { borderColor: colors.electricBlue + '60' }]}
+          style={[styles.secondaryBtn, { borderColor: colors.jade + '60' }]}
           onPress={openReschedule}
           accessibilityLabel="Reschedule this consultation"
         >
-          <Text style={[styles.secondaryBtnText, { color: colors.electricBlue }]}>Reschedule appointment</Text>
+          <Text style={[styles.secondaryBtnText, { color: colors.jade }]}>Reschedule appointment</Text>
         </Pressable>
       )}
 
@@ -389,10 +449,10 @@ export default function ConsultationDetailScreen() {
         <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr, padding: spacing[5] }]}>
           <Text style={[styles.panelTitle, { color: textPri }]}>Pick a new time</Text>
 
-          {slotsLoading && <ActivityIndicator color={colors.electricBlue} style={{ marginVertical: spacing[4] }} />}
+          {slotsLoading && <ActivityIndicator color={colors.jade} style={{ marginVertical: spacing[4] }} />}
 
           {slotsError && (
-            <Text style={[styles.errorText, { color: colors.criticalRed }]}>{slotsError}</Text>
+            <Text style={[styles.errorText, { color: colors.alert }]}>{slotsError}</Text>
           )}
 
           {!slotsLoading && !slotsError && slots.length === 0 && (
@@ -433,18 +493,37 @@ export default function ConsultationDetailScreen() {
       {canCancel && (
         <Animated.View style={cancelAnim}>
           <Pressable
-            style={[styles.cancelBtn, { borderColor: colors.criticalRed + '60' }, cancelling && styles.disabled]}
+            style={[styles.cancelBtn, { borderColor: colors.alert + '60' }, cancelling && styles.disabled]}
             onPress={handleCancel}
             onPressIn={() => { cancelScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
             onPressOut={() => { cancelScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
             disabled={cancelling}
             accessibilityLabel="Cancel this consultation"
           >
-            <Text style={[styles.cancelBtnText, { color: colors.criticalRed }]}>
+            <Text style={[styles.cancelBtnText, { color: colors.alert }]}>
               {cancelling ? 'Cancelling…' : (isRequest ? 'Withdraw request' : 'Cancel appointment')}
             </Text>
           </Pressable>
         </Animated.View>
+      )}
+
+      {/* Razorpay checkout (mounted only when paying) */}
+      {consultation.payment && (
+        <RazorpayCheckout
+          visible={checkoutVisible}
+          orderId={consultation.payment.razorpay_order_id}
+          amountPaise={consultation.payment.amount_paise}
+          currency={consultation.payment.currency}
+          keyId={RAZORPAY_KEY_ID}
+          prefill={{
+            name: me?.name ?? undefined,
+            email: me?.email ?? undefined,
+            contact: me?.phone ?? undefined,
+          }}
+          onSuccess={handleCheckoutSuccess}
+          onFailure={handleCheckoutFailure}
+          onDismiss={handleCheckoutDismiss}
+        />
       )}
     </ScrollView>
   );
@@ -500,12 +579,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[2],
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   joinBtnIcon: { fontSize: 20 },
-  joinBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  joinBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },
 
   cancelBtn: {
     height: 52,

@@ -56,10 +56,10 @@ export function GoogleSignInButton({ onToken, onError, busy }: Props) {
       accessibilityLabel="Sign in with Google"
     >
       {busy ? (
-        <ActivityIndicator color={colors.navyDeep} size="small" />
+        <ActivityIndicator color={colors.ink} size="small" />
       ) : (
         <View style={styles.row}>
-          <Ionicons name="logo-google" size={20} color={colors.navyDeep} />
+          <Ionicons name="logo-google" size={20} color={colors.ink} />
           <Text style={styles.text}>Sign in with Google</Text>
         </View>
       )}
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.navyDeep,
+    color: colors.ink,
     fontWeight: '600',
   },
 });

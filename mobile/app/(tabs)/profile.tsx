@@ -85,10 +85,10 @@ export default function ProfileScreen() {
     setPreference(val ? 'dark' : 'light');
   }
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
 
   return (
     <View style={[styles.flex, { backgroundColor: bg }]}>
@@ -103,7 +103,7 @@ export default function ProfileScreen() {
         {user && (
           <GlassCard>
             <View style={styles.identityRow}>
-              <LinearGradient colors={[colors.navyMid, colors.navyDeep]} style={styles.avatar}>
+              <LinearGradient colors={[colors.jade, colors.forest]} style={styles.avatar}>
                 <Text style={styles.avatarText}>{initials}</Text>
               </LinearGradient>
               <View style={styles.identityInfo}>
@@ -111,8 +111,8 @@ export default function ProfileScreen() {
                 <Text style={[styles.userDetail, { color: textSub }]}>
                   {user.phone ?? user.email ?? 'Kyros patient'}
                 </Text>
-                <View style={[styles.planBadge, { backgroundColor: isDark ? colors.nightElev : colors.iceBlue }]}>
-                  <Text style={[styles.planBadgeText, { color: colors.electricBlue }]}>
+                <View style={[styles.planBadge, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
+                  <Text style={[styles.planBadgeText, { color: colors.jade }]}>
                     Free plan
                   </Text>
                 </View>
@@ -260,8 +260,8 @@ export default function ProfileScreen() {
                 icon="warning-outline"
                 tint="amber"
                 label="Delete my account"
-                labelColor={colors.criticalRed}
-                hintColor={colors.criticalRed}
+                labelColor={colors.alert}
+                hintColor={colors.alert}
                 onPress={() => router.push('/delete-account')}
                 accessibilityLabel="Delete my account"
               />
@@ -309,12 +309,12 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 4px 8px ${withAlpha(colors.forest, 0.25)}`,
   },
   avatarText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '700',
   },
   identityInfo: { flex: 1, gap: spacing[1] },

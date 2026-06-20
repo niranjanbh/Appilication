@@ -20,15 +20,10 @@
         <div class="nmc">{{ doctor.nmc_registration_number }}</div>
         <div style="margin-top:8px;">
           <a href="/admin/doctors/{{ doctor.id }}" class="btn btn-secondary btn-sm">View</a>
-          {% if stage == 'applied' %}
-          <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify" style="display:inline;">
+          {% if stage != 'active' %}
+          <form method="POST" action="/admin/doctors/{{ doctor.id }}/advance" style="display:inline;">
             {{ csrf_field(request) }}
-            <button type="submit" class="btn btn-primary btn-sm">Verify</button>
-          </form>
-          {% elif stage == 'verified' or stage == 'onboarding' %}
-          <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate" style="display:inline;">
-            {{ csrf_field(request) }}
-            <button type="submit" class="btn btn-primary btn-sm">Activate</button>
+            <button type="submit" class="btn btn-primary btn-sm">Advance</button>
           </form>
           {% endif %}
         </div>

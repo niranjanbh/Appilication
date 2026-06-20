@@ -11,7 +11,13 @@
   <td style="color:var(--stone);">{{ 'Yes' if item.ai_disclosure else 'No' }}</td>
   <td>
     <div style="display:flex;gap:6px;">
-      {% if item.status.value != 'published' %}
+      {% if item.status.value == 'draft' %}
+      <form method="POST" action="/admin/content/{{ item.id }}/submit-for-review">
+        {{ csrf_field(request) }}
+        <button type="submit" class="btn btn-primary btn-sm">Submit for review</button>
+      </form>
+      {% endif %}
+      {% if admin and admin.role.value == 'super_admin' and item.status.value == 'approved' %}
       <form method="POST" action="/admin/content/{{ item.id }}/publish">
         {{ csrf_field(request) }}
         <button type="submit" class="btn btn-primary btn-sm">Publish</button>

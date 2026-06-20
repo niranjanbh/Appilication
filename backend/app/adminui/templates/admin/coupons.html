@@ -1,0 +1,136 @@
+{% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
+{% block title %}Coupons — Kyros Clinic Admin{% endblock %}
+{% block content %}
+{% set is_super = admin and admin.role.value == 'super_admin' %}
+<div class="page-header">
+  <h2>Coupons <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+</div>
+
+{% if success == 'created' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Coupon created.</div>
+{% elif success == 'deactivated' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Coupon deactivated.</div>
+{% endif %}
+{% if error %}
+<div class="alert-bar alert-bar-error" style="margin-bottom:14px;">
+  {% if error == 'duplicate_code' %}A coupon with that code already exists.
+  {% elif error == 'invalid_value' %}Discount value must be a positive number.
+  {% elif error == 'invalid_code' %}Please enter a coupon code.
+  {% elif error == 'invalid_valid_from' %}Please provide a valid start date.
+  {% else %}Could not save coupon ({{ error }}).{% endif %}
+</div>
+{% endif %}
+
+<form class="filter-bar" method="GET" action="/admin/coupons">
+  <div>
+    <label>Status</label>
+    <select name="active_only" onchange="this.form.submit()">
+      <option value="" {% if not active_only %}selected{% endif %}>All</option>
+      <option value="1" {% if active_only %}selected{% endif %}>Active only</option>
+    </select>
+  </div>
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Code</th><th>Discount</th><th>Min order</th><th>Redemptions</th>
+        <th>Valid from</th><th>Valid until</th><th>Status</th>{% if is_super %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in items %}
+      <tr>
+        <td>
+          <strong style="font-size:13px;">{{ c.code }}</strong>
+          {% if c.description %}<div style="font-size:11px;color:var(--stone);">{{ c.description }}</div>{% endif %}
+        </td>
+        <td>
+          {% if c.discount_type == 'percent' %}{{ c.discount_value }}%{% if c.max_discount_paise %} <span style="font-size:11px;color:var(--stone);">(max ₹{{ '%.2f' | format(c.max_discount_paise / 100) }})</span>{% endif %}
+          {% else %}₹{{ '%.2f' | format(c.discount_value / 100) }}{% endif %}
+        </td>
+        <td style="color:var(--stone);">₹{{ '%.2f' | format(c.min_order_paise / 100) }}</td>
+        <td style="color:var(--stone);">{{ c.redemption_count }}{% if c.max_redemptions %} / {{ c.max_redemptions }}{% endif %}</td>
+        <td style="color:var(--stone);font-size:12px;">{{ c.valid_from.strftime('%d %b %Y') if c.valid_from else '—' }}</td>
+        <td style="color:var(--stone);font-size:12px;">{{ c.valid_until.strftime('%d %b %Y') if c.valid_until else '—' }}</td>
+        <td>
+          {% if c.active %}<span class="chip chip-active">Active</span>
+          {% else %}<span class="chip chip-inactive">Inactive</span>{% endif %}
+        </td>
+        {% if is_super %}
+        <td>
+          {% if c.active %}
+          <form method="POST" action="/admin/coupons/{{ c.id }}/deactivate">
+            {{ csrf_field(request) }}
+            <button type="submit" class="btn btn-danger btn-sm">Deactivate</button>
+          </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 8 if is_super else 7 }}" style="text-align:center;color:var(--stone);padding:20px;">No coupons found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<div class="pagination">
+  {% if page > 1 %}<a href="/admin/coupons?active_only={{ active_only }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ ((total - 1) // page_size) + 1 }}</span>
+  {% if page * page_size < total %}<a href="/admin/coupons?active_only={{ active_only }}&page={{ page + 1 }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% if is_super %}
+<div class="card" style="margin-top:20px;max-width:620px;">
+  <div class="card-title">Create coupon</div>
+  <form method="POST" action="/admin/coupons" x-data="{ dtype: 'flat' }" style="margin-top:10px;">
+    {{ csrf_field(request) }}
+    <div class="form-group">
+      <label for="code">Code</label>
+      <input id="code" name="code" type="text" required placeholder="NEWYEAR25" style="text-transform:uppercase;">
+    </div>
+    <div class="form-group">
+      <label for="description">Description (optional)</label>
+      <input id="description" name="description" type="text">
+    </div>
+    <div class="form-group">
+      <label for="discount_type">Discount type</label>
+      <select id="discount_type" name="discount_type" x-model="dtype">
+        <option value="flat">Flat (₹)</option>
+        <option value="percent">Percent (%)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="discount_value"><span x-show="dtype === 'flat'">Discount amount (₹)</span><span x-show="dtype === 'percent'">Discount percentage (%)</span></label>
+      <input id="discount_value" name="discount_value" type="number" min="1" step="0.01" required>
+    </div>
+    <div class="form-group" x-show="dtype === 'percent'">
+      <label for="max_discount_rupees">Max discount cap (₹, optional)</label>
+      <input id="max_discount_rupees" name="max_discount_rupees" type="number" min="0" step="0.01">
+    </div>
+    <div class="form-group">
+      <label for="min_order_rupees">Minimum order (₹)</label>
+      <input id="min_order_rupees" name="min_order_rupees" type="number" min="0" step="0.01" value="0">
+    </div>
+    <div class="form-group">
+      <label for="max_redemptions">Max redemptions (optional)</label>
+      <input id="max_redemptions" name="max_redemptions" type="number" min="1" step="1">
+    </div>
+    <div class="form-group">
+      <label for="valid_from">Valid from</label>
+      <input id="valid_from" name="valid_from" type="datetime-local" required>
+    </div>
+    <div class="form-group">
+      <label for="valid_until">Valid until (optional)</label>
+      <input id="valid_until" name="valid_until" type="datetime-local">
+    </div>
+    <button type="submit" class="btn btn-primary">Create coupon</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -2,6 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { getMeApi } from '../api/auth';
 import { registerUnauthenticatedHandler } from '../api/client';
 import {
+  addPushTokenChangeListener,
+  registerForPushNotifications,
+} from '../native/notifications';
+import {
   clearTokens,
   isOnboardingComplete,
   loadTokens,
@@ -57,6 +61,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Once authenticated (after login/signup or on app start with a live session),
+  // register this device's Expo push token with the backend and listen for token
+  // rotation. Registration is idempotent and non-fatal — failures are swallowed
+  // inside the native helper so they never block the authenticated experience.
+  useEffect(() => {
+    if (state.status !== 'authenticated') return;
+    void registerForPushNotifications();
+    const sub = addPushTokenChangeListener();
+    return () => sub.remove();
+  }, [state.status]);
 
   const signIn = useCallback(async (tokens: AuthTokens) => {
     await saveTokens(tokens);

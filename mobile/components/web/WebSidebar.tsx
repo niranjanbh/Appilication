@@ -20,11 +20,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Home', icon: '⌂', href: '/(tabs)/home' },
-  { label: 'Consultations', icon: '📅', href: '/(tabs)/consultations' },
-  { label: 'Reports', icon: '🔬', href: '/(tabs)/reports' },
-  { label: 'Reminders', icon: '🔔', href: '/(tabs)/reminders' },
-  { label: 'Profile', icon: '👤', href: '/(tabs)/profile' },
+  { label: 'Home',      icon: '⌂', href: '/(tabs)/home' },
+  { label: 'Care',      icon: '♡', href: '/(tabs)/consultations' },
+  { label: 'Records',   icon: '⧫', href: '/(tabs)/reports' },
+  { label: 'Reminders', icon: '⏰', href: '/(tabs)/reminders' },
+  { label: 'Lifestyle', icon: '◎', href: '/(tabs)/lifestyle' },
+];
+
+const SECONDARY_ITEMS: NavItem[] = [
+  { label: 'Notifications', icon: '🔔', href: '/(tabs)/notifications' },
+  { label: 'Profile',       icon: '👤', href: '/(tabs)/profile' },
 ];
 
 export function WebSidebar() {
@@ -40,9 +45,29 @@ export function WebSidebar() {
         <Text style={styles.wordmark}>Kyros</Text>
       </View>
 
-      {/* Nav items */}
+      {/* Primary nav */}
       <View style={styles.navItems}>
         {NAV_ITEMS.map((item) => {
+          const isActive = pathname.includes(item.href.replace('/(tabs)/', ''));
+          return (
+            <Pressable
+              key={item.href}
+              style={[styles.navItem, isActive && styles.navItemActive]}
+              onPress={() => router.push(item.href as Parameters<typeof router.push>[0])}
+              accessibilityLabel={item.label}
+              accessibilityRole="menuitem"
+            >
+              <Text style={styles.navIcon}>{item.icon}</Text>
+              <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        <View style={styles.divider} />
+
+        {SECONDARY_ITEMS.map((item) => {
           const isActive = pathname.includes(item.href.replace('/(tabs)/', ''));
           return (
             <Pressable
@@ -95,6 +120,12 @@ const styles = StyleSheet.create({
   },
   navItems: {
     flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.forest + '14',
+    marginHorizontal: spacing[4],
+    marginVertical: spacing[2],
   },
   navItem: {
     flexDirection: 'row',

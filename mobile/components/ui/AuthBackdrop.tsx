@@ -8,7 +8,7 @@ import { colors, withAlpha } from '../../lib/design-tokens';
  */
 export function AuthBackdrop() {
   return (
-    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none', overflow: 'hidden' }]}>
       <LinearGradient
         colors={[colors.forestSurface, colors.forestInk, colors.forestInk]}
         start={{ x: 0, y: 0 }}

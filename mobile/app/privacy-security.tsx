@@ -56,7 +56,7 @@ function ConsentCard({
 }) {
   const t = useTheme();
   const isActive = consent.granted && !consent.revoked_at;
-  const statusColor = isActive ? colors.successGreen : colors.stone;
+  const statusColor = isActive ? colors.jade : colors.stone;
   const statusLabel = consent.revoked_at
     ? 'Revoked'
     : consent.granted
@@ -90,7 +90,7 @@ function ConsentCard({
           accessibilityLabel={`Withdraw ${CONSENT_LABELS[consent.consent_type] ?? consent.consent_type}`}
           style={[styles.withdrawBtn, withdrawing && styles.withdrawDisabled]}
         >
-          <Text style={[styles.withdrawText, { color: colors.criticalRed }]}>
+          <Text style={[styles.withdrawText, { color: colors.alert }]}>
             {withdrawing ? 'Withdrawing…' : 'Withdraw consent'}
           </Text>
         </Pressable>
@@ -205,9 +205,9 @@ export default function PrivacySecurityScreen() {
               onPress={() => router.push('/delete-account')}
               accessibilityLabel="Delete my account"
             >
-              <Ionicons name="warning-outline" size={20} color={colors.criticalRed} />
-              <Text style={[styles.rightLabel, { color: colors.criticalRed }]}>Delete my account</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.criticalRed} />
+              <Ionicons name="warning-outline" size={20} color={colors.alert} />
+              <Text style={[styles.rightLabel, { color: colors.alert }]}>Delete my account</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.alert} />
             </HapticPressable>
           </GlassCard>
         </View>

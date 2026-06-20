@@ -40,10 +40,10 @@ function showAlert(title: string, message: string) {
 }
 
 const STATUS_META: Record<DataExportStatus, { label: string; color: string }> = {
-  received:    { label: 'Queued',     color: colors.warningAmber },
-  in_progress: { label: 'Preparing',  color: colors.warningAmber },
-  completed:   { label: 'Ready',      color: colors.successGreen },
-  rejected:    { label: 'Unavailable', color: colors.criticalRed },
+  received:    { label: 'Queued',     color: colors.saffron },
+  in_progress: { label: 'Preparing',  color: colors.saffron },
+  completed:   { label: 'Ready',      color: colors.jade },
+  rejected:    { label: 'Unavailable', color: colors.alert },
 };
 
 function formatDate(iso: string): string {
@@ -118,8 +118,8 @@ export default function DownloadDataScreen() {
 
         <GlassCard>
           <View style={styles.infoSection}>
-            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.electricBlue, 0.12) }]}>
-              <Ionicons name="download-outline" size={28} color={colors.electricBlue} />
+            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.jade, 0.12) }]}>
+              <Ionicons name="download-outline" size={28} color={colors.jade} />
             </View>
             <Text style={[styles.infoTitle, { color: t.text }]}>
               Your data, your right
@@ -137,7 +137,7 @@ export default function DownloadDataScreen() {
             <Text style={[styles.bulletTitle, { color: t.text }]}>What's included</Text>
             {['Profile information', 'Consent records', 'Data subject requests'].map(item => (
               <View key={item} style={styles.bulletRow}>
-                <Ionicons name="checkmark-circle" size={18} color={colors.successGreen} />
+                <Ionicons name="checkmark-circle" size={18} color={colors.jade} />
                 <Text style={[styles.bulletText, { color: t.textSub }]}>{item}</Text>
               </View>
             ))}
@@ -198,8 +198,8 @@ export default function DownloadDataScreen() {
                         accessibilityLabel="Download export"
                         style={[styles.downloadLink, downloading && styles.btnDisabled]}
                       >
-                        <Ionicons name="download-outline" size={16} color={colors.electricBlue} />
-                        <Text style={[styles.downloadLinkText, { color: colors.electricBlue }]}>
+                        <Ionicons name="download-outline" size={16} color={colors.jade} />
+                        <Text style={[styles.downloadLinkText, { color: colors.jade }]}>
                           {downloading ? 'Opening…' : 'Download'}
                         </Text>
                       </Pressable>
@@ -266,15 +266,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[2],
     height: 52,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
-    boxShadow: `0 6px 14px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 6px 14px ${withAlpha(colors.forest, 0.30)}`,
   },
   btnDisabled: { opacity: 0.7 },
   requestBtnText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '700',
   },
   successHint: {

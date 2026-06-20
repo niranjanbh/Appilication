@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_coord_session
+from app.adminui.schemas import coordinator as coord_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole
 from app.db.session import get_db
@@ -54,8 +55,10 @@ async def patient_list(
             {"coord": coord, "patients": [], "search": search, "error": "No coordinator profile."},
         )
 
-    patients = await coord_repo.list_assigned_patients(
-        db, coordinator_id=coordinator.id, search=search or None
+    patients = coord_schemas.patient_pairs(
+        await coord_repo.list_assigned_patients(
+            db, coordinator_id=coordinator.id, search=search or None
+        )
     )
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "coord/_patient_rows.html" if is_htmx else "coord/patients.html"
@@ -93,13 +96,22 @@ async def patient_detail(
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
-    patient, user = row
-    consults = await coord_repo.list_patient_consultations_restricted(
-        db, coordinator_id=coordinator.id, patient_id=patient_id
+    patient_orm, user_orm = row
+    patient = coord_schemas.CoordinatorPatientView.model_validate(patient_orm)
+    user = coord_schemas.CoordinatorUserView.model_validate(user_orm)
+    consults = coord_schemas.consultation_user_pairs(
+        await coord_repo.list_patient_consultations_restricted(
+            db, coordinator_id=coordinator.id, patient_id=patient_id
+        )
     )
     interactions = await coord_repo.list_interactions_for_patient(
         db, coordinator_id=coordinator.id, patient_id=patient_id
     )
+    intake_responses: dict[str, object] | None = None
+    if patient.intake_complete_at is not None:
+        intake_responses = await coord_repo.get_patient_intake_responses(
+            db, coordinator_id=coordinator.id, patient_id=patient_id
+        )
     await write_audit(
         db, ctx, action="coord_view_patient", resource_type="patient",
         resource_id=patient_id, allowed=True,
@@ -113,6 +125,7 @@ async def patient_detail(
             "user": user,
             "consultations": consults,
             "interactions": interactions,
+            "intake_responses": intake_responses,
             "interaction_channels": _INTERACTION_CHANNELS,
             "success": request.query_params.get("success"),
         },

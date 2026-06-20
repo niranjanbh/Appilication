@@ -38,9 +38,9 @@ function AssignmentCard({
   const { content } = assignment;
 
   const cardBg  = isDark ? colors.forestSurface : colors.white;
-  const cardBdr = isDark ? colors.electricBlue + '40' : colors.electricBlue + '30';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const cardBdr = isDark ? colors.jade + '40' : colors.jade + '30';
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <Animated.View style={[anim, isRead && styles.readOpacity]}>
@@ -53,12 +53,12 @@ function AssignmentCard({
       >
         <View style={styles.cardTop}>
           <Text style={styles.typeIcon}>{TYPE_ICON[content.content_type] ?? '📄'}</Text>
-          <View style={[styles.assignedBadge, { backgroundColor: colors.electricBlue + '18' }]}>
-            <Text style={[styles.assignedBadgeText, { color: colors.electricBlue }]}>Doctor assigned</Text>
+          <View style={[styles.assignedBadge, { backgroundColor: colors.jade + '18' }]}>
+            <Text style={[styles.assignedBadgeText, { color: colors.jade }]}>Doctor assigned</Text>
           </View>
           {isRead && (
-            <View style={[styles.readBadge, { backgroundColor: colors.successGreen + '18' }]}>
-              <Text style={[styles.readBadgeText, { color: colors.successGreen }]}>✓ Read</Text>
+            <View style={[styles.readBadge, { backgroundColor: colors.jade + '18' }]}>
+              <Text style={[styles.readBadgeText, { color: colors.jade }]}>✓ Read</Text>
             </View>
           )}
         </View>
@@ -66,7 +66,7 @@ function AssignmentCard({
         {assignment.notes ? <Text style={[styles.cardNotes, { color: textSub }]}>"{assignment.notes}"</Text> : null}
         <Text style={[styles.cardMeta, { color: textSub }]}>Assigned {formatDate(assignment.created_at)}</Text>
         {content.ai_disclosure && (
-          <Text style={[styles.aiNote, { color: colors.warningAmber }]}>AI-assisted · Doctor reviewed</Text>
+          <Text style={[styles.aiNote, { color: colors.saffron }]}>AI-assisted · Doctor reviewed</Text>
         )}
       </Pressable>
     </Animated.View>
@@ -89,7 +89,7 @@ function LibraryCard({
 
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
 
   return (
     <Animated.View style={anim}>
@@ -107,8 +107,8 @@ function LibraryCard({
         {content.condition_categories.length > 0 && (
           <View style={styles.tagRow}>
             {content.condition_categories.slice(0, 3).map(cat => (
-              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
-                <Text style={[styles.tagText, { color: isDark ? colors.stoneDim : colors.navyDeep }]}>
+              <View key={cat} style={[styles.tag, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
+                <Text style={[styles.tagText, { color: isDark ? colors.stoneDim : colors.ink }]}>
                   {cat.replace('_', ' ')}
                 </Text>
               </View>
@@ -116,7 +116,7 @@ function LibraryCard({
           </View>
         )}
         {content.ai_disclosure && (
-          <Text style={[styles.aiNote, { color: colors.warningAmber }]}>AI-assisted · Doctor reviewed</Text>
+          <Text style={[styles.aiNote, { color: colors.saffron }]}>AI-assisted · Doctor reviewed</Text>
         )}
       </Pressable>
     </Animated.View>
@@ -144,15 +144,15 @@ export default function EducationIndexScreen() {
     router.push(`/education/${contentId}${query}`);
   };
 
-  const bg      = isDark ? colors.forestInk  : colors.skyMist;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.ivory;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.jade} /></View>;
   }
   if (error || !data) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'No content available.'}</Text></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'No content available.'}</Text></View>;
   }
 
   return (

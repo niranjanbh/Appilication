@@ -1,0 +1,18 @@
+{% for member in staff %}
+<tr>
+  <td><a href="/admin/users/{{ member.id }}">{{ member.name }}</a></td>
+  <td style="color:var(--stone);font-size:12px;">{{ member.email or '—' }}</td>
+  <td><span class="chip chip-{{ member.role.value }}">{{ member.role.value.replace('_', ' ') }}</span></td>
+  <td>
+    {% if member.deleted_at %}
+      <span class="chip chip-inactive">Suspended</span>
+    {% else %}
+      <span class="chip chip-active">Active</span>
+    {% endif %}
+  </td>
+  <td style="color:var(--stone);font-size:12px;">{{ member.created_at.strftime('%d %b %Y') if member.created_at else '—' }}</td>
+  <td><a href="/admin/users/{{ member.id }}" class="btn btn-secondary btn-sm">View</a></td>
+</tr>
+{% else %}
+<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No staff found.</td></tr>
+{% endfor %}

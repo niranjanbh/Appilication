@@ -19,16 +19,16 @@ export default function JoinConsultationWebScreen() {
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
   const SPRING   = { mass: 0.3, stiffness: 500, damping: 20 };
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-        <View style={[styles.iconWrap, { backgroundColor: colors.navyDeep + '15' }]}>
+        <View style={[styles.iconWrap, { backgroundColor: colors.forest + '15' }]}>
           <Text style={styles.icon}>📱</Text>
         </View>
         <Text style={[styles.title, { color: textPri }]}>Open the Kyros app to join</Text>
@@ -89,13 +89,13 @@ const styles = StyleSheet.create({
   btn: {
     width: '100%',
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
   },
-  btnText:     { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  btnText:     { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
   backBtn:     { paddingVertical: spacing[2] },
   backBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 });

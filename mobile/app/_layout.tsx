@@ -29,12 +29,13 @@ export default function RootLayout() {
     'DMSans-Medium':             require('@expo-google-fonts/dm-sans/500Medium/DMSans_500Medium.ttf'),
     'DMSans-SemiBold':           require('@expo-google-fonts/dm-sans/600SemiBold/DMSans_600SemiBold.ttf'),
     'TiroDevanagariHindi-Regular': require('@expo-google-fonts/tiro-devanagari-hindi/400Regular/TiroDevanagariHindi_400Regular.ttf'),
+    'Newsreader-Regular':        require('@expo-google-fonts/newsreader/400Regular/Newsreader_400Regular.ttf'),
+    'Newsreader-Medium':         require('@expo-google-fonts/newsreader/500Medium/Newsreader_500Medium.ttf'),
+    'Newsreader-Italic':         require('@expo-google-fonts/newsreader/400Regular_Italic/Newsreader_400Regular_Italic.ttf'),
   });
 
-  // Match the app's real background per theme so the hand-off to the first screen
-  // is seamless — light: skyMist bg + navy spinner; dark: forest-ink bg + jade spinner.
-  const loadingBg      = isDark ? colors.forestInk : colors.skyMist;
-  const loadingSpinner = isDark ? colors.jadeGlow  : colors.navyDeep;
+  const loadingBg      = isDark ? colors.forestInk : colors.ivory;
+  const loadingSpinner = isDark ? colors.saffron   : colors.forest;
 
   if (!fontsLoaded) {
     return (
@@ -65,8 +66,8 @@ function RootLayoutNav() {
   const { colorScheme } = useThemePreference();
   const isDark = colorScheme === 'dark';
 
-  const headerBg   = isDark ? colors.forestSurface : colors.navyDeep;
-  const headerText = colors.white;
+  const headerBg   = isDark ? colors.forestSurface : colors.forest;
+  const headerText = isDark ? colors.ivoryText : colors.ivory;
 
   return (
     <Stack
@@ -79,7 +80,7 @@ function RootLayoutNav() {
           color: headerText,
         },
         headerShadowVisible: false,
-        contentStyle: { backgroundColor: isDark ? colors.forestInk : colors.skyMist },
+        contentStyle: { backgroundColor: isDark ? colors.forestInk : colors.ivory },
       }}
     >
       {/* Route groups render their own headers (or none) — hide the outer
@@ -95,6 +96,7 @@ function RootLayoutNav() {
       <Stack.Screen name="emergency-contact" options={{ title: 'Emergency contact' }} />
       <Stack.Screen name="vitals" options={{ title: 'Log vitals' }} />
       <Stack.Screen name="activity" options={{ title: 'Activity' }} />
+      <Stack.Screen name="chat/index" options={{ title: 'Coordinator' }} />
     </Stack>
   );
 }

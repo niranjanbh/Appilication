@@ -39,20 +39,20 @@ function ConsentCard({ icon, title, summary, fullText, agreed, onAgree, isDark }
 
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <View style={[c.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
       <View style={c.cardHeader}>
-        <View style={[c.iconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
+        <View style={[c.iconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
           <Text style={c.icon}>{icon}</Text>
         </View>
         <View style={c.cardHeaderText}>
           <Text style={[c.title, { color: textPri }]}>{title}</Text>
           {agreed && (
-            <View style={[c.agreedBadge, { backgroundColor: colors.successGreen + '20' }]}>
-              <Text style={[c.agreedBadgeText, { color: colors.successGreen }]}>✓ Agreed</Text>
+            <View style={[c.agreedBadge, { backgroundColor: colors.jade + '20' }]}>
+              <Text style={[c.agreedBadgeText, { color: colors.jade }]}>✓ Agreed</Text>
             </View>
           )}
         </View>
@@ -61,7 +61,7 @@ function ConsentCard({ icon, title, summary, fullText, agreed, onAgree, isDark }
       <Text style={[c.summary, { color: textSub }]}>{summary}</Text>
 
       <Pressable onPress={() => setExpanded(e => !e)} accessibilityLabel="Read full consent text">
-        <Text style={[c.toggle, { color: colors.electricBlue }]}>
+        <Text style={[c.toggle, { color: colors.jade }]}>
           {expanded ? 'Hide full text ↑' : 'Read full text ↓'}
         </Text>
       </Pressable>
@@ -72,11 +72,11 @@ function ConsentCard({ icon, title, summary, fullText, agreed, onAgree, isDark }
 
       {!agreed && (
         <Pressable
-          style={[c.agreeBtn, { borderColor: colors.navyDeep, backgroundColor: isDark ? colors.navyMid : colors.iceBlue }]}
+          style={[c.agreeBtn, { borderColor: colors.forest, backgroundColor: isDark ? colors.jade : colors.ivory }]}
           onPress={onAgree}
           accessibilityLabel={`I agree to ${title}`}
         >
-          <Text style={[c.agreeBtnText, { color: isDark ? colors.white : colors.navyDeep }]}>
+          <Text style={[c.agreeBtnText, { color: isDark ? colors.ivoryText : colors.ink }]}>
             I agree
           </Text>
         </Pressable>
@@ -182,9 +182,9 @@ export default function ConsentScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk  : colors.skyMist;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
+  const bg      = isDark ? colors.forestInk  : colors.ivory;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: 4,
-    backgroundColor: colors.electricBlue,
+    backgroundColor: colors.jade,
     borderRadius: 2,
   },
   stepLabel: {
@@ -289,25 +289,25 @@ const styles = StyleSheet.create({
   error: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.criticalRed,
+    color: colors.alert,
     textAlign: 'center',
     marginBottom: spacing[3],
   },
 
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing[2],
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
 });

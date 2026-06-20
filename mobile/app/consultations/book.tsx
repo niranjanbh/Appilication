@@ -20,10 +20,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
+import { listConditions, type Condition } from '../../lib/api/conditions';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -50,14 +53,42 @@ interface ThemeProps {
 
 // ── Condition catalogue ────────────────────────────────────────────────────────
 
-const CONDITIONS = [
-  { slug: 'thyroid',       label: 'Thyroid',               icon: '🦋' },
-  { slug: 'weight',        label: 'Weight management',     icon: '⚖️' },
-  { slug: 'pcos',          label: 'PCOS',                  icon: '🌿' },
-  { slug: 'skin_hair',     label: 'Skin & hair',           icon: '✨' },
-  { slug: 'mens_intimate', label: "Men's intimate health", icon: '🔬' },
-  { slug: 'hormones_trt',  label: 'Hormones & TRT',        icon: '⚡' },
-  { slug: 'longevity',     label: 'Longevity',             icon: '🌱' },
+// The condition list is fetched live from GET /v1/public/conditions. The backend
+// does not return icons, so we keep a static slug→icon lookup here. Unknown slugs
+// fall back to a neutral icon.
+const CONDITION_ICONS: Record<string, string> = {
+  'weight-management': '⚖️',
+  diabetes:            '🩸',
+  thyroid:             '🦋',
+  pmos:                '🌿',
+  'skin-and-hair':     '✨',
+  'sexual-health':     '🔬',
+  'hormones-trt':      '⚡',
+  longevity:           '🌱',
+};
+const DEFAULT_CONDITION_ICON = '🩺';
+
+interface ConditionOption {
+  slug: string;
+  label: string;
+  icon: string;
+}
+
+function toOption(c: Condition): ConditionOption {
+  return { slug: c.slug, label: c.name, icon: CONDITION_ICONS[c.slug] ?? DEFAULT_CONDITION_ICON };
+}
+
+// Static fallback used only if the live fetch fails, so booking still works.
+// Slugs must match the backend's accepted set.
+const FALLBACK_CONDITIONS: ConditionOption[] = [
+  { slug: 'weight-management', label: 'Weight Management',         icon: CONDITION_ICONS['weight-management']! },
+  { slug: 'diabetes',          label: 'Diabetes',                  icon: CONDITION_ICONS['diabetes']! },
+  { slug: 'thyroid',           label: 'Thyroid',                   icon: CONDITION_ICONS['thyroid']! },
+  { slug: 'pmos',              label: 'PMOS (PCOS)',               icon: CONDITION_ICONS['pmos']! },
+  { slug: 'skin-and-hair',     label: 'Skin & Hair',               icon: CONDITION_ICONS['skin-and-hair']! },
+  { slug: 'sexual-health',     label: 'Sexual & Intimate Health',  icon: CONDITION_ICONS['sexual-health']! },
+  { slug: 'hormones-trt',      label: 'Hormones & TRT',            icon: CONDITION_ICONS['hormones-trt']! },
+  { slug: 'longevity',         label: 'Longevity',                 icon: CONDITION_ICONS['longevity']! },
 ];
 
 // Coarse preferred time windows — must match the backend's accepted set.
@@ -96,11 +127,11 @@ function StepHeader({ step, title, theme }: { step: number; title: string; theme
 const sh = StyleSheet.create({
   wrapper:  { gap: spacing[2], marginBottom: spacing[4] },
   track:    { height: 4, borderRadius: 2, overflow: 'hidden' },
-  fill:     { height: 4, backgroundColor: colors.electricBlue, borderRadius: 2 },
+  fill:     { height: 4, backgroundColor: colors.jade, borderRadius: 2 },
   count:    { fontFamily: fontFamily.body, fontSize: fontSize.xs, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  badge:    { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.navyDeep, alignItems: 'center', justifyContent: 'center' },
-  badgeText:{ fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '700', color: colors.white },
+  badge:    { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
+  badgeText:{ fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '700', color: colors.ivoryText },
   title:    { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600', flex: 1 },
 });
 
@@ -131,36 +162,50 @@ function PressCard({ onPress, children, style, accessibilityLabel }: {
 
 // ── Step 1 — Condition ────────────────────────────────────────────────────────
 
-function ConditionStep({ onSelect, theme }: { onSelect: (slug: string) => void; theme: ThemeProps }) {
+function ConditionStep({ conditions, loading, onSelect, theme }: {
+  conditions: ConditionOption[];
+  loading: boolean;
+  onSelect: (slug: string) => void;
+  theme: ThemeProps;
+}) {
   return (
     <ScrollView
-      style={[styles.flex, { backgroundColor: theme.isDark ? colors.forestInk : colors.skyMist }]}
+      style={[styles.flex, { backgroundColor: theme.isDark ? colors.forestInk : colors.ivory }]}
       contentContainerStyle={styles.stepContainer}
       showsVerticalScrollIndicator={false}
     >
       <StepHeader step={1} title="What would you like to address?" theme={theme} />
-      <View style={styles.conditionGrid}>
-        {CONDITIONS.map(c => (
-          <PressCard
-            key={c.slug}
-            onPress={() => onSelect(c.slug)}
-            accessibilityLabel={c.label}
-            style={[styles.conditionCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}
-          >
-            <Text style={styles.conditionIcon}>{c.icon}</Text>
-            <Text style={[styles.conditionLabel, { color: theme.textPri }]}>{c.label}</Text>
-            <Text style={[styles.conditionChevron, { color: theme.textSub }]}>›</Text>
-          </PressCard>
-        ))}
-      </View>
+      {loading ? (
+        <View style={styles.conditionGrid}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} height={64} radius={borderRadius.xl} />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.conditionGrid}>
+          {conditions.map(c => (
+            <PressCard
+              key={c.slug}
+              onPress={() => onSelect(c.slug)}
+              accessibilityLabel={c.label}
+              style={[styles.conditionCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBdr }]}
+            >
+              <Text style={styles.conditionIcon}>{c.icon}</Text>
+              <Text style={[styles.conditionLabel, { color: theme.textPri }]}>{c.label}</Text>
+              <Text style={[styles.conditionChevron, { color: theme.textSub }]}>›</Text>
+            </PressCard>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 // ── Step 2 — Requirement + preferred time → submit ─────────────────────────────
 
-function RequirementStep({ condition, onSuccess, onBack, theme }: {
+function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
   condition: string;
+  conditions: ConditionOption[];
   onSuccess: (consultationId: string) => void;
   onBack: () => void;
   theme: ThemeProps;
@@ -169,8 +214,8 @@ function RequirementStep({ condition, onSuccess, onBack, theme }: {
   const [window, setWindow]     = useState<string>('flexible');
   const [submitting, setSubmit] = useState(false);
 
-  const conditionLabel = CONDITIONS.find(c => c.slug === condition)?.label ?? condition;
-  const bg = theme.isDark ? colors.forestInk : colors.skyMist;
+  const conditionLabel = conditions.find(c => c.slug === condition)?.label ?? condition;
+  const bg = theme.isDark ? colors.forestInk : colors.ivory;
 
   const handleSubmit = useCallback(async () => {
     setSubmit(true);
@@ -236,8 +281,8 @@ function RequirementStep({ condition, onSuccess, onBack, theme }: {
               style={[
                 styles.windowChip,
                 {
-                  backgroundColor: active ? colors.navyDeep : theme.cardBg,
-                  borderColor: active ? colors.navyDeep : theme.cardBdr,
+                  backgroundColor: active ? colors.forest : theme.cardBg,
+                  borderColor: active ? colors.forest : theme.cardBdr,
                 },
               ]}
             >
@@ -284,6 +329,17 @@ export default function RequestConsultationScreen() {
   const [condition,   setCondition]   = useState('');
   const [confirmedId, setConfirmedId] = useState('');
 
+  const conditionsQuery = useQuery({
+    queryKey: ['public', 'conditions'],
+    queryFn: listConditions,
+    staleTime: 1000 * 60 * 60, // catalogue rarely changes
+  });
+
+  // Use the live catalogue; fall back to the static list if the fetch failed.
+  const conditions: ConditionOption[] = conditionsQuery.data
+    ? conditionsQuery.data.map(toOption)
+    : FALLBACK_CONDITIONS;
+
   const onSuccess = useCallback((consultationId: string) => {
     setConfirmedId(consultationId);
     setStep('success');
@@ -291,22 +347,29 @@ export default function RequestConsultationScreen() {
 
   const theme: ThemeProps = {
     isDark,
-    textPri: isDark ? colors.white         : colors.navyDeep,
-    textSub: isDark ? colors.stoneDim      : colors.coolGray,
+    textPri: isDark ? colors.ivoryText         : colors.ink,
+    textSub: isDark ? colors.stoneDim      : colors.stone,
     cardBg:  isDark ? colors.forestSurface : colors.white,
     cardBdr: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)',
   };
 
   if (step === 'condition') {
-    return <ConditionStep onSelect={slug => { setCondition(slug); setStep('requirement'); }} theme={theme} />;
+    return (
+      <ConditionStep
+        conditions={conditions}
+        loading={conditionsQuery.isLoading}
+        onSelect={slug => { setCondition(slug); setStep('requirement'); }}
+        theme={theme}
+      />
+    );
   }
   if (step === 'requirement') {
-    return <RequirementStep condition={condition} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
+    return <RequirementStep condition={condition} conditions={conditions} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
   }
 
   // ── Success screen ────────────────────────────────────────────────────────
 
-  const bg = isDark ? colors.forestInk : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.ivory;
   const successScale = useSharedValue(0.7);
   const successAnim  = useAnimatedStyle(() => ({ transform: [{ scale: successScale.value }] }));
   successScale.value = withSpring(1, { mass: 0.6, stiffness: 200 });
@@ -406,11 +469,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[2],
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
-  primaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  primaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },
   disabled:       { opacity: 0.50 },
 
   // Back link
@@ -429,13 +492,13 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.successGreen,
+    backgroundColor: colors.jade,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.successGreen, 0.35)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.jade, 0.35)}`,
     marginBottom: spacing[2],
   },
-  successIcon: { fontSize: 36, color: colors.white },
+  successIcon: { fontSize: 36, color: colors.ivoryText },
   successTitle: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h2,
@@ -451,12 +514,12 @@ const styles = StyleSheet.create({
   successBtn: {
     height: 56,
     paddingHorizontal: spacing[8],
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
     marginTop: spacing[2],
   },
-  successBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  successBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },
 });

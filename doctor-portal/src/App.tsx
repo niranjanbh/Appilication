@@ -17,6 +17,7 @@ const ConsultationList = lazy(() => import('./routes/consultations/ConsultationL
 const ConsultationDetail = lazy(() => import('./routes/consultations/ConsultationDetail').then(m => ({ default: m.ConsultationDetail })));
 const Profile = lazy(() => import('./routes/Profile').then(m => ({ default: m.Profile })));
 const Schedule = lazy(() => import('./routes/Schedule').then(m => ({ default: m.Schedule })));
+const ContentReview = lazy(() => import('./routes/ContentReview').then(m => ({ default: m.ContentReview })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="/consultations/:id" element={<ProtectedShell><ConsultationDetail /></ProtectedShell>} />
 
             <Route path="/schedule" element={<ProtectedShell><Schedule /></ProtectedShell>} />
+            <Route path="/content-review" element={<ProtectedShell><ContentReview /></ProtectedShell>} />
             <Route path="/profile" element={<ProtectedShell><Profile /></ProtectedShell>} />
 
             {/* Fallback */}

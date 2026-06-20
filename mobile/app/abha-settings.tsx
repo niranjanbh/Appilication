@@ -96,15 +96,15 @@ export default function AbhaSettingsScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg        = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri   = isDark ? colors.white        : colors.navyDeep;
-  const textSub   = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg        = isDark ? colors.forestInk     : colors.ivory;
+  const textPri   = isDark ? colors.ivoryText        : colors.ink;
+  const textSub   = isDark ? colors.stoneDim    : colors.stone;
   const cardBg    = isDark ? colors.forestSurface : colors.white;
-  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.ivory;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   if (statusLoading) {
-    return <View style={[styles.centered, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.centered, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   return (
@@ -112,7 +112,7 @@ export default function AbhaSettingsScreen() {
 
       {/* Header */}
       <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-        <Text style={[styles.backText, { color: colors.electricBlue }]}>‹ Back</Text>
+        <Text style={[styles.backText, { color: colors.jade }]}>‹ Back</Text>
       </Pressable>
       <Text style={[styles.title, { color: textPri }]}>Health Records (ABHA)</Text>
       <Text style={[styles.subtitle, { color: textSub }]}>
@@ -121,16 +121,16 @@ export default function AbhaSettingsScreen() {
 
       {/* Linked state */}
       {status?.linked && (
-        <View style={[styles.linkedCard, { backgroundColor: colors.successGreen + '12', borderColor: colors.successGreen + '30' }]}>
-          <Text style={[styles.linkedLabel, { color: colors.successGreen }]}>✓ Linked ABHA</Text>
+        <View style={[styles.linkedCard, { backgroundColor: colors.jade + '12', borderColor: colors.jade + '30' }]}>
+          <Text style={[styles.linkedLabel, { color: colors.jade }]}>✓ Linked ABHA</Text>
           <Text style={[styles.linkedNumber, { color: textPri }]}>{status.abha_number_masked}</Text>
         </View>
       )}
 
       {/* Success banner */}
       {success && (
-        <View style={[styles.successBanner, { backgroundColor: colors.successGreen + '12', borderColor: colors.successGreen + '30' }]}>
-          <Text style={[styles.successText, { color: colors.successGreen }]}>{success}</Text>
+        <View style={[styles.successBanner, { backgroundColor: colors.jade + '12', borderColor: colors.jade + '30' }]}>
+          <Text style={[styles.successText, { color: colors.jade }]}>{success}</Text>
         </View>
       )}
 
@@ -142,7 +142,7 @@ export default function AbhaSettingsScreen() {
             {(['link', 'create'] as Tab[]).map(t => (
               <Pressable
                 key={t}
-                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, boxShadow: `0 2px 8px ${withAlpha(isDark ? colors.forestInk : colors.navyDeep, 0.08)}` }]]}
+                style={[styles.tabItem, tab === t && [styles.tabActive, { backgroundColor: cardBg, boxShadow: `0 2px 8px ${withAlpha(isDark ? colors.forestInk : colors.forest, 0.08)}` }]]}
                 onPress={() => { setTab(t); setError(null); if (t === 'create') setCreateStep('aadhaar'); }}
                 accessibilityLabel={t === 'link' ? 'Link existing ABHA' : 'Create new ABHA'}
               >
@@ -260,12 +260,12 @@ export default function AbhaSettingsScreen() {
                 onPress={() => { setCreateStep('aadhaar'); setOtp(''); setError(null); }}
                 accessibilityLabel="Change Aadhaar number"
               >
-                <Text style={[styles.secondaryBtnText, { color: colors.electricBlue }]}>Change Aadhaar number</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.jade }]}>Change Aadhaar number</Text>
               </Pressable>
             </View>
           )}
 
-          {error && <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>}
+          {error && <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>}
         </>
       )}
     </ScrollView>
@@ -309,14 +309,14 @@ const styles = StyleSheet.create({
 
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
   },
   buttonBusy: { opacity: 0.70 },
-  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '600' },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '600' },
 
   secondaryBtn:     { height: 48, alignItems: 'center', justifyContent: 'center' },
   secondaryBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '600' },

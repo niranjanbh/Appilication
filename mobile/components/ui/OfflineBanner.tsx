@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
-    backgroundColor: colors.criticalRed,
+    backgroundColor: colors.alert,
     paddingTop: spacing[10],
     paddingBottom: spacing[3],
     paddingHorizontal: spacing[4],
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
     fontWeight: '600',
-    color: colors.white,
+    color: colors.ivoryText,
     flex: 1,
   },
   retryBtn: {
@@ -76,6 +76,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.white,
+    color: colors.ivoryText,
   },
 });

@@ -22,15 +22,15 @@ import {
   type LabReport,
   type ParsedLabReport,
 } from '../../lib/api/lab-reports';
-import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, shadow, spacing, withAlpha } from '../../lib/design-tokens';
 
 const POLL_INTERVAL_MS = 4000;
 const PROCESSING_STATUSES = new Set(['ocr_pending', 'ocr_processing']);
 
 function confidenceColor(c: number): string {
-  if (c >= 0.85) return colors.successGreen;
-  if (c >= 0.60) return colors.warningAmber;
-  return colors.criticalRed;
+  if (c >= 0.85) return colors.jade;
+  if (c >= 0.60) return colors.saffron;
+  return colors.alert;
 }
 function flagLabel(f: Biomarker['flag']): string {
   if (f === 'high') return '↑';
@@ -58,10 +58,10 @@ function BiomarkerRow({
 }) {
   const needsCorrection = biomarker.confidence < 0.60 || biomarker.needs_patient_correction;
   const lowConfidence   = biomarker.confidence < 0.85;
-  const flagColor = biomarker.flag === 'high' ? colors.criticalRed : colors.warningAmber;
+  const flagColor = biomarker.flag === 'high' ? colors.alert : colors.saffron;
 
   return (
-    <View style={[b.row, { backgroundColor: cardBg, borderColor: needsCorrection ? colors.warningAmber + '50' : cardBdr, borderWidth: needsCorrection ? 1.5 : 1 }]}>
+    <View style={[b.row, { backgroundColor: cardBg, borderColor: needsCorrection ? colors.saffron + '50' : cardBdr, borderWidth: needsCorrection ? 1.5 : 1 }]}>
       <View style={b.header}>
         <Text style={[b.name, { color: textPri }]}>{biomarker.name}</Text>
         {flagLabel(biomarker.flag) ? (
@@ -77,11 +77,11 @@ function BiomarkerRow({
       </View>
       {needsCorrection ? (
         <View style={b.correction}>
-          <Text style={[b.corrLabel, { color: colors.warningAmber }]}>
+          <Text style={[b.corrLabel, { color: colors.saffron }]}>
             {biomarker.confidence < 0.60 ? 'Please verify this value:' : 'Low confidence — verify:'}
           </Text>
           <TextInput
-            style={[b.corrInput, { backgroundColor: isDark ? colors.nightElev : colors.skyMist, borderColor: colors.warningAmber + '60', color: textPri }]}
+            style={[b.corrInput, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory, borderColor: colors.saffron + '60', color: textPri }]}
             value={correctionValue}
             onChangeText={onChangeCorrectionValue}
             placeholder={biomarker.value || '—'}
@@ -237,27 +237,27 @@ export default function ReportDetailScreen() {
   const saveScale = useSharedValue(1);
   const saveAnim  = useAnimatedStyle(() => ({ transform: [{ scale: saveScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const bg      = isDark ? colors.forestInk       : colors.ivory;
+  const textPri = isDark ? colors.ivoryText       : colors.ink;
+  const textSub = isDark ? colors.stoneDim        : colors.stone;
+  const cardBg  = isDark ? colors.forestSurface   : colors.white;
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,61,46,0.06)';
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
   if (error || !report) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Report not found.'}</Text>
-        <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.electricBlue }]}>← Back</Text></Pressable>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Report not found.'}</Text>
+        <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text></Pressable>
       </View>
     );
   }
   if (PROCESSING_STATUSES.has(report.status)) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator size="large" color={colors.electricBlue} />
+        <ActivityIndicator size="large" color={colors.jade} />
         <Text style={[styles.processingTitle, { color: textPri }]}>Analysing your report…</Text>
         <Text style={[styles.processingSub, { color: textSub }]}>
           Our system is extracting your lab values. This usually takes under 60 seconds.
@@ -269,8 +269,8 @@ export default function ReportDetailScreen() {
     return (
       <ScrollView style={[styles.scroll, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
         <MetaCard report={report} onDownload={() => void handleDownload()} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />
-        <View style={[styles.failedBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
-          <Text style={[styles.failedTitle, { color: colors.criticalRed }]}>Processing failed</Text>
+        <View style={[styles.failedBox, { backgroundColor: colors.alert + '12', borderColor: colors.alert + '30' }]}>
+          <Text style={[styles.failedTitle, { color: colors.alert }]}>Processing failed</Text>
           <Text style={[styles.failedSub, { color: textSub }]}>
             We couldn't automatically read this report. You can still download the original file and share it with your doctor.
           </Text>
@@ -298,7 +298,7 @@ export default function ReportDetailScreen() {
           )}
 
           {report.status === 'patient_review_needed' && (
-            <View style={[styles.reviewBanner, { backgroundColor: colors.warningAmber + '15', borderColor: colors.warningAmber + '40' }]}>
+            <View style={[styles.reviewBanner, { backgroundColor: colors.saffron + '15', borderColor: colors.saffron + '40' }]}>
               <Text style={[styles.reviewText, { color: textPri }]}>
                 Some values need your confirmation before they're saved to your health record.
               </Text>
@@ -332,14 +332,14 @@ export default function ReportDetailScreen() {
                 disabled={saving}
                 accessibilityLabel="Save corrections"
               >
-                {saving ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.saveBtnText}>Save corrections</Text>}
+                {saving ? <ActivityIndicator color={colors.ivoryText} size="small" /> : <Text style={styles.saveBtnText}>Save corrections</Text>}
               </Pressable>
             </Animated.View>
           )}
 
           {report.patient_corrected && (
-            <View style={[styles.correctedBadge, { backgroundColor: colors.successGreen + '15' }]}>
-              <Text style={[styles.correctedText, { color: colors.successGreen }]}>✓ You've reviewed and corrected this report</Text>
+            <View style={[styles.correctedBadge, { backgroundColor: colors.jade + '15' }]}>
+              <Text style={[styles.correctedText, { color: colors.jade }]}>✓ You've reviewed and corrected this report</Text>
             </View>
           )}
 
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     overflow: 'hidden',
     borderWidth: 1,
-    boxShadow: '0 6px 14px rgba(0,0,0,0.07)',
+    boxShadow: shadow.md,
   },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
   metaLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, flex: 1 },
@@ -386,12 +386,12 @@ const styles = StyleSheet.create({
   emptyBio: { fontFamily: fontFamily.body, fontSize: fontSize.body, textAlign: 'center', paddingVertical: spacing[4] },
 
   saveBtn: {
-    height: 56, backgroundColor: colors.navyDeep, borderRadius: borderRadius.xxl,
+    height: 56, backgroundColor: colors.forest, borderRadius: borderRadius.xxl,
     alignItems: 'center', justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   disabled:    { opacity: 0.45 },
-  saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },
 
   correctedBadge: { borderRadius: borderRadius.xl, padding: spacing[3], alignItems: 'center' },
   correctedText:  { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '700' },

@@ -1,0 +1,60 @@
+{% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
+{% block title %}New Content — Kyros Clinic Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>New Education Content</h2>
+</div>
+<div class="page-body">
+  {% if error %}
+  <div class="alert-bar alert-bar-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="card" style="max-width:640px;">
+    <form method="POST" action="/admin/content/new">
+      {{ csrf_field(request) }}
+      <div class="form-group">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" required value="{{ values.title or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="slug">Slug</label>
+        <input id="slug" name="slug" type="text" required placeholder="managing-thyroid-naturally" value="{{ values.slug or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="content_type">Type</label>
+        <select id="content_type" name="content_type" required>
+          {% for t in content_types %}
+          <option value="{{ t }}" {{ 'selected' if values.content_type == t else '' }}>{{ t.title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="condition_categories">Condition categories (comma-separated)</label>
+        <input id="condition_categories" name="condition_categories" type="text"
+               placeholder="thyroid, pcos" value="{{ values.condition_categories or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="content_url">Content URL (optional)</label>
+        <input id="content_url" name="content_url" type="text" value="{{ values.content_url or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="body_md">Body (Markdown, optional)</label>
+        <textarea id="body_md" name="body_md" rows="8"
+                  style="width:100%;border:1px solid #d4cfc6;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;">{{ values.body_md or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label style="font-weight:400;">
+          <input type="checkbox" name="ai_disclosure" value="1">
+          AI-assisted content (requires disclosure)
+        </label>
+      </div>
+      <p style="font-size:12px;color:var(--stone);margin-bottom:12px;">
+        Saved as a draft. Submit it for doctor review from the content list once ready.
+      </p>
+      <button type="submit" class="btn btn-primary">Create draft</button>
+      <a href="/admin/content" class="btn btn-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

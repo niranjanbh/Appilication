@@ -170,12 +170,12 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 52,
     marginTop: spacing[2],
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 6px 14px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 6px 14px ${withAlpha(colors.forest, 0.30)}`,
   },
-  saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
   disabled: { opacity: 0.5 },
 });

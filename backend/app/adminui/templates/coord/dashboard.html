@@ -22,6 +22,10 @@
       <div class="card-title">Today's consults</div>
       <div class="card-value">{{ today_consultations | length }}</div>
     </div>
+    <a href="/coord/followups" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <div class="card-title">Pending follow-ups</div>
+      <div class="card-value">{{ pending_followups }}</div>
+    </a>
   </div>
 
   <!-- Today's schedule -->

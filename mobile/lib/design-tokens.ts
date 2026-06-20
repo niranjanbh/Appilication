@@ -10,7 +10,7 @@ function px(value: string): number {
 }
 
 export const colors = {
-  // Original palette
+  // Warm palette
   forest:       tokens.colors.forest,
   jade:         tokens.colors.jade,
   sage:         tokens.colors.sage,
@@ -22,23 +22,7 @@ export const colors = {
   ink:          tokens.colors.ink,
   stone:        tokens.colors.stone,
   alert:        tokens.colors.alert,
-  // Premium navy/dark palette
-  navyDeep:     tokens.colors.navyDeep,
-  navyMid:      tokens.colors.navyMid,
-  skyMist:      tokens.colors.skyMist,
-  iceBlue:      tokens.colors.iceBlue,
-  coolGray:     tokens.colors.coolGray,
   borderLight:  tokens.colors.borderLight,
-  successGreen: tokens.colors.successGreen,
-  successLight: tokens.colors.successLight,
-  warningAmber: tokens.colors.warningAmber,
-  criticalRed:  tokens.colors.criticalRed,
-  midnight:     tokens.colors.forestInk,
-  nightSurface: tokens.colors.forestSurface,
-  nightElev:    tokens.colors.forestSurfaceRaised,
-  electricBlue: tokens.colors.electricBlue,
-  slateText:    tokens.colors.stoneDim,
-  accentViolet: tokens.colors.accentViolet,
   // Forest-ink dark palette
   forestInk:           tokens.colors.forestInk,
   forestSurface:       tokens.colors.forestSurface,
@@ -92,6 +76,7 @@ export const fontFamily = {
   display: tokens.typography.fontFamily.display[0],
   body:    tokens.typography.fontFamily.body[0],
   hindi:   tokens.typography.fontFamily.hindi[0],
+  data:    tokens.typography.fontFamily.data[0],
 } as const;
 
 export const fontSize = {
@@ -138,6 +123,26 @@ export const borderRadius = {
   xl:   px(tokens.borderRadius.xl),
   xxl:  px(tokens.borderRadius.xxl),
   full: px(tokens.borderRadius.full),
+} as const;
+
+export const shadow = {
+  xs:      tokens.shadow.xs,
+  sm:      tokens.shadow.sm,
+  md:      tokens.shadow.md,
+  lg:      tokens.shadow.lg,
+  hero:    tokens.shadow.hero,
+  caution: tokens.shadow.caution,
+  darkXs:  tokens.shadow.darkXs,
+  darkMd:  tokens.shadow.darkMd,
+  darkLg:  tokens.shadow.darkLg,
+} as const;
+
+export const gradient = {
+  screenWarm: tokens.gradient.screenWarm,
+} as const;
+
+export const numericProps = {
+  fontVariant: ['tabular-nums'] as const,
 } as const;
 
 export const motionDuration = {

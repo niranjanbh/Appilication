@@ -22,19 +22,19 @@ function formatDate(iso: string): string {
 }
 
 const STATUS_META: Record<RefundStatus, { label: string; color: string }> = {
-  pending:   { label: 'Processing', color: colors.warningAmber },
-  processed: { label: 'Refunded',   color: colors.successGreen },
-  failed:    { label: 'Failed',     color: colors.criticalRed },
+  pending:   { label: 'Processing', color: colors.saffron },
+  processed: { label: 'Refunded',   color: colors.jade },
+  failed:    { label: 'Failed',     color: colors.alert },
 };
 
 // ── Refund card ───────────────────────────────────────────────────────────────
 
 function RefundCard({ refund, isDark }: { refund: Refund; isDark: boolean }) {
   const meta    = STATUS_META[refund.status];
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <View
@@ -84,20 +84,20 @@ export default function PaymentsScreen() {
     void fetchRefunds();
   }, [fetchRefunds]);
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.ivory;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchRefunds()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -107,7 +107,7 @@ export default function PaymentsScreen() {
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.electricBlue} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
     >
       {refunds.length === 0 ? (
         <View style={styles.emptyState}>

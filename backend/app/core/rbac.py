@@ -172,7 +172,11 @@ async def cross_user_404[T](
 get_patient_user = enforce_role(UserRole.PATIENT)
 get_doctor_user = enforce_role(UserRole.DOCTOR)
 get_coordinator_user = enforce_role(UserRole.COORDINATOR)
-get_admin_user = enforce_role(UserRole.SUPER_ADMIN)
+# State-changing admin endpoints: full super_admin tier only.
+get_super_admin_user = enforce_role(UserRole.SUPER_ADMIN)
+# Read-only admin endpoints: both the read-only ADMIN tier and SUPER_ADMIN.
+# State changes are gated separately by get_super_admin_user / require_permission.
+get_admin_user = enforce_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 get_staff_user = enforce_role(UserRole.DOCTOR, UserRole.COORDINATOR, UserRole.SUPER_ADMIN)
 get_any_staff_user = enforce_role(
     UserRole.DOCTOR, UserRole.COORDINATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN

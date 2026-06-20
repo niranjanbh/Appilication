@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { finalizeUpload, initiateUpload, uploadToS3 } from '../../lib/api/lab-reports';
-import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, shadow, spacing , withAlpha } from '../../lib/design-tokens';
 import { DragDropUpload } from '../../components/web/DragDropUpload';
 import { useBreakpoint } from '../../lib/hooks/useBreakpoint';
 
@@ -95,11 +95,11 @@ export default function UploadReportScreen() {
   const uploadScale = useSharedValue(1);
   const uploadAnim  = useAnimatedStyle(() => ({ transform: [{ scale: uploadScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText    : colors.ink;
+  const textSub = isDark ? colors.stoneDim     : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,61,46,0.06)';
 
   return (
     <ScrollView
@@ -143,8 +143,8 @@ export default function UploadReportScreen() {
       {/* Selected file preview */}
       {picked && (
         <View style={[styles.preview, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-          <View style={[styles.previewIconWrap, { backgroundColor: colors.electricBlue + '18' }]}>
-            <Text style={[styles.previewIconText, { color: colors.electricBlue }]}>{mimeLabel(picked.mimeType)}</Text>
+          <View style={[styles.previewIconWrap, { backgroundColor: colors.jade + '18' }]}>
+            <Text style={[styles.previewIconText, { color: colors.jade }]}>{mimeLabel(picked.mimeType)}</Text>
           </View>
           <View style={styles.previewMeta}>
             <Text style={[styles.previewName, { color: textPri }]} numberOfLines={2}>{picked.name}</Text>
@@ -160,9 +160,9 @@ export default function UploadReportScreen() {
 
       {/* Upload progress */}
       {isWorking && (
-        <View style={[styles.progressBox, { backgroundColor: colors.electricBlue + '12', borderColor: colors.electricBlue + '30' }]}>
-          <ActivityIndicator color={colors.electricBlue} />
-          <Text style={[styles.progressLabel, { color: colors.electricBlue }]}>
+        <View style={[styles.progressBox, { backgroundColor: colors.jade + '12', borderColor: colors.jade + '30' }]}>
+          <ActivityIndicator color={colors.jade} />
+          <Text style={[styles.progressLabel, { color: colors.jade }]}>
             {step === 'uploading' ? 'Uploading file…' : 'Queuing OCR scan…'}
           </Text>
         </View>
@@ -170,8 +170,8 @@ export default function UploadReportScreen() {
 
       {/* Error */}
       {step === 'error' && errorMsg && (
-        <View style={[styles.errorBox, { backgroundColor: colors.criticalRed + '12', borderColor: colors.criticalRed + '30' }]}>
-          <Text style={[styles.errorText, { color: colors.criticalRed }]}>{errorMsg}</Text>
+        <View style={[styles.errorBox, { backgroundColor: colors.alert + '12', borderColor: colors.alert + '30' }]}>
+          <Text style={[styles.errorText, { color: colors.alert }]}>{errorMsg}</Text>
         </View>
       )}
 
@@ -186,7 +186,7 @@ export default function UploadReportScreen() {
           accessibilityLabel="Upload report"
         >
           {isWorking ? (
-            <ActivityIndicator color={colors.white} size="small" />
+            <ActivityIndicator color={colors.ivoryText} size="small" />
           ) : (
             <Text style={styles.uploadBtnText}>Upload report</Text>
           )}
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[5],
     alignItems: 'center',
     gap: spacing[2],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
+    boxShadow: shadow.sm,
   },
   pickIcon:  { fontSize: 26 },
   pickLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', textAlign: 'center' },
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.06)',
+    boxShadow: shadow.sm,
   },
   previewIconWrap: {
     width: 48,
@@ -274,14 +274,14 @@ const styles = StyleSheet.create({
 
   uploadBtn: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   disabled:       { opacity: 0.45 },
-  uploadBtnText:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.white },
+  uploadBtnText:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },
 
   cancelLink: { alignItems: 'center' },
   cancelText: { fontFamily: fontFamily.body, fontSize: fontSize.caption },

@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { getPreConsultReport, type BiomarkerSummary, type PreConsultReport } from '../../lib/api/pre-consult-reports';
-import { apiFetch } from '../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 function trendSymbol(t: BiomarkerSummary['trend']): string {
@@ -13,9 +12,9 @@ function trendSymbol(t: BiomarkerSummary['trend']): string {
   return '↔';
 }
 function trendColor(t: BiomarkerSummary['trend'], isDark: boolean): string {
-  if (t === 'up') return colors.criticalRed;
-  if (t === 'down') return colors.successGreen;
-  return isDark ? colors.stoneDim : colors.coolGray;
+  if (t === 'up') return colors.alert;
+  if (t === 'down') return colors.jade;
+  return isDark ? colors.stoneDim : colors.stone;
 }
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
@@ -71,7 +70,7 @@ function LabSummarySection({ summary, isDark, cardBg, cardBdr, textPri, textSub 
   return (
     <Section title={`Lab Summary (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
       {summary.biomarkers.map(bm => (
-        <View key={bm.name} style={[styles.bioRow, bm.flag && { backgroundColor: colors.warningAmber + '12', borderRadius: borderRadius.lg, paddingHorizontal: spacing[3] }]}>
+        <View key={bm.name} style={[styles.bioRow, bm.flag && { backgroundColor: colors.saffron + '12', borderRadius: borderRadius.lg, paddingHorizontal: spacing[3] }]}>
           <View style={styles.bioLeft}>
             <Text style={[styles.bioName, { color: textPri }]}>{bm.name}</Text>
             <Text style={[styles.bioRef, { color: textSub }]}>Ref: {bm.ref_low ?? '—'}–{bm.ref_high ?? '—'} {bm.unit ?? ''}</Text>
@@ -79,7 +78,7 @@ function LabSummarySection({ summary, isDark, cardBg, cardBdr, textPri, textSub 
           <View style={styles.bioRight}>
             <Text style={[
               styles.bioValue,
-              { color: bm.flag === 'high' ? colors.criticalRed : bm.flag === 'low' ? colors.warningAmber : textPri },
+              { color: bm.flag === 'high' ? colors.alert : bm.flag === 'low' ? colors.saffron : textPri },
             ]}>
               {bm.value ?? '—'} {bm.unit ?? ''}
             </Text>
@@ -108,7 +107,7 @@ function AdherenceSection({ summary, cardBg, cardBdr, textPri, textSub }: {
     );
   }
   const pct      = summary.compliance_pct;
-  const barColor = pct >= 80 ? colors.successGreen : pct >= 50 ? colors.warningAmber : colors.criticalRed;
+  const barColor = pct >= 80 ? colors.jade : pct >= 50 ? colors.saffron : colors.alert;
   return (
     <Section title={`Medication Adherence (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
       <View style={[styles.adherenceTrack, { backgroundColor: colors.borderLight }]}>
@@ -153,7 +152,7 @@ function WearableSection({ summary, cardBg, cardBdr, textPri, textSub }: {
     <Section title={`Health Summary (last ${summary.window_days} days)`} cardBg={cardBg} cardBdr={cardBdr} textPri={textPri} textSub={textSub}>
       <View style={styles.statsRow}>
         {stats.map(s => (
-          <View key={s.label} style={[styles.statCard, { backgroundColor: colors.electricBlue + '12' }]}>
+          <View key={s.label} style={[styles.statCard, { backgroundColor: colors.jade + '12' }]}>
             <Text style={styles.statIcon}>{s.icon}</Text>
             <Text style={[styles.statValue, { color: textPri }]}>{s.value}</Text>
             {s.unit && <Text style={[styles.statUnit, { color: textSub }]}>{s.unit}</Text>}
@@ -179,7 +178,7 @@ function FlagsSection({ flags, cardBg, cardBdr, textPri, textSub }: {
       ) : (
         items.map((f, i) => (
           <View key={i} style={styles.flagItem}>
-            <Text style={[styles.flagBullet, { color: colors.electricBlue }]}>•</Text>
+            <Text style={[styles.flagBullet, { color: colors.jade }]}>•</Text>
             <Text style={[styles.flagText, { color: textPri }]}>{f}</Text>
           </View>
         ))
@@ -211,8 +210,7 @@ export default function PreConsultReportScreen() {
   const handleDownload = async () => {
     if (!report?.pdf_url) return;
     try {
-      const { url } = await apiFetch<{ url: string }>(`/v1/clinic/patient/consultations/${id}/pre-consult-report/download`);
-      await Linking.openURL(url);
+      await Linking.openURL(report.pdf_url);
     } catch {
       // graceful
     }
@@ -221,21 +219,21 @@ export default function PreConsultReportScreen() {
   const dlScale = useSharedValue(1);
   const dlAnim  = useAnimatedStyle(() => ({ transform: [{ scale: dlScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator size="large" color={colors.jade} /></View>;
   }
   if (error || !report) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Report not available yet.'}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Report not available yet.'}</Text>
         <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-          <Text style={[styles.backBtnText, { color: colors.electricBlue }]}>Go back</Text>
+          <Text style={[styles.backBtnText, { color: colors.jade }]}>Go back</Text>
         </Pressable>
       </View>
     );
@@ -315,13 +313,13 @@ const styles = StyleSheet.create({
 
   dlBtn: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
   },
-  dlBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  dlBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
 
   backBtn:     { marginTop: spacing[4] },
   backBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },

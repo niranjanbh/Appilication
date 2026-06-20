@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_admin_session, require_fresh_super_admin
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, PaymentStatus
 from app.db.session import get_db
@@ -61,7 +62,7 @@ async def payment_list(
         template,
         {
             "admin": admin,
-            "payments": payments,
+            "payments": admin_schemas.payment_pairs(payments),
             "total": total,
             "page": page,
             "status_filter": status_filter,

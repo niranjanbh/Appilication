@@ -6,19 +6,22 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_coord_session
+from app.adminui.schemas import coordinator as coord_schemas
 from app.core.audit import AuditContext, write_audit
-from app.db.enums import ActorRole
+from app.db.enums import ActorRole, PaymentStatus
 from app.db.session import get_db
 from app.repositories import coordinator_portal as coord_repo
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/adminui/templates")
+logger = structlog.get_logger(__name__)
 
 _CONDITIONS = [
     "thyroid", "weight", "pcos", "skin_hair",
@@ -73,10 +76,11 @@ async def scheduling_view(
         {
             "coord": coord,
             "coordinator": coordinator,
+            # Slots carry doctor scheduling data only — no patient clinical content.
             "slots": slots,
-            "patients": patients,
-            "upcoming": upcoming,
-            "requests": requests,
+            "patients": coord_schemas.patient_pairs(patients),
+            "upcoming": coord_schemas.consultation_user_user_triples(upcoming),
+            "requests": coord_schemas.consultation_user_pairs(requests),
             "conditions": _CONDITIONS,
             "days_ahead": days_ahead,
             "error": None,
@@ -138,8 +142,8 @@ async def book_consultation(
             status_code=status.HTTP_302_FOUND,
         )
 
-    # Notify patient
-    _notify_patient_booked(consultation, db)
+    # Notify patient (best-effort — a notification failure must not fail the booking).
+    await _notify_patient_booked(db, consultation_id=consultation.id)
 
     return RedirectResponse(url="/coord/scheduling?success=booked", status_code=status.HTTP_302_FOUND)
 
@@ -227,7 +231,21 @@ async def cancel_consultation(
         reason=None if allowed else "not_assigned_or_not_found",
     )
 
-    return RedirectResponse(url="/coord/scheduling", status_code=status.HTTP_302_FOUND)
+    if not allowed:
+        return RedirectResponse(
+            url="/coord/scheduling?error=cancel_failed",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    # Refund any captured payment. A coordinator cancel mirrors the admin policy:
+    # if the consultation was paid, the patient is refunded in full. A Razorpay
+    # hiccup must not block the cancellation — we still leave it cancelled and audit
+    # the refund failure for manual follow-up from Razorpay's dashboard.
+    await _refund_on_cancel(db, ctx, consultation=cancelled)
+
+    return RedirectResponse(
+        url="/coord/scheduling?success=cancelled", status_code=status.HTTP_302_FOUND
+    )
 
 
 @router.post("/scheduling/{consultation_id}/reschedule")
@@ -281,9 +299,82 @@ async def reschedule_consultation(
     )
 
 
-def _notify_patient_booked(consultation: object, db: object) -> None:
-    """Best-effort: dispatch booking confirmation notification to patient."""
+async def _refund_on_cancel(
+    db: AsyncSession,
+    ctx: AuditContext,
+    *,
+    consultation: object,
+) -> None:
+    """Refund a coordinator-cancelled consultation's captured payment, if any.
+
+    Mirrors ``consultation_service.admin_cancel_consultation``: a paid consultation
+    is refunded in full. Razorpay failures are non-fatal — the consultation stays
+    cancelled and the refund failure is audited so ops can retry manually.
+    """
+    from app.models.clinic import Consultation as ConsultationModel
+    from app.models.payment import Payment
+    from app.services import payment_service
+
+    assert isinstance(consultation, ConsultationModel)
+
+    payment_id = consultation.payment_id
+    fee_paise = consultation.consultation_fee_paise or 0
+    # Nothing to refund: no payment linked, or a zero-fee booking.
+    if payment_id is None or fee_paise <= 0:
+        return
+
+    payment = await db.get(Payment, payment_id)
+    if payment is None or payment.status != PaymentStatus.PAID:
+        return
+
     try:
-        pass
+        await payment_service.initiate_refund(
+            db,
+            payment_id=payment.id,
+            user_id=payment.user_id,
+            reason="coordinator_cancellation",
+        )
+        await write_audit(
+            db, ctx, action="coord_refund_consultation", resource_type="payment",
+            resource_id=payment.id, allowed=True,
+            log_metadata={"consultation_id": str(consultation.id), "amount_paise": payment.amount_paise},
+        )
+    except payment_service.PaymentError as exc:
+        # Audit the failed attempt for manual follow-up. The audit row must survive
+        # even though the consultation cancellation itself is already committed by
+        # the request-scoped transaction; record allowed=False with the reason.
+        await write_audit(
+            db, ctx, action="coord_refund_consultation", resource_type="payment",
+            resource_id=payment.id, allowed=False, reason=exc.code,
+            log_metadata={"consultation_id": str(consultation.id)},
+        )
+        logger.error(
+            "coord_refund_on_cancel_failed",
+            consultation_id=str(consultation.id),
+            payment_id=str(payment.id),
+            reason=exc.code,
+        )
+
+
+async def _notify_patient_booked(
+    db: AsyncSession, *, consultation_id: uuid.UUID
+) -> None:
+    """Best-effort: dispatch a booking confirmation to the patient.
+
+    A coordinator-booked consultation goes straight to SCHEDULED, so the patient
+    is told their appointment is set (push + WhatsApp + email, channel-gated by the
+    patient's preferences inside the service). The notification service resolves the
+    patient's contact details itself from the consultation id.
+
+    Notification dispatch is fire-and-forget: a broker/email outage must never fail
+    the booking flow, so all errors are swallowed after logging.
+    """
+    from app.services.notifications import notify_appointment_confirmed
+
+    try:
+        await notify_appointment_confirmed(db, consultation_id=consultation_id)
     except Exception:
-        pass
+        logger.exception(
+            "coord_notify_patient_booked_failed",
+            consultation_id=str(consultation_id),
+        )

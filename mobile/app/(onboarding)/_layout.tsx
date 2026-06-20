@@ -8,7 +8,7 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: isDark ? colors.forestInk : colors.skyMist },
+        contentStyle: { backgroundColor: isDark ? colors.forestInk : colors.ivory },
         // Prevent back gesture during onboarding
         gestureEnabled: false,
       }}

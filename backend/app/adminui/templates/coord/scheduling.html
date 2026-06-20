@@ -24,6 +24,12 @@
   {% if request.query_params.get('success') == 'assigned' %}
   <div class="alert-bar alert-bar-success">Doctor assigned. The patient has been notified to pay and confirm.</div>
   {% endif %}
+  {% if request.query_params.get('success') == 'cancelled' %}
+  <div class="alert-bar alert-bar-success">Consultation cancelled. Any captured payment has been refunded.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'cancel_failed' %}
+  <div class="alert-bar alert-bar-error">Could not cancel — the consultation was not found or is not one of your patients'.</div>
+  {% endif %}
   {% if request.query_params.get('error') == 'slot_not_available' %}
   <div class="alert-bar alert-bar-error">That slot was just taken. Please choose another and try again.</div>
   {% endif %}

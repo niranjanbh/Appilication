@@ -14,10 +14,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_super_admin_session
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import (
     ActorRole,
@@ -26,23 +26,13 @@ from app.db.enums import (
 )
 from app.db.session import get_db
 from app.models.consent import DataSubjectRequest
-from app.models.identity import User
+from app.repositories import dsr as dsr_repo
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/adminui/templates")
 
-_TRANSITIONS: dict[DataSubjectRequestStatus, tuple[DataSubjectRequestStatus, ...]] = {
-    DataSubjectRequestStatus.RECEIVED: (
-        DataSubjectRequestStatus.IN_PROGRESS,
-        DataSubjectRequestStatus.REJECTED,
-    ),
-    DataSubjectRequestStatus.IN_PROGRESS: (
-        DataSubjectRequestStatus.COMPLETED,
-        DataSubjectRequestStatus.REJECTED,
-    ),
-    DataSubjectRequestStatus.COMPLETED: (),
-    DataSubjectRequestStatus.REJECTED: (),
-}
+# Re-exported for the template, which renders allowed next-states per status.
+_TRANSITIONS = dsr_repo.DSR_TRANSITIONS
 
 
 def _ctx(request: Request, admin: object) -> AuditContext:
@@ -64,20 +54,9 @@ async def dsr_queue(
     admin: Annotated[object, Depends(require_super_admin_session)],
     show: str = "open",
 ) -> HTMLResponse:
-    stmt = (
-        select(DataSubjectRequest, User.name)
-        .join(User, User.id == DataSubjectRequest.user_id)
-        .order_by(DataSubjectRequest.received_at.asc())
-        .limit(200)
+    requests, _total = await dsr_repo.list_dsr_requests(
+        db, open_only=(show != "all"), page=1, page_size=200
     )
-    if show != "all":
-        stmt = stmt.where(
-            DataSubjectRequest.status.in_(
-                (DataSubjectRequestStatus.RECEIVED, DataSubjectRequestStatus.IN_PROGRESS)
-            )
-        )
-    result = await db.execute(stmt)
-    requests = [(row.DataSubjectRequest, row.name) for row in result]
 
     await write_audit(
         db, _ctx(request, admin), action="admin_view_dsr_queue",
@@ -88,7 +67,7 @@ async def dsr_queue(
         "admin/dsr.html",
         {
             "admin": admin,
-            "requests": requests,
+            "requests": admin_schemas.dsr_pairs(requests),
             "show": show,
             "transitions": {k.value: [s.value for s in v] for k, v in _TRANSITIONS.items()},
             "now": datetime.now(UTC),
@@ -160,13 +139,18 @@ async def dsr_set_status(
 ) -> RedirectResponse:
     ctx = _ctx(request, admin)
 
-    dsr = await db.get(DataSubjectRequest, request_id)
     try:
         target = DataSubjectRequestStatus(new_status)
     except ValueError:
         target = None  # type: ignore[assignment]
 
-    if dsr is None or target is None or target not in _TRANSITIONS.get(dsr.status, ()):
+    updated = (
+        await dsr_repo.update_dsr_status(db, request_id, target, note=note)
+        if target is not None
+        else None
+    )
+
+    if updated is None:
         await write_audit(
             db, ctx, action="admin_dsr_status_change",
             resource_type="data_subject_request", resource_id=request_id,
@@ -174,15 +158,6 @@ async def dsr_set_status(
         )
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
-
-    dsr.status = target
-    if target == DataSubjectRequestStatus.COMPLETED:
-        dsr.completed_at = datetime.now(UTC)
-    if note.strip():
-        stamp = datetime.now(UTC).strftime("%d %b %Y")
-        appended = f"[{stamp}] {note.strip()[:400]}"
-        dsr.notes = f"{dsr.notes}\n{appended}" if dsr.notes else appended
-    await db.flush()
 
     await write_audit(
         db, ctx, action="admin_dsr_status_change",

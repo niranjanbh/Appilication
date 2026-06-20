@@ -55,7 +55,7 @@ function MedicationCard({ item, isDark, textPri, textSub, cardBg, cardBdr }: {
         <Text style={[med.chipValue, { color: textPri }]}>{frequency}</Text>
       </View>
       {item.instructions && <Text style={[med.instructions, { color: textSub }]}>{item.instructions}</Text>}
-      {item.refill_allowed && <Text style={[med.refill, { color: colors.electricBlue }]}>↻ Refill allowed</Text>}
+      {item.refill_allowed && <Text style={[med.refill, { color: colors.jade }]}>↻ Refill allowed</Text>}
     </View>
   );
 }
@@ -128,19 +128,19 @@ export default function PrescriptionDetailScreen() {
   const pdfScale = useSharedValue(1);
   const pdfAnim  = useAnimatedStyle(() => ({ transform: [{ scale: pdfScale.value }] }));
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
   const divider = isDark ? 'rgba(255,255,255,0.08)' : colors.borderLight;
 
-  if (loading) return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+  if (loading) return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   if (error || !prescription) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error ?? 'Prescription not found.'}</Text>
-        <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.electricBlue }]}>← Back</Text></Pressable>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Prescription not found.'}</Text>
+        <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text></Pressable>
       </View>
     );
   }
@@ -171,9 +171,9 @@ export default function PrescriptionDetailScreen() {
       </Animated.View>
 
       {/* Clinic letterhead */}
-      <View style={[styles.letterhead, { borderBottomColor: isDark ? colors.electricBlue + '40' : colors.navyDeep }]}>
+      <View style={[styles.letterhead, { borderBottomColor: isDark ? colors.jade + '40' : colors.forest }]}>
         <View>
-          <Text style={[styles.clinicName, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>Kyros Clinic</Text>
+          <Text style={[styles.clinicName, { color: isDark ? colors.jade : colors.ink }]}>Kyros Clinic</Text>
           <Text style={[styles.clinicSub, { color: textSub }]}>Digital Health Clinic · kyrosclinic.com</Text>
         </View>
         <View style={styles.clinicRight}>
@@ -183,8 +183,8 @@ export default function PrescriptionDetailScreen() {
       </View>
 
       {/* Signed chip */}
-      <View style={[styles.signedChip, { backgroundColor: colors.successGreen + '15' }]}>
-        <Text style={[styles.signedText, { color: colors.successGreen }]}>
+      <View style={[styles.signedChip, { backgroundColor: colors.jade + '15' }]}>
+        <Text style={[styles.signedText, { color: colors.jade }]}>
           ✓ Digitally signed {formatDateTime(prescription.signed_at)}
         </Text>
       </View>
@@ -199,7 +199,7 @@ export default function PrescriptionDetailScreen() {
 
       {/* Medications */}
       <View style={styles.rxSection}>
-        <Text style={[styles.rxSymbol, { color: isDark ? colors.electricBlue : colors.navyDeep }]}>℞</Text>
+        <Text style={[styles.rxSymbol, { color: isDark ? colors.jade : colors.ink }]}>℞</Text>
         {sortedItems.map(item => (
           <MedicationCard key={item.id} item={item} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />
         ))}
@@ -218,7 +218,7 @@ export default function PrescriptionDetailScreen() {
         <View style={styles.timelineSection}>
           <Text style={[styles.timelineTitle, { color: textPri }]}>Dosage history</Text>
           <View style={styles.timelineItem}>
-            <View style={[styles.timelineDot, { backgroundColor: colors.electricBlue }]} />
+            <View style={[styles.timelineDot, { backgroundColor: colors.jade }]} />
             <Text style={[styles.timelineText, { color: textSub }]}>
               This is version {prescription.version}. Previous versions are preserved in your records.
             </Text>

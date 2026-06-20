@@ -12,7 +12,7 @@ interface IconChipProps {
 }
 
 /** Soft pastel circle with a tinted icon — replaces emoji glyphs across the app. */
-export function IconChip({ icon, tint = 'blue', size = 44 }: IconChipProps) {
+export function IconChip({ icon, tint = 'sage', size = 44 }: IconChipProps) {
   const t = useTheme();
   const pair = tintSoft[tint];
   return (

@@ -16,6 +16,7 @@ from app.adminui.deps import (
     require_fresh_super_admin,
     require_super_admin_session,
 )
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, ConsultationStatus
 from app.db.session import get_db
@@ -69,7 +70,7 @@ async def consultation_list(
         template,
         {
             "admin": admin,
-            "consultations": consultations,
+            "consultations": admin_schemas.consultation_triples(consultations),
             "total": total,
             "page": page,
             "status_filter": status_filter,
@@ -144,9 +145,13 @@ async def reassign_form(
         "admin/consultation_reassign.html",
         {
             "admin": admin,
-            "consultation": consultation,
-            "patient_user": patient_user,
-            "doctor_user": doctor_user,
+            "consultation": admin_schemas.AdminConsultationView.model_validate(consultation),
+            "patient_user": admin_schemas.AdminUserView.model_validate(patient_user),
+            "doctor_user": (
+                admin_schemas.AdminUserView.model_validate(doctor_user)
+                if doctor_user is not None
+                else None
+            ),
             "slots": slots,
             "error": request.query_params.get("error"),
         },

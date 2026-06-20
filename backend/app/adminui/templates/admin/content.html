@@ -3,7 +3,31 @@
 {% block content %}
 <div class="page-header">
   <h2>Education Content <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+  {% if admin and admin.role.value == 'super_admin' %}
+  <a href="/admin/content/new" class="btn btn-primary">New content</a>
+  {% endif %}
 </div>
+
+{% set _success = request.query_params.get('success') %}
+{% if _success == 'published' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Content published.</div>
+{% elif _success == 'created' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Draft created.</div>
+{% elif _success == 'submitted' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Submitted for doctor review.</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="alert-bar alert-bar-error" style="margin-bottom:14px;">
+  {% set err = request.query_params.get('error') %}
+  {% if err == 'content_not_found_or_not_approved' %}
+    Cannot publish: the content does not exist or has not been doctor-approved yet.
+  {% elif err == 'content_not_found' %}
+    Cannot submit for review: the content does not exist or is not in draft status.
+  {% else %}
+    Could not complete the action ({{ err }}).
+  {% endif %}
+</div>
+{% endif %}
 
 <form class="filter-bar"
       hx-get="/admin/content"

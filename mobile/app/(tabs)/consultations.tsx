@@ -13,10 +13,11 @@ import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
-import { NeumorphCard } from '../../components/ui/NeumorphCard';
-import { SkeuButton } from '../../components/ui/SkeuButton';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { SkeletonCards } from '../../components/ui/Skeleton';
-import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { Button } from '../../components/Button';
+import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { useTheme } from '../../lib/theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -63,13 +64,13 @@ const STATUS_LABEL: Record<ConsultationStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ConsultationStatus, string> = {
-  requested:   colors.warningAmber,
-  scheduled:   colors.navyDeep,
-  confirmed:   colors.electricBlue,
-  in_progress: colors.warningAmber,
-  completed:   colors.successGreen,
-  cancelled:   colors.criticalRed,
-  no_show:     colors.criticalRed,
+  requested:   colors.saffron,
+  scheduled:   colors.forest,
+  confirmed:   colors.jade,
+  in_progress: colors.saffron,
+  completed:   colors.jade,
+  cancelled:   colors.alert,
+  no_show:     colors.alert,
 };
 
 // ── Card ───────────────────────────────────────────────────────────────────────
@@ -84,8 +85,8 @@ function ConsultationCard({
   onPress: () => void;
 }) {
   const sc      = STATUS_COLOR[item.status];
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim  : colors.stone;
 
   return (
     <HapticPressable
@@ -94,7 +95,7 @@ function ConsultationCard({
       containerStyle={styles.cardSpacing}
       accessibilityLabel={`Consultation, ${formatWhen(item.scheduled_start_at)}, ${STATUS_LABEL[item.status]}`}
     >
-      <NeumorphCard unpadded>
+      <GlassCard unpadded>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardDate, { color: textSub }]}>
@@ -112,7 +113,7 @@ function ConsultationCard({
             {item.consultation_fee_paise != null ? ` · ${formatRupees(item.consultation_fee_paise)}` : ''}
           </Text>
         </View>
-      </NeumorphCard>
+      </GlassCard>
     </HapticPressable>
   );
 }
@@ -122,6 +123,7 @@ function ConsultationCard({
 export default function ConsultationsScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
+  const t       = useTheme();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['consultations'],
@@ -132,26 +134,24 @@ export default function ConsultationsScreen() {
   const consultations = data?.items ?? [];
   const upcoming = consultations.filter(isUpcoming);
   const past     = consultations.filter(c => !isUpcoming(c));
-  const bg       = isDark ? colors.midnight : colors.skyMist;
-  const textPri  = isDark ? colors.white    : colors.navyDeep;
-  const textSub  = isDark ? colors.slateText : colors.coolGray;
 
   return (
-    <View style={[styles.flex, { backgroundColor: bg }]}>
+    <View style={[styles.flex, { backgroundColor: t.background }]}>
       <AmbientBackground />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={colors.electricBlue} />}
+        refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={t.primary} />}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: textPri }]}>Consultations</Text>
-          <SkeuButton
+          <Text style={[styles.title, { color: t.text }]}>Care</Text>
+          <Button
             label="+ Book"
-            size="sm"
+            variant="forest"
             onPress={() => router.push('/consultations/book')}
             accessibilityLabel="Book a consultation"
+            style={{ height: 36, paddingHorizontal: spacing[4] }}
           />
         </View>
 
@@ -162,11 +162,11 @@ export default function ConsultationsScreen() {
         ) : (
           <>
             {/* Upcoming */}
-            <Text style={[styles.sectionLabel, { color: textSub }]}>Upcoming</Text>
+            <Text style={[styles.sectionLabel, { color: t.textSub }]}>Upcoming</Text>
             {upcoming.length === 0 ? (
               <EmptyState
                 icon="calendar-outline"
-                tint="blue"
+                tint="forest"
                 title="No upcoming consultations"
                 body="Book a consultation with a Kyros specialist to get started — your care plan begins with one conversation."
                 ctaLabel="Book a consultation"
@@ -186,7 +186,7 @@ export default function ConsultationsScreen() {
             {/* Past */}
             {past.length > 0 && (
               <>
-                <Text style={[styles.sectionLabel, styles.sectionLabelLower, { color: textSub }]}>Past</Text>
+                <Text style={[styles.sectionLabel, styles.sectionLabelLower, { color: t.textSub }]}>Past</Text>
                 {past.map(c => (
                   <ConsultationCard
                     key={c.id}
@@ -226,22 +226,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h2,
     fontWeight: '600',
   },
-  bookBtn: {
-    height: 36,
-    paddingHorizontal: spacing[4],
-    backgroundColor: colors.navyDeep,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: `0 4px 8px ${withAlpha(colors.navyDeep, 0.25)}`,
-  },
-  bookBtnText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.sm,
-    color: colors.white,
-    fontWeight: '700',
-  },
-
   sectionLabel: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,
@@ -289,7 +273,7 @@ const styles = StyleSheet.create({
   error: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.criticalRed,
+    color: colors.alert,
     marginBottom: spacing[4],
   },
 });

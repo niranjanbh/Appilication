@@ -1,0 +1,94 @@
+{% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
+{% block title %}Pricing — Kyros Clinic Admin{% endblock %}
+{% block content %}
+{% set is_super = admin and admin.role.value == 'super_admin' %}
+<div class="page-header">
+  <h2>Consultation Pricing <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ configs | length }})</span></h2>
+</div>
+
+{% if success == 'saved' %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Pricing saved.</div>
+{% endif %}
+{% if error %}
+<div class="alert-bar alert-bar-error" style="margin-bottom:14px;">
+  {% if error == 'invalid_fee' %}Fee must be a positive amount in rupees.
+  {% elif error == 'invalid_category' %}Unknown condition category.
+  {% elif error == 'invalid_type' %}Unknown consultation type.
+  {% else %}Could not save pricing ({{ error }}).{% endif %}
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Condition</th><th>Type</th><th>Fee (₹)</th>{% if is_super %}<th>Update fee</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in configs %}
+      <tr>
+        <td>{{ c.condition_category.replace('_', ' ').title() }}</td>
+        <td style="color:var(--stone);">{{ c.consultation_type.value }}</td>
+        <td>₹{{ '%.2f' | format(c.fee_paise / 100) }}</td>
+        {% if is_super %}
+        <td>
+          <form method="POST"
+                action="/admin/pricing/{{ c.condition_category }}/{{ c.consultation_type.value }}"
+                style="display:flex;gap:8px;align-items:center;">
+            {{ csrf_field(request) }}
+            <input type="number" name="fee_rupees" min="1" step="0.01"
+                   value="{{ '%.2f' | format(c.fee_paise / 100) }}"
+                   style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 9px;font-size:13px;width:110px;">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 4 if is_super else 3 }}" style="text-align:center;color:var(--stone);padding:20px;">No pricing configured yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_super %}
+<div class="card" style="margin-top:20px;max-width:560px;">
+  <div class="card-title">Set a price</div>
+  <p style="font-size:12px;color:var(--stone);margin:6px 0 12px;">
+    Create or update the fee for any condition / consultation-type combination.
+  </p>
+  <form method="POST" action="" x-data="{ cat: 'thyroid', type: 'initial' }"
+        :action="'/admin/pricing/' + cat + '/' + type"
+        style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+    {{ csrf_field(request) }}
+    <div class="form-group" style="margin:0;">
+      <label>Condition</label>
+      <select x-model="cat">
+        <option value="thyroid">Thyroid</option>
+        <option value="weight">Weight</option>
+        <option value="pcos">PCOS</option>
+        <option value="skin_hair">Skin &amp; Hair</option>
+        <option value="mens_intimate">Men's Intimate</option>
+        <option value="hormones_trt">Hormones / TRT</option>
+        <option value="longevity">Longevity</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label>Type</label>
+      <select x-model="type">
+        <option value="initial">Initial</option>
+        <option value="follow_up">Follow-up</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label>Fee (₹)</label>
+      <input type="number" name="fee_rupees" min="1" step="0.01" required
+             style="width:120px;">
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

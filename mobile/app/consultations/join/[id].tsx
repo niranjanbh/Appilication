@@ -40,13 +40,13 @@ const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 // ── Waiting room ──────────────────────────────────────────────────────────────
 
 function WaitingRoom({ isDark }: { isDark: boolean }) {
-  const bg = isDark ? colors.midnight : colors.skyMist;
-  const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg = isDark ? colors.forestInk : colors.ivory;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
   return (
     <View style={[wr.container, { backgroundColor: bg }]}>
-      <View style={[wr.iconWrap, { backgroundColor: isDark ? colors.nightSurface : colors.white }]}>
-        <ActivityIndicator size="large" color={colors.electricBlue} />
+      <View style={[wr.iconWrap, { backgroundColor: isDark ? colors.forestSurface : colors.white }]}>
+        <ActivityIndicator size="large" color={colors.jade} />
       </View>
       <Text style={[wr.title, { color: textPri }]}>Preparing your consultation…</Text>
       <Text style={[wr.sub, { color: textSub }]}>
@@ -75,14 +75,14 @@ const wr = StyleSheet.create({
 function ErrorState({ message, onBack, isDark }: { message: string; onBack: () => void; isDark: boolean }) {
   const scale = useSharedValue(1);
   const anim  = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const bg     = isDark ? colors.midnight     : colors.skyMist;
-  const cardBg = isDark ? colors.nightSurface : colors.white;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg     = isDark ? colors.forestInk     : colors.ivory;
+  const cardBg = isDark ? colors.forestSurface : colors.white;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
   return (
     <View style={[er.container, { backgroundColor: bg }]}>
       <View style={[er.card, { backgroundColor: cardBg, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)' }]}>
-        <View style={[er.iconWrap, { backgroundColor: colors.criticalRed + '15' }]}>
+        <View style={[er.iconWrap, { backgroundColor: colors.alert + '15' }]}>
           <Text style={er.icon}>⚠️</Text>
         </View>
         <Text style={[er.title, { color: textPri }]}>Unable to join</Text>
@@ -122,12 +122,12 @@ const er = StyleSheet.create({
   button: {
     height: 52,
     paddingHorizontal: spacing[8],
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.white, fontWeight: '700' },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.ivoryText, fontWeight: '700' },
 });
 
 // ── Recording consent dialog ───────────────────────────────────────────────────
@@ -146,16 +146,16 @@ function RecordingConsentDialog({
   const skipScale  = useSharedValue(1);
   const skipAnim   = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
 
-  const sheetBg = isDark ? colors.nightSurface : colors.white;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const sheetBg = isDark ? colors.forestSurface : colors.white;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <Modal transparent animationType="fade" visible>
       <View style={cd.overlay}>
         <View style={[cd.sheet, { backgroundColor: sheetBg }]}>
           <View style={cd.handle} />
-          <View style={[cd.iconWrap, { backgroundColor: colors.navyDeep + '15' }]}>
+          <View style={[cd.iconWrap, { backgroundColor: colors.forest + '15' }]}>
             <Text style={cd.icon}>📹</Text>
           </View>
           <Text style={[cd.title, { color: textPri }]}>Recording consent</Text>
@@ -208,13 +208,13 @@ const cd = StyleSheet.create({
   allowBtn: {
     width: '100%',
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.28)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.28)}`,
   },
-  allowBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '700' },
+  allowBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '700' },
   skipBtn:  { width: '100%', height: 52, borderWidth: 1, borderRadius: borderRadius.xxl, alignItems: 'center', justifyContent: 'center' },
   skipBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '500' },
 });

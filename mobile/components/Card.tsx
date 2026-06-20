@@ -1,5 +1,5 @@
 import { StyleSheet, View, type ViewProps } from 'react-native';
-import { borderRadius, colors, spacing , withAlpha } from '../lib/design-tokens';
+import { borderRadius, colors, shadow, spacing, withAlpha } from '../lib/design-tokens';
 import { useThemePreference } from '../lib/theme-context';
 
 type CardVariant = 'clay' | 'dark' | 'glass' | 'flat' | 'white' | 'ivory';
@@ -18,7 +18,7 @@ export function Card({ variant = 'clay', style, children, ...props }: CardProps)
       ? isDark ? colors.forestSurfaceRaised : colors.ivory
       : undefined;
 
-  const dynamicBorder = isDark ? 'rgba(79,163,131,0.12)' : 'rgba(0,31,63,0.06)';
+  const dynamicBorder = isDark ? 'rgba(79,163,131,0.12)' : withAlpha(colors.forest, 0.06);
 
   return (
     <View
@@ -45,29 +45,25 @@ const styles = StyleSheet.create({
     padding: spacing[6],
   },
 
-  // Clay — soft background, large radius, layered shadow + inner border highlight
   clay: {
     borderWidth: 1,
-    boxShadow: '0 8px 20px rgba(0,0,0,0.08)',
+    boxShadow: shadow.md,
   },
 
-  // Dark — forest hero card with jade border
   dark: {
     backgroundColor: colors.forest,
     borderWidth: 1,
     borderColor: 'rgba(79,163,131,0.20)',
-    boxShadow: `0 14px 24px ${withAlpha(colors.forest, 0.40)}`,
+    boxShadow: shadow.hero,
   },
 
-  // Glass — translucent surface
   glass: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    boxShadow: shadow.sm,
   },
 
-  // Flat — minimal, just surface color
   flat: {
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    boxShadow: shadow.xs,
   },
 });

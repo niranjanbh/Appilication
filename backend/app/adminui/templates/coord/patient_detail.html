@@ -55,6 +55,30 @@
     {% endif %}
   </div>
 
+  <!-- Intake form responses — patient's own self-reported triage answers -->
+  {% if patient.intake_complete_at %}
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Intake form responses</div>
+    <p style="font-size:11px;color:var(--stone);margin:4px 0 12px;">
+      Patient's self-reported answers from sign-up. Operational triage data only — no clinical content.
+    </p>
+    {% if intake_responses %}
+    <table style="width:100%;font-size:13px;">
+      <tbody>
+        {% for key, value in intake_responses.items() %}
+        <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 12px 8px 0;color:var(--stone);white-space:nowrap;vertical-align:top;">{{ key.replace('_', ' ').title() }}</td>
+          <td style="padding:8px 0;">{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:13px;color:var(--stone);">No intake answers on file.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- Interaction log -->
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Interaction log</div>

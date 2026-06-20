@@ -47,7 +47,7 @@ function Field({ label, error, inputBg, inputBdr, textColor, children }: FieldPr
   return (
     <View style={field.wrap}>
       <Text style={[field.label, { color: textColor }]}>{label}</Text>
-      <View style={[field.inputWrap, { backgroundColor: inputBg, borderColor: error ? colors.criticalRed : inputBdr }]}>
+      <View style={[field.inputWrap, { backgroundColor: inputBg, borderColor: error ? colors.alert : inputBdr }]}>
         {children}
       </View>
       {error ? <Text style={field.error}>{error}</Text> : null}
@@ -74,7 +74,7 @@ const field = StyleSheet.create({
   error: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.criticalRed,
+    color: colors.alert,
     marginTop: 2,
   },
 });
@@ -149,11 +149,11 @@ export default function LoginScreen() {
     }
   };
 
-  const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
+  const textPri  = isDark ? colors.ivoryText        : colors.ink;
+  const textSub  = isDark ? colors.stoneDim    : colors.stone;
   const inputBg  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.35)';
   const inputBdr = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.50)';
-  const inputTxt = isDark ? colors.white        : colors.navyDeep;
+  const inputTxt = isDark ? colors.ivoryText        : colors.ink;
 
   return (
     <KeyboardAvoidingView
@@ -305,11 +305,14 @@ export default function LoginScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, overflow: 'hidden' },
   container: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing[6],
+    maxWidth: 480,
+    alignSelf: 'center',
+    width: '100%',
   },
 
   // Logo area — sits on the gradient backdrop
@@ -320,7 +323,7 @@ const styles = StyleSheet.create({
   wordmark: {
     fontFamily: fontFamily.display,
     fontSize: 48,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '500',
     letterSpacing: -0.5,
   },
@@ -361,24 +364,24 @@ const styles = StyleSheet.create({
   apiError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.criticalRed,
+    color: colors.alert,
     textAlign: 'center',
   },
 
   // Primary button (full-width, 56px, bold radius)
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
     letterSpacing: 0.3,
   },

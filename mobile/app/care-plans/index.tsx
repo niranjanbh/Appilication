@@ -40,12 +40,12 @@ function CarePlanCard({
   const scale = useSharedValue(1);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const active = plan.status === 'active';
-  const dotColor = active ? colors.successGreen : (isDark ? colors.stoneDim : colors.coolGray);
+  const dotColor = active ? colors.jade : (isDark ? colors.stoneDim : colors.stone);
 
   const cardBg = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   const categories = [...new Set(plan.items.map(i => CATEGORY_LABELS[i.category] ?? i.category))];
   const categoryText = categories.slice(0, 3).join(', ') + (categories.length > 3 ? '...' : '');
@@ -105,18 +105,18 @@ export default function CarePlansListScreen() {
     void fetchPlans();
   }, [fetchPlans]);
 
-  const bg = isDark ? colors.forestInk : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.ivory;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchPlans()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -124,14 +124,14 @@ export default function CarePlansListScreen() {
 
   const active = plans.filter(p => p.status === 'active');
   const completed = plans.filter(p => p.status === 'completed');
-  const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.electricBlue} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
     >
       {plans.length === 0 ? (
         <View style={styles.emptyState}>

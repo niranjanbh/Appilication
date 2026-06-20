@@ -19,29 +19,28 @@ function Row({ children }: { children: React.ReactNode }) {
 
 export default function DesignShowcase() {
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk      : colors.ivory;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim      : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
-  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
+  const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,61,46,0.06)';
 
   return (
     <ScrollView style={[styles.screen, { backgroundColor: bg }]} contentContainerStyle={styles.content}>
 
-      {/* Header — navy letterhead */}
+      {/* Header — forest letterhead */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Kyros Design System</Text>
-        <Text style={styles.headerSub}>Premium · Light + Dark · Mobile</Text>
+        <Text style={styles.headerSub}>Warm Ivory · Light + Dark · Mobile</Text>
       </View>
 
       {/* Button */}
       <SectionTitle textSub={textSub}>Button</SectionTitle>
-      <Row><Button variant="navy"    label="Book consultation" /></Row>
-      <Row><Button variant="forest"  label="Forest variant" /></Row>
+      <Row><Button variant="forest"  label="Book consultation" /></Row>
       <Row><Button variant="saffron" label="Join now" /></Row>
       <Row><Button variant="outline" label="View details" /></Row>
       <Row><Button variant="ghost"   label="Dismiss" /></Row>
-      <Row><Button variant="navy"    label="Loading…" isLoading /></Row>
+      <Row><Button variant="forest"  label="Loading…" isLoading /></Row>
 
       {/* Card */}
       <SectionTitle textSub={textSub}>Card</SectionTitle>
@@ -50,8 +49,8 @@ export default function DesignShowcase() {
         <Text style={[styles.cardText, { color: textPri }]}>Soft shadow, rounded 24 px, adapts to light and dark.</Text>
       </View>
       <Card variant="dark" style={styles.cardDemo}>
-        <Text style={[styles.cardLabel, { color: 'rgba(255,255,255,0.60)' }]}>Dark card — navy hero</Text>
-        <Text style={[styles.cardText, { color: colors.white }]}>Navy background with glass border. Used for CTAs.</Text>
+        <Text style={[styles.cardLabel, { color: 'rgba(255,255,255,0.60)' }]}>Dark card — forest hero</Text>
+        <Text style={[styles.cardText, { color: colors.ivoryText }]}>Forest background with jade glass border. Used for CTAs.</Text>
       </Card>
 
       {/* PullQuote */}
@@ -118,7 +117,7 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing[12] },
 
   header: {
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     paddingHorizontal: spacing[6],
     paddingVertical: spacing[8],
     marginBottom: spacing[6],
@@ -126,7 +125,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: 'CormorantGaramond-Medium',
     fontSize: fontSize.h2,
-    color: colors.white,
+    color: colors.ivory,
   },
   headerSub: {
     fontFamily: 'DMSans-Regular',

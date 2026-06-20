@@ -3,6 +3,9 @@
    Production: replace with compiled Tailwind output.
 */
 
+/* Hide Alpine-managed elements until Alpine initializes (avoids flash). */
+[x-cloak] { display: none !important; }
+
 :root {
   --forest: #0F3D2E;
   --jade: #2D7A5F;

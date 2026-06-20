@@ -14,10 +14,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adminui.deps import require_fresh_super_admin, require_super_admin_session
+from app.adminui.deps import (
+    require_admin_session,
+    require_fresh_super_admin,
+    require_super_admin_session,
+)
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext
 from app.db.enums import ActorRole, UserRole
 from app.db.session import get_db
+from app.repositories import admin_portal as admin_repo
 from app.services.staff_service import StaffServiceError, create_staff_user
 
 router = APIRouter()
@@ -32,6 +38,37 @@ _STAFF_ROLE_CHOICES = ["admin", "coordinator", "doctor", "super_admin"]
 
 def _form_context(error: str | None = None, **values: str) -> dict[str, object]:
     return {"roles": _STAFF_ROLE_CHOICES, "error": error, "values": values}
+
+
+_STAFF_LIST_ROLES = ["super_admin", "admin", "coordinator", "doctor"]
+
+
+@router.get("/staff", response_class=HTMLResponse)
+async def staff_list(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_admin_session)],
+    role: str = "",
+    page: int = 1,
+) -> HTMLResponse:
+    staff, total = await admin_repo.list_staff(
+        db, role_filter=role or None, page=page
+    )
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = "admin/_staff_rows.html" if is_htmx else "admin/staff.html"
+    return templates.TemplateResponse(
+        request,
+        template,
+        {
+            "admin": admin,
+            "staff": admin_schemas.user_list(staff),
+            "total": total,
+            "page": page,
+            "role": role,
+            "roles": _STAFF_LIST_ROLES,
+            "page_size": 30,
+        },
+    )
 
 
 @router.get("/staff/new", response_class=HTMLResponse)

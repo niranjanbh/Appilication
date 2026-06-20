@@ -2,11 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { borderRadius, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
+import { borderRadius, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
 import { useBreakpoint } from '../../lib/hooks/useBreakpoint';
 import { WebSidebar } from '../../components/web/WebSidebar';
 import { GlassTabBackground, HapticTabButton } from '../../components/ui/GlassTabBar';
+import { HeaderBell } from '../../components/ui/HeaderBell';
+import { HeaderAvatar } from '../../components/ui/HeaderAvatar';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -16,15 +18,17 @@ interface TabDef {
   headerTitle: string;
   active: IoniconName;
   inactive: IoniconName;
+  href?: null;
 }
 
 const TABS: TabDef[] = [
   { name: 'home',          title: 'Home',       headerTitle: 'Your plan',      active: 'home',                inactive: 'home-outline' },
-  { name: 'consultations', title: 'Plan',        headerTitle: 'Consultations',  active: 'calendar',            inactive: 'calendar-outline' },
-  { name: 'reports',       title: 'Reports',     headerTitle: 'Reports',        active: 'document-text',       inactive: 'document-text-outline' },
-  { name: 'reminders',     title: 'Reminders',   headerTitle: 'Reminders',      active: 'alarm',               inactive: 'alarm-outline' },
-  { name: 'notifications', title: 'Inbox',       headerTitle: 'Notifications',  active: 'notifications',       inactive: 'notifications-outline' },
-  { name: 'profile',       title: 'Profile',     headerTitle: 'Profile',        active: 'person',              inactive: 'person-outline' },
+  { name: 'consultations', title: 'Care',       headerTitle: 'Care',           active: 'heart',               inactive: 'heart-outline' },
+  { name: 'reports',       title: 'Records',    headerTitle: 'Records',        active: 'folder-open',         inactive: 'folder-open-outline' },
+  { name: 'reminders',     title: 'Reminders',  headerTitle: 'Reminders',      active: 'alarm',               inactive: 'alarm-outline' },
+  { name: 'lifestyle',     title: 'Lifestyle',  headerTitle: 'Lifestyle',      active: 'fitness',             inactive: 'fitness-outline' },
+  { name: 'notifications', title: 'Inbox',      headerTitle: 'Notifications',  active: 'notifications',       inactive: 'notifications-outline', href: null },
+  { name: 'profile',       title: 'Profile',    headerTitle: 'Profile',        active: 'person',              inactive: 'person-outline',        href: null },
 ];
 
 export default function TabsLayout() {
@@ -78,6 +82,12 @@ export default function TabsLayout() {
           color: t.text,
           fontWeight: '600' as const,
         },
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: spacing[3] }}>
+            <HeaderBell />
+            <HeaderAvatar />
+          </View>
+        ),
         headerShown: !isDesktop,
         headerShadowVisible: false,
         lazy: false,
@@ -92,6 +102,7 @@ export default function TabsLayout() {
           options={{
             title: tab.title,
             headerTitle: tab.headerTitle,
+            href: tab.href === null ? null : undefined,
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? tab.active : tab.inactive} size={22} color={color} />
             ),

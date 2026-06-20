@@ -13,10 +13,11 @@ import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
-import { NeumorphCard } from '../../components/ui/NeumorphCard';
-import { SkeuButton } from '../../components/ui/SkeuButton';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { SkeletonCards } from '../../components/ui/Skeleton';
+import { Button } from '../../components/Button';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
+import { useTheme } from '../../lib/theme';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -31,11 +32,11 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   upload_pending:        colors.stone,
-  ocr_pending:           colors.warningAmber,
-  ocr_processing:        colors.warningAmber,
-  ocr_complete:          colors.successGreen,
-  ocr_failed:            colors.criticalRed,
-  patient_review_needed: colors.warningAmber,
+  ocr_pending:           colors.saffron,
+  ocr_processing:        colors.saffron,
+  ocr_complete:          colors.jade,
+  ocr_failed:            colors.alert,
+  patient_review_needed: colors.saffron,
 };
 
 function formatDate(iso: string): string {
@@ -59,8 +60,8 @@ function ReportCard({
   const sLabel = STATUS_LABEL[report.status] ?? report.status;
   const isPdf  = report.content_type === 'application/pdf';
 
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim  : colors.stone;
 
   return (
     <HapticPressable
@@ -68,7 +69,7 @@ function ReportCard({
       onPress={onPress}
       accessibilityLabel={`View ${report.original_filename}`}
     >
-      <NeumorphCard unpadded>
+      <GlassCard unpadded>
         <View style={styles.card}>
           <View style={[styles.fileIcon, { backgroundColor: sColor + '18' }]}>
             <Text style={[styles.fileIconText, { color: sColor }]}>{isPdf ? 'PDF' : 'IMG'}</Text>
@@ -87,7 +88,7 @@ function ReportCard({
             <Text style={[styles.chevron, { color: textSub }]}>›</Text>
           </View>
         </View>
-      </NeumorphCard>
+      </GlassCard>
     </HapticPressable>
   );
 }
@@ -97,6 +98,7 @@ function ReportCard({
 export default function ReportsScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
+  const t       = useTheme();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['lab-reports'],
@@ -107,15 +109,13 @@ export default function ReportsScreen() {
   const reports = data?.items ?? [];
   const total   = data?.total ?? 0;
 
-  const bg = isDark ? colors.midnight : colors.skyMist;
-
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: bg }]}>
+      <View style={[styles.container, { backgroundColor: t.background }]}>
         <AmbientBackground />
         <View style={styles.list}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: isDark ? colors.white : colors.navyDeep }]}>
+            <Text style={[styles.title, { color: t.text }]}>
               Lab Reports
             </Text>
           </View>
@@ -126,7 +126,7 @@ export default function ReportsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
+    <View style={[styles.container, { backgroundColor: t.background }]}>
       <AmbientBackground />
       <FlatList
         data={reports}
@@ -144,15 +144,15 @@ export default function ReportsScreen() {
           <RefreshControl
             refreshing={isFetching && !isLoading}
             onRefresh={refetch}
-            tintColor={colors.electricBlue}
+            tintColor={t.primary}
           />
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={[styles.title, { color: isDark ? colors.white : colors.navyDeep }]}>
+            <Text style={[styles.title, { color: t.text }]}>
               Lab Reports
             </Text>
-            <Text style={[styles.subtitle, { color: isDark ? colors.slateText : colors.coolGray }]}>
+            <Text style={[styles.subtitle, { color: t.textSub }]}>
               {total > 0 ? `${total} report${total === 1 ? '' : 's'}` : 'No reports yet'}
             </Text>
           </View>
@@ -178,12 +178,10 @@ export default function ReportsScreen() {
         }
       />
 
-      {/* Upload FAB — floats above the tab dock */}
       <View style={styles.fab}>
-        <SkeuButton
+        <Button
           label="Upload report"
-          size="lg"
-          haptic="medium"
+          variant="forest"
           onPress={() => router.push('/reports/upload')}
           accessibilityLabel="Upload lab report"
         />

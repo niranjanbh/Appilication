@@ -19,14 +19,14 @@ function formatWhen(iso: string): string {
 }
 
 function ActivityRow({ item, isDark }: { item: ActivityItem; isDark: boolean }) {
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
-      <View style={[styles.dot, { backgroundColor: item.allowed ? colors.successGreen : colors.criticalRed }]} />
+      <View style={[styles.dot, { backgroundColor: item.allowed ? colors.jade : colors.alert }]} />
       <View style={styles.body}>
         <Text style={[styles.desc, { color: textPri }]}>{item.description}</Text>
         <Text style={[styles.meta, { color: textSub }]}>
@@ -66,20 +66,20 @@ export default function ActivityScreen() {
     void fetchActivity();
   }, [fetchActivity]);
 
-  const bg      = isDark ? colors.midnight  : colors.skyMist;
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.ivory;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchActivity()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -89,7 +89,7 @@ export default function ActivityScreen() {
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.electricBlue} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
     >
       {items.length === 0 ? (
         <View style={styles.emptyState}>

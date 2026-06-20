@@ -1,7 +1,8 @@
 import { BlurView } from 'expo-blur';
-import { Platform, Pressable, StyleSheet, type PressableProps } from 'react-native';
+import { Pressable, StyleSheet, type PressableProps } from 'react-native';
 import { glass } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
+import { canLiveBlur } from '../../lib/platform/blur';
 import { triggerHaptic } from './HapticPressable';
 
 /** Bottom padding scroll content needs so the floating dock never hides the last row. */
@@ -13,7 +14,7 @@ export const TAB_DOCK_CLEARANCE = 128;
  */
 export function GlassTabBackground() {
   const t = useTheme();
-  if (Platform.OS === 'android') return null;
+  if (!canLiveBlur) return null;
   return (
     <BlurView
       tint={t.isDark ? 'dark' : 'light'}

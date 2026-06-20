@@ -28,6 +28,20 @@ export function markAllNotificationsReadApi(): Promise<MarkAllReadResponse> {
   return apiFetch('/v1/users/notifications/read-all', { method: 'POST' });
 }
 
+/**
+ * Register (or update) this device's Expo push token with the backend so the
+ * server can deliver push notifications. Idempotent: PUT overwrites the stored
+ * token, so calling it repeatedly with the same token is a no-op server-side.
+ */
+export function registerPushTokenApi(
+  pushToken: string,
+): Promise<{ status: string }> {
+  return apiFetch('/v1/users/me/push-token', {
+    method: 'PUT',
+    body: JSON.stringify({ push_token: pushToken }),
+  });
+}
+
 export function getNotificationPreferencesApi(): Promise<NotificationPreferences> {
   return apiFetch('/v1/users/notification-preferences');
 }

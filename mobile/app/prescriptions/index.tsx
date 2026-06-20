@@ -37,12 +37,12 @@ function PrescriptionCard({
   const active = isActive(prescription);
   const firstDrug  = prescription.items[0]?.drug_generic_name ?? 'Prescription';
   const itemCount  = prescription.items.length;
-  const dotColor   = active ? colors.successGreen : (isDark ? colors.stoneDim : colors.coolGray);
+  const dotColor   = active ? colors.jade : (isDark ? colors.stoneDim : colors.stone);
 
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <Animated.View style={anim}>
@@ -98,18 +98,18 @@ export default function PrescriptionsListScreen() {
     void fetchPrescriptions();
   }, [fetchPrescriptions]);
 
-  const bg = isDark ? colors.forestInk : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.ivory;
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.electricBlue} /></View>;
+    return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchPrescriptions()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -117,14 +117,14 @@ export default function PrescriptionsListScreen() {
 
   const active = prescriptions.filter(isActive);
   const past   = prescriptions.filter(rx => !isActive(rx));
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.electricBlue} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
     >
       {prescriptions.length === 0 ? (
         <View style={styles.emptyState}>

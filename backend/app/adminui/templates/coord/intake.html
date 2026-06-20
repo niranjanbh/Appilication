@@ -11,6 +11,11 @@
   {% if error %}
   <div class="alert-bar alert-bar-error">{{ error }}</div>
   {% endif %}
+  {% if escalated == '1' %}
+  <div class="alert-bar alert-bar-success">Escalation recorded and super admin notified.</div>
+  {% elif escalated == 'email_failed' %}
+  <div class="alert-bar alert-bar-error">Escalation recorded, but the email alert could not be sent. Please notify the super admin directly.</div>
+  {% endif %}
 
   {% if not queue %}
   <div class="card">

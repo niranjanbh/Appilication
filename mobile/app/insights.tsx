@@ -29,9 +29,9 @@ import { useTheme } from '../lib/theme';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const FLAG_CONFIG: Record<string, { color: string; label: string; icon: IoniconName }> = {
-  normal: { color: colors.successGreen, label: 'Normal', icon: 'checkmark-circle' },
-  high:   { color: colors.criticalRed,  label: 'High',   icon: 'arrow-up-circle' },
-  low:    { color: colors.warningAmber,  label: 'Low',    icon: 'arrow-down-circle' },
+  normal: { color: colors.jade, label: 'Normal', icon: 'checkmark-circle' },
+  high:   { color: colors.alert,  label: 'High',   icon: 'arrow-up-circle' },
+  low:    { color: colors.saffron,  label: 'Low',    icon: 'arrow-down-circle' },
 };
 
 function formatDate(iso: string | null): string {

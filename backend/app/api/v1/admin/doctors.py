@@ -27,21 +27,11 @@ from app.repositories import admin_portal
 
 router = APIRouter(tags=["admin-doctors"])
 
-# Forward-pipeline transitions only. Lateral transitions (suspend/reactivate) are
-# separate endpoints.
-_ADVANCE_TRANSITIONS: dict[DoctorStatus, DoctorStatus] = {
-    DoctorStatus.APPLIED: DoctorStatus.DOCUMENTS_SUBMITTED,
-    DoctorStatus.DOCUMENTS_SUBMITTED: DoctorStatus.VERIFIED,
-    DoctorStatus.VERIFIED: DoctorStatus.ONBOARDING,
-    DoctorStatus.ONBOARDING: DoctorStatus.ACTIVE,
-}
-
-_SUSPEND_FROM: frozenset[DoctorStatus] = frozenset(
-    {DoctorStatus.ACTIVE, DoctorStatus.INACTIVE}
-)
-_REACTIVATE_FROM: frozenset[DoctorStatus] = frozenset(
-    {DoctorStatus.SUSPENDED, DoctorStatus.INACTIVE}
-)
+# Doctor lifecycle transitions are defined once in the repository and shared with
+# the Jinja admin portal so both surfaces enforce the same state machine.
+_ADVANCE_TRANSITIONS = admin_portal.ADVANCE_TRANSITIONS
+_SUSPEND_FROM = admin_portal.SUSPEND_FROM
+_REACTIVATE_FROM = admin_portal.REACTIVATE_FROM
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────

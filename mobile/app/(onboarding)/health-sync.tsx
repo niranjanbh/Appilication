@@ -69,9 +69,9 @@ export default function HealthSyncScreen() {
   const btnScale = useSharedValue(1);
   const btnAnim  = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim    : colors.coolGray;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
@@ -105,7 +105,7 @@ export default function HealthSyncScreen() {
             <Text style={[styles.dataCardTitle, { color: textPri }]}>What we read</Text>
             {DATA_POINTS.map(({ icon, label }) => (
               <View key={label} style={styles.dataRow}>
-                <View style={[styles.dataIconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}>
+                <View style={[styles.dataIconWrap, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
                   <Text style={styles.dataIcon}>{icon}</Text>
                 </View>
                 <Text style={[styles.dataLabel, { color: textPri }]}>{label}</Text>
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
 
   stepRow: { gap: spacing[2] },
   progressTrack: { height: 4, backgroundColor: colors.borderLight, borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: 4, backgroundColor: colors.electricBlue, borderRadius: 2 },
+  progressFill: { height: 4, backgroundColor: colors.jade, borderRadius: 2 },
   stepLabel: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,
@@ -225,17 +225,17 @@ const styles = StyleSheet.create({
   footer: { gap: spacing[3] },
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.25)}`,
   },
   buttonMuted: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
   skipBtn: { height: 48, alignItems: 'center', justifyContent: 'center' },

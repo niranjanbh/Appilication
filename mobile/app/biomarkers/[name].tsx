@@ -41,12 +41,12 @@ const RANGES: { label: string; value: BiomarkerRange }[] = [
 const CHART_HEIGHT = 220;
 
 // Skia color strings — use brand colors for chart elements
-const DATA_LINE    = colors.navyDeep;          // main data line
-const DATA_DOT_OOB = colors.warningAmber;      // out-of-range dot
+const DATA_LINE    = colors.forest;          // main data line
+const DATA_DOT_OOB = colors.saffron;      // out-of-range dot
 const SAGE_BAND    = 'rgba(143,168,142,0.22)'; // normal zone fill
 const SAFFRON_ZONE = 'rgba(212,131,10,0.12)';  // out-of-range zone
 const BOUND_LINE   = 'rgba(107,107,104,0.12)'; // ref boundary lines
-const PRESS_DOT    = colors.electricBlue;       // crosshair dot
+const PRESS_DOT    = colors.jade;       // crosshair dot
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,9 +69,9 @@ function trendLabel(t: TrendDirection): string {
   return '→ Steady';
 }
 function trendColor(t: TrendDirection): string {
-  if (t === 'better') return colors.successGreen;
-  if (t === 'worse')  return colors.criticalRed;
-  return colors.coolGray;
+  if (t === 'better') return colors.jade;
+  if (t === 'worse')  return colors.alert;
+  return colors.stone;
 }
 function buildChartData(pts: BiomarkerDataPoint[], refLow: number | null, refHigh: number | null): ChartDatum[] {
   const fl = refLow ?? 0; const fh = refHigh ?? 0;
@@ -94,7 +94,7 @@ function TrendBadge({ trend, isDark }: { trend: TrendDirection; isDark: boolean 
     Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [trend, opacity]);
 
-  const badgeBg = isDark ? colors.nightElev : colors.white;
+  const badgeBg = isDark ? colors.forestSurfaceRaised : colors.white;
   const badgeBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
   return (
     <Animated.View style={[styles.trendBadge, { opacity, backgroundColor: badgeBg, borderColor: badgeBdr }]}>
@@ -110,9 +110,9 @@ function RangeSelector({ selected, onSelect, isDark }: {
   onSelect: (r: BiomarkerRange) => void;
   isDark: boolean;
 }) {
-  const activeBg  = colors.navyDeep;
-  const inactiveBg = isDark ? colors.nightElev : colors.white;
-  const activeBdr  = colors.navyDeep;
+  const activeBg  = colors.forest;
+  const inactiveBg = isDark ? colors.forestSurfaceRaised : colors.white;
+  const activeBdr  = colors.forest;
   const inactiveBdr = isDark ? 'rgba(255,255,255,0.12)' : colors.borderLight;
 
   return (
@@ -133,7 +133,7 @@ function RangeSelector({ selected, onSelect, isDark }: {
         >
           <Text style={[
             styles.rangeBtnText,
-            { color: selected === r.value ? colors.white : (isDark ? colors.slateText : colors.coolGray) },
+            { color: selected === r.value ? colors.white : (isDark ? colors.stoneDim : colors.stone) },
           ]}>
             {r.label}
           </Text>
@@ -154,10 +154,10 @@ function Tooltip({ point, onDismiss, onOpenConsultation, isDark }: {
   const flagText = point.flag && point.flag !== 'normal'
     ? ` · ${point.flag === 'high' ? '↑ High' : '↓ Low'}`
     : '';
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,31,63,0.08)';
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.slateText : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <Pressable style={styles.tooltipOverlay} onPress={onDismiss} accessible={false}>
@@ -174,7 +174,7 @@ function Tooltip({ point, onDismiss, onOpenConsultation, isDark }: {
             onPress={() => onOpenConsultation(point.consultation_id!)}
             accessibilityLabel="View linked consultation"
           >
-            <Text style={[styles.tooltipConsultText, { color: colors.electricBlue }]}>View consultation →</Text>
+            <Text style={[styles.tooltipConsultText, { color: colors.jade }]}>View consultation →</Text>
           </Pressable>
         )}
       </View>
@@ -197,8 +197,8 @@ function BiomarkerChart({ data, dataPoints, refLow, refHigh, onPointTap, isDark 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { state, isActive } = useChartPressState({ x: 0, y: { y: 0, refLow: 0, refHigh: 0 } } as any);
   void useRef<number>(-1); // chart press ref — unused but required by Victory hook contract
-  const chartBg = isDark ? colors.nightSurface : colors.white;
-  const axisColor = isDark ? colors.slateText : colors.stone;
+  const chartBg = isDark ? colors.forestSurface : colors.white;
+  const axisColor = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <View style={[styles.chartContainer, { backgroundColor: chartBg }]}>
@@ -276,9 +276,9 @@ function BiomarkerChart({ data, dataPoints, refLow, refHigh, onPointTap, isDark 
 
 function ChartSkeleton({ isDark }: { isDark: boolean }) {
   return (
-    <View style={[styles.chartContainer, { backgroundColor: isDark ? colors.nightSurface : colors.white, alignItems: 'center', justifyContent: 'center' }]}>
-      <View style={[styles.skeletonBand, { backgroundColor: isDark ? colors.nightElev : colors.borderLight }]} />
-      <Text style={[styles.skeletonCaption, { color: isDark ? colors.slateText : colors.coolGray }]}>Loading trend…</Text>
+    <View style={[styles.chartContainer, { backgroundColor: isDark ? colors.forestSurface : colors.white, alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[styles.skeletonBand, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.borderLight }]} />
+      <Text style={[styles.skeletonCaption, { color: isDark ? colors.stoneDim : colors.stone }]}>Loading trend…</Text>
     </View>
   );
 }
@@ -320,18 +320,18 @@ export default function BiomarkerTrendScreen() {
   const biomarkerName = data?.biomarker_name ?? decodeURIComponent(name as string ?? '');
   const unit = data?.unit ?? '';
 
-  const bg      = isDark ? colors.midnight     : colors.skyMist;
-  const textPri = isDark ? colors.white        : colors.navyDeep;
-  const textSub = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg  = isDark ? colors.nightSurface : colors.white;
+  const bg      = isDark ? colors.forestInk     : colors.ivory;
+  const textPri = isDark ? colors.ivoryText        : colors.ink;
+  const textSub = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
 
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
         <Pressable style={styles.retryBtn} onPress={() => void fetchData()}>
-          <Text style={[styles.retryText, { color: colors.electricBlue }]}>Try again</Text>
+          <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
     );
@@ -407,8 +407,8 @@ export default function BiomarkerTrendScreen() {
               <Text style={[styles.historyDate, { color: textSub }]}>{formatDate(pt.report_date)}</Text>
               <Text style={[styles.historyValue, { color: textPri }]}>{pt.value} {pt.unit}</Text>
               {pt.flag && pt.flag !== 'normal' && (
-                <View style={[styles.flagChip, { backgroundColor: colors.warningAmber + '20' }]}>
-                  <Text style={[styles.flagText, { color: colors.warningAmber }]}>
+                <View style={[styles.flagChip, { backgroundColor: colors.saffron + '20' }]}>
+                  <Text style={[styles.flagText, { color: colors.saffron }]}>
                     {pt.flag === 'high' ? '↑ High' : '↓ Low'}
                   </Text>
                 </View>

@@ -8,8 +8,11 @@
 
 import { Platform } from 'react-native';
 import type { AdherenceAction } from '../../types/wellness';
+import { registerPushTokenApi } from '../api/notifications';
 
 export type { AdherenceAction };
+
+declare const process: { env: Record<string, string | undefined> };
 
 export interface ReminderNotificationData {
   reminderId: string;
@@ -93,6 +96,94 @@ export function registerNotificationCategories(): void {
 }
 
 export type NotificationResponseListener = { remove: () => void };
+
+/**
+ * Resolve the EAS projectId required by getExpoPushTokenAsync. Primary source is
+ * app.json -> expo.extra.eas.projectId (read via expo-constants when available);
+ * an EXPO_PUBLIC_EAS_PROJECT_ID env var overrides it for local/dev builds.
+ */
+function getProjectId(): string | undefined {
+  const envId = process.env['EXPO_PUBLIC_EAS_PROJECT_ID'];
+  if (envId) return envId;
+  try {
+    // expo-constants is bundled with the Expo runtime on native; guard the
+    // require so web / test bundles that lack it don't crash.
+    const Constants = require('expo-constants').default;
+    return (
+      Constants?.expoConfig?.extra?.eas?.projectId ??
+      Constants?.easConfig?.projectId ??
+      undefined
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+async function getExpoPushToken(): Promise<string | null> {
+  if (!isAvailable()) return null;
+  try {
+    const Notifications = require('expo-notifications');
+    const projectId = getProjectId();
+    const { data } = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined,
+    );
+    return (data as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Obtain this device's Expo push token and register it with the backend.
+ *
+ * Idempotent and non-fatal: on web, when the native module is unavailable, when
+ * permission is denied, or when the token can't be fetched/registered, it
+ * resolves to false without throwing so callers can fire-and-forget. The backend
+ * PUT overwrites the stored token, so repeated calls with the same token are
+ * harmless. No PHI is involved — only the opaque Expo push token.
+ */
+export async function registerForPushNotifications(): Promise<boolean> {
+  if (!isAvailable()) return false;
+  try {
+    const granted = await requestNotificationPermissions();
+    if (!granted) return false;
+
+    const token = await getExpoPushToken();
+    if (!token) return false;
+
+    await registerPushTokenApi(token);
+    return true;
+  } catch {
+    // Permission denial, missing projectId, network/API errors are all
+    // non-fatal — push is a best-effort enhancement, not a blocking flow.
+    return false;
+  }
+}
+
+/**
+ * Listen for device push token rotation and re-register with the backend.
+ *
+ * Note: addPushTokenListener emits the *device* token (FCM/APNs), but the
+ * backend stores the *Expo* push token. So on rotation we re-fetch a fresh Expo
+ * token and register that, rather than forwarding the raw device token.
+ * Returns a subscription with remove(); no-op on web/unavailable.
+ */
+export function addPushTokenChangeListener(): NotificationResponseListener {
+  if (!isAvailable()) return { remove: () => {} };
+  try {
+    const Notifications = require('expo-notifications');
+    const sub = Notifications.addPushTokenListener(() => {
+      // Fire-and-forget; failures are non-fatal.
+      void (async () => {
+        const expoToken = await getExpoPushToken();
+        if (expoToken) await registerPushTokenApi(expoToken).catch(() => {});
+      })();
+    });
+    return { remove: () => sub.remove() };
+  } catch {
+    return { remove: () => {} };
+  }
+}
 
 export function addNotificationResponseListener(
   handler: (reminderId: string, scheduledAt: string, action: AdherenceAction) => void,

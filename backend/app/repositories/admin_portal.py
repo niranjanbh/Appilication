@@ -124,6 +124,43 @@ async def list_users(
     return list(rows.scalars().all()), total
 
 
+_STAFF_ROLES = (
+    UserRole.SUPER_ADMIN,
+    UserRole.ADMIN,
+    UserRole.COORDINATOR,
+    UserRole.DOCTOR,
+)
+
+
+async def list_staff(
+    db: AsyncSession,
+    *,
+    role_filter: str | None = None,
+    page: int = 1,
+    page_size: int = 30,
+) -> tuple[list[User], int]:
+    """List staff users (admin/super_admin/coordinator/doctor primary roles)."""
+    base = select(User).where(
+        User.deleted_at.is_(None), User.role.in_(_STAFF_ROLES)
+    )
+    if role_filter:
+        try:
+            role = UserRole(role_filter)
+        except ValueError:
+            role = None
+        if role in _STAFF_ROLES:
+            base = base.where(User.role == role)
+
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
+    total: int = count_result.scalar_one()
+
+    offset = (page - 1) * page_size
+    rows = await db.execute(
+        base.order_by(User.created_at.desc()).offset(offset).limit(page_size)
+    )
+    return list(rows.scalars().all()), total
+
+
 async def get_user_detail(
     db: AsyncSession, user_id: uuid.UUID
 ) -> tuple[User, Doctor | None, Patient | None] | None:
@@ -378,6 +415,42 @@ async def update_doctor_status(
         .returning(Doctor)
     )
     return result.scalar_one_or_none()
+
+
+# ── Doctor lifecycle state machine ───────────────────────────────────────────────
+#
+# Single source of truth for doctor credentialing transitions, shared by the REST
+# admin router (POST /v1/admin/doctors/{id}/advance|suspend|reactivate) and the
+# Jinja admin portal. Forward pipeline runs application_received → … → active;
+# active↔suspended are lateral moves.
+
+# Forward-pipeline transitions only (one step at a time).
+ADVANCE_TRANSITIONS: dict[DoctorStatus, DoctorStatus] = {
+    DoctorStatus.APPLIED: DoctorStatus.DOCUMENTS_SUBMITTED,
+    DoctorStatus.DOCUMENTS_SUBMITTED: DoctorStatus.VERIFIED,
+    DoctorStatus.VERIFIED: DoctorStatus.ONBOARDING,
+    DoctorStatus.ONBOARDING: DoctorStatus.ACTIVE,
+}
+
+SUSPEND_FROM: frozenset[DoctorStatus] = frozenset(
+    {DoctorStatus.ACTIVE, DoctorStatus.INACTIVE}
+)
+REACTIVATE_FROM: frozenset[DoctorStatus] = frozenset(
+    {DoctorStatus.SUSPENDED, DoctorStatus.INACTIVE}
+)
+
+
+def next_advance_status(current: DoctorStatus) -> DoctorStatus | None:
+    """The single forward-pipeline target from ``current``, or None if terminal."""
+    return ADVANCE_TRANSITIONS.get(current)
+
+
+def can_suspend(current: DoctorStatus) -> bool:
+    return current in SUSPEND_FROM
+
+
+def can_reactivate(current: DoctorStatus) -> bool:
+    return current in REACTIVATE_FROM
 
 
 async def update_doctor_revenue_share(

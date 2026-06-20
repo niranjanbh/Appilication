@@ -49,8 +49,8 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  const textPri = isDark ? colors.white : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
   const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.35)';
   const inputBdr = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.50)';
 
@@ -77,7 +77,7 @@ export default function ForgotPasswordScreen() {
                 <TextInput
                   style={[
                     styles.input,
-                    { backgroundColor: inputBg, borderColor: errors.identifier ? colors.criticalRed : inputBdr, color: textPri },
+                    { backgroundColor: inputBg, borderColor: errors.identifier ? colors.alert : inputBdr, color: textPri },
                   ]}
                   value={field.value}
                   onChangeText={field.onChange}
@@ -125,16 +125,19 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, overflow: 'hidden' },
   container: {
     flex: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],
     paddingBottom: spacing[8],
     justifyContent: 'center',
+    maxWidth: 480,
+    alignSelf: 'center',
+    width: '100%',
   },
   logoArea: { alignItems: 'center', marginBottom: spacing[6] },
-  wordmark: { fontFamily: fontFamily.display, fontSize: 40, color: colors.white, fontWeight: '500' },
+  wordmark: { fontFamily: fontFamily.display, fontSize: 40, color: colors.ivoryText, fontWeight: '500' },
   cardShadow: { boxShadow: '0 24px 40px rgba(0,0,0,0.22)' },
   cardInner: { padding: spacing[6], gap: spacing[4], alignItems: 'center' },
   fullWidth: { width: '100%' },
@@ -149,19 +152,19 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
   },
-  fieldError: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.criticalRed, textAlign: 'center' },
-  apiError: { fontFamily: fontFamily.body, fontSize: fontSize.sm, color: colors.criticalRed, textAlign: 'center' },
+  fieldError: { fontFamily: fontFamily.body, fontSize: fontSize.caption, color: colors.alert, textAlign: 'center' },
+  apiError: { fontFamily: fontFamily.body, fontSize: fontSize.sm, color: colors.alert, textAlign: 'center' },
   button: {
     width: '100%',
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   buttonBusy: { opacity: 0.7 },
-  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.white, fontWeight: '600' },
+  buttonText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, color: colors.ivoryText, fontWeight: '600' },
   backBtn: { paddingVertical: spacing[2] },
   backText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, textAlign: 'center' },
 });

@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   openBtnText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
   dismissBtn: {

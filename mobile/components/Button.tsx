@@ -75,13 +75,13 @@ const styles = StyleSheet.create({
   forestPressed: { backgroundColor: colors.jade },
   forestLabel:   { color: colors.ivory },
 
-  // Navy (premium primary)
+  // Navy (alias → forest for warm theme back-compat)
   navy: {
-    backgroundColor: colors.navyDeep,
-    boxShadow: `0 4px 12px ${withAlpha(colors.navyDeep, 0.30)}`,
+    backgroundColor: colors.forest,
+    boxShadow: `0 4px 12px ${withAlpha(colors.forest, 0.25)}`,
   },
-  navyPressed: { backgroundColor: colors.navyMid },
-  navyLabel:   { color: colors.white },
+  navyPressed: { backgroundColor: colors.jade },
+  navyLabel:   { color: colors.ivory },
 
   // Saffron
   saffron: {
@@ -95,15 +95,15 @@ const styles = StyleSheet.create({
   outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: colors.navyDeep,
+    borderColor: colors.forest,
   },
-  outlinePressed: { backgroundColor: `${colors.navyDeep}0E` },
-  outlineLabel:   { color: colors.navyDeep },
+  outlinePressed: { backgroundColor: withAlpha(colors.forest, 0.06) },
+  outlineLabel:   { color: colors.forest },
 
   // Ghost
   ghost: {
     backgroundColor: 'transparent',
   },
-  ghostPressed: { backgroundColor: `${colors.navyDeep}0E` },
-  ghostLabel:   { color: colors.navyDeep },
+  ghostPressed: { backgroundColor: withAlpha(colors.forest, 0.06) },
+  ghostLabel:   { color: colors.forest },
 });

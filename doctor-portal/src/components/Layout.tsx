@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Calendar, CalendarDays, LogOut, Stethoscope, User, Users } from 'lucide-react';
+import { Calendar, CalendarDays, FileCheck, LogOut, Stethoscope, User, Users } from 'lucide-react';
 import { logout } from '../lib/auth';
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/patients',  label: 'Patients',     Icon: Users },
   { to: '/consultations/today', label: 'Consultations', Icon: Stethoscope },
   { to: '/schedule',  label: 'Schedule',     Icon: Calendar },
+  { to: '/content-review', label: 'Content review', Icon: FileCheck },
   { to: '/profile',   label: 'Profile',      Icon: User },
 ];
 

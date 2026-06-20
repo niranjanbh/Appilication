@@ -40,11 +40,11 @@ import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, Reminde
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TYPE_ICON: Record<ReminderType, { icon: IoniconName; tint: TintName }> = {
-  water:      { icon: 'water-outline',         tint: 'blue' },
-  supplement: { icon: 'leaf-outline',          tint: 'green' },
-  medication: { icon: 'medical-outline',       tint: 'violet' },
-  gym:        { icon: 'barbell-outline',       tint: 'amber' },
-  custom:     { icon: 'notifications-outline', tint: 'blue' },
+  water:      { icon: 'water-outline',         tint: 'sage' },
+  supplement: { icon: 'leaf-outline',          tint: 'forest' },
+  medication: { icon: 'medical-outline',       tint: 'peach' },
+  gym:        { icon: 'barbell-outline',       tint: 'saffron' },
+  custom:     { icon: 'notifications-outline', tint: 'sage' },
 };
 
 const REMINDER_TYPES: { value: ReminderType; label: string }[] = [
@@ -115,9 +115,9 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
   }
 
   const modalBg  = isDark ? colors.forestSurface       : colors.white;
-  const sheetBg  = isDark ? colors.forestInk           : colors.skyMist;
-  const textPri  = isDark ? colors.ivoryText           : colors.navyDeep;
-  const textSub  = isDark ? colors.stoneDim            : colors.coolGray;
+  const sheetBg  = isDark ? colors.forestInk           : colors.ivory;
+  const textPri  = isDark ? colors.ivoryText           : colors.ink;
+  const textSub  = isDark ? colors.stoneDim            : colors.stone;
   const inputBg  = isDark ? colors.forestSurfaceRaised : colors.white;
   const inputBdr = isDark ? 'rgba(79,163,131,0.20)'   : colors.borderLight;
 
@@ -278,8 +278,8 @@ interface AdherenceDialogProps {
 
 function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClose, isDark }: AdherenceDialogProps) {
   const sheetBg = isDark ? colors.forestSurface : colors.white;
-  const textPri = isDark ? colors.ivoryText     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim      : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim      : colors.stone;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -290,9 +290,9 @@ function AdherenceDialog({ visible, reminderId, scheduledAt, label, onLog, onClo
           <Text style={[ad.sub, { color: textSub }]}>Did you take this?</Text>
           {(
             [
-              { action: 'taken'   as AdherenceAction, label: '✓  Taken',      bg: colors.successGreen,                          border: undefined },
+              { action: 'taken'   as AdherenceAction, label: '✓  Taken',      bg: colors.jade,                                    border: undefined },
               { action: 'skipped' as AdherenceAction, label: 'Skip',           bg: isDark ? colors.forestSurfaceRaised : colors.borderLight, border: undefined },
-              { action: 'snoozed' as AdherenceAction, label: 'Snooze 15 min', bg: colors.warningAmber + '25',                    border: colors.warningAmber },
+              { action: 'snoozed' as AdherenceAction, label: 'Snooze 15 min', bg: colors.saffron + '25',                           border: colors.saffron },
             ]
           ).map(({ action, label: btnLabel, bg, border }) => (
             <Pressable
@@ -413,7 +413,7 @@ export default function RemindersScreen() {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
   }
 
-  const bg = isDark ? colors.forestInk : colors.skyMist;
+  const bg = isDark ? colors.forestInk : colors.ivory;
 
   if (remindersQuery.isLoading) {
     return (

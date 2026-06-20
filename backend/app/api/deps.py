@@ -15,6 +15,7 @@ from app.core.rbac import (  # noqa: F401 — re-exported for router convenience
     get_doctor_user,
     get_patient_user,
     get_staff_user,
+    get_super_admin_user,
 )
 from app.db.enums import ActorRole
 from app.db.redis import RedisClient, get_redis

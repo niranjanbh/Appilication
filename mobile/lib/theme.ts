@@ -1,24 +1,24 @@
-import { colors, glass, neumorph, skeu, slider } from './design-tokens';
+import { colors, glass, neumorph, skeu, slider, withAlpha } from './design-tokens';
 import { useThemePreference } from './theme-context';
 
 export const lightPalette = {
-  background:   colors.skyMist,
+  background:   colors.ivory,
   surface:      colors.white,
-  surfaceMuted: colors.borderLight,
-  primary:      colors.navyDeep,
-  text:         colors.navyDeep,
-  textSub:      colors.coolGray,
-  border:       'rgba(0,31,63,0.07)',
-  shadow:       colors.navyDeep,
+  surfaceMuted: colors.peachMist,
+  primary:      colors.forest,
+  text:         colors.ink,
+  textSub:      colors.stone,
+  border:       withAlpha(colors.forest, 0.08),
+  shadow:       colors.forest,
   navBar:       colors.white,
-  success:      colors.successGreen,
-  warning:      colors.warningAmber,
-  critical:     colors.criticalRed,
+  success:      colors.jade,
+  warning:      colors.saffron,
+  critical:     colors.alert,
   glass:        glass.light,
   neumorph:     neumorph.light,
   skeu:         skeu.light,
   slider:       slider.light,
-  skeletonBase: colors.borderLight,
+  skeletonBase: withAlpha(colors.stone, 0.12),
   isDark:       false as const,
 } as const;
 
@@ -33,7 +33,7 @@ export const darkPalette = {
   shadow:       '#000000',
   navBar:       colors.forestSurface,
   success:      colors.jadeGlow,
-  warning:      colors.warningAmber,
+  warning:      colors.saffron,
   critical:     colors.alertBright,
   glass:        glass.dark,
   neumorph:     neumorph.dark,

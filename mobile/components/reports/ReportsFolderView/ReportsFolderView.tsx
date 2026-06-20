@@ -126,7 +126,7 @@ function FileThumbnail({
             <Ionicons name="download-outline" size={16} color={t.textSub} />
           </Pressable>
           <Pressable onPress={confirmDelete} hitSlop={6} accessibilityLabel={`Delete ${file.name}`}>
-            <Ionicons name="trash-outline" size={16} color={t.isDark ? colors.alertBright : colors.criticalRed} />
+            <Ionicons name="trash-outline" size={16} color={t.isDark ? colors.alertBright : colors.alert} />
           </Pressable>
         </View>
       </View>

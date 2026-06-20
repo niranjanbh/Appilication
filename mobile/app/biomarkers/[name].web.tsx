@@ -27,9 +27,9 @@ const RANGES: { label: string; value: BiomarkerRange }[] = [
 ];
 
 function flagColor(flag: BiomarkerDataPoint['flag']): string {
-  if (flag === 'high') return colors.criticalRed;
-  if (flag === 'low')  return colors.warningAmber;
-  return colors.successGreen;
+  if (flag === 'high') return colors.alert;
+  if (flag === 'low')  return colors.saffron;
+  return colors.jade;
 }
 
 function trendLabel(t: BiomarkerTrendResponse['trend']): string {
@@ -39,9 +39,9 @@ function trendLabel(t: BiomarkerTrendResponse['trend']): string {
 }
 
 function trendColor(t: BiomarkerTrendResponse['trend']): string {
-  if (t === 'better') return colors.successGreen;
-  if (t === 'worse')  return colors.criticalRed;
-  return colors.coolGray;
+  if (t === 'better') return colors.jade;
+  if (t === 'worse')  return colors.alert;
+  return colors.stone;
 }
 
 function formatDate(iso: string | null): string {
@@ -67,20 +67,20 @@ export default function BiomarkerTrendWebScreen() {
       .finally(() => setLoading(false));
   }, [name, range]);
 
-  const bg        = isDark ? colors.midnight     : colors.skyMist;
-  const textPri   = isDark ? colors.white        : colors.navyDeep;
-  const textSub   = isDark ? colors.slateText    : colors.coolGray;
-  const cardBg    = isDark ? colors.nightSurface : colors.white;
+  const bg        = isDark ? colors.forestInk     : colors.ivory;
+  const textPri   = isDark ? colors.ivoryText        : colors.ink;
+  const textSub   = isDark ? colors.stoneDim    : colors.stone;
+  const cardBg    = isDark ? colors.forestSurface : colors.white;
   const cardBdr   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,31,63,0.06)';
-  const rowAltBg  = isDark ? colors.nightElev    : colors.skyMist;
-  const headerBg  = isDark ? colors.navyMid + '30' : colors.navyDeep + '10';
+  const rowAltBg  = isDark ? colors.forestSurfaceRaised    : colors.ivory;
+  const headerBg  = isDark ? colors.jade + '30' : colors.forest + '10';
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={styles.content}>
 
       {/* Back */}
       <Pressable onPress={() => router.back()} style={styles.backRow} accessibilityLabel="Back">
-        <Text style={[styles.backText, { color: colors.electricBlue }]}>← Back</Text>
+        <Text style={[styles.backText, { color: colors.jade }]}>← Back</Text>
       </Pressable>
 
       {/* Title */}
@@ -97,8 +97,8 @@ export default function BiomarkerTrendWebScreen() {
             style={[
               styles.rangeBtn,
               {
-                backgroundColor: range === r.value ? colors.navyDeep : cardBg,
-                borderColor:     range === r.value ? colors.navyDeep : cardBdr,
+                backgroundColor: range === r.value ? colors.forest : cardBg,
+                borderColor:     range === r.value ? colors.forest : cardBdr,
               },
             ]}
             accessibilityLabel={`Show ${r.label}`}
@@ -116,12 +116,12 @@ export default function BiomarkerTrendWebScreen() {
       {/* Loading */}
       {loading && (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.electricBlue} />
+          <ActivityIndicator size="large" color={colors.jade} />
         </View>
       )}
 
       {/* Error */}
-      {error && <Text style={[styles.errorText, { color: colors.criticalRed }]}>{error}</Text>}
+      {error && <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>}
 
       {/* Data */}
       {data && !loading && (

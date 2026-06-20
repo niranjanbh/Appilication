@@ -18,7 +18,7 @@ interface EmptyStateProps {
   onCtaPress?: () => void;
 }
 
-export function EmptyState({ icon, title, body, tint = 'blue', ctaLabel, onCtaPress }: EmptyStateProps) {
+export function EmptyState({ icon, title, body, tint = 'sage', ctaLabel, onCtaPress }: EmptyStateProps) {
   const t = useTheme();
   return (
     <GlassCard style={styles.card}>

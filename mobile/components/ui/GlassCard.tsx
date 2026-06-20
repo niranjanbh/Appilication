@@ -1,7 +1,8 @@
 import { BlurView } from 'expo-blur';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { borderRadius, glass, spacing, withAlpha } from '../../lib/design-tokens';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { borderRadius, glass, shadow, spacing } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
+import { canLiveBlur } from '../../lib/platform/blur';
 
 interface GlassCardProps {
   children: React.ReactNode;
@@ -14,25 +15,21 @@ interface GlassCardProps {
   style?: StyleProp<ViewStyle>;
 }
 
-// Live blur is expensive on low-end Android; those devices get a translucent solid
-// surface instead. iOS and web (CSS backdrop-filter) render true glass.
-const CAN_BLUR = Platform.OS !== 'android';
-
 export function GlassCard({ children, strong = false, intensity, unpadded = false, style }: GlassCardProps) {
   const t = useTheme();
-  const surface = strong || !CAN_BLUR ? t.glass.surfaceStrong : t.glass.surface;
+  const surface = strong || !canLiveBlur ? t.glass.surfaceStrong : t.glass.surface;
 
   const frame: StyleProp<ViewStyle> = [
     styles.frame,
     {
       borderColor: t.glass.border,
-      backgroundColor: CAN_BLUR ? undefined : surface,
-      boxShadow: `0 8px 20px ${withAlpha(t.shadow, 0.10)}`,
+      backgroundColor: canLiveBlur ? undefined : surface,
+      boxShadow: t.isDark ? shadow.darkMd : shadow.md,
     },
     style,
   ];
 
-  if (!CAN_BLUR) {
+  if (!canLiveBlur) {
     return (
       <View style={frame}>
         <View style={[styles.content, !unpadded && styles.padded]}>{children}</View>

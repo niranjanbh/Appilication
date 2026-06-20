@@ -41,8 +41,8 @@ interface OptionGroupProps {
 }
 
 function OptionGroup({ label, options, selected, onSelect, isDark }: OptionGroupProps) {
-  const textPri = isDark ? colors.white     : colors.navyDeep;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const textPri = isDark ? colors.ivoryText     : colors.ink;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
   const cardBg  = isDark ? colors.forestSurface : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : colors.borderLight;
 
@@ -58,17 +58,17 @@ function OptionGroup({ label, options, selected, onSelect, isDark }: OptionGroup
               g.option,
               {
                 backgroundColor: active
-                  ? isDark ? colors.navyMid  : colors.iceBlue
+                  ? isDark ? colors.jade  : colors.ivory
                   : cardBg,
-                borderColor: active ? colors.electricBlue : cardBdr,
+                borderColor: active ? colors.jade : cardBdr,
               },
             ]}
             onPress={() => onSelect(opt.value)}
             accessibilityLabel={opt.label}
             accessibilityState={{ selected: active }}
           >
-            <View style={[g.radio, { borderColor: active ? colors.electricBlue : textSub, backgroundColor: active ? colors.electricBlue : 'transparent' }]} />
-            <Text style={[g.optionText, { color: active ? (isDark ? colors.white : colors.navyDeep) : textPri, fontWeight: active ? '600' : '400' }]}>
+            <View style={[g.radio, { borderColor: active ? colors.jade : textSub, backgroundColor: active ? colors.jade : 'transparent' }]} />
+            <Text style={[g.optionText, { color: active ? (isDark ? colors.ivoryText : colors.ink) : textPri, fontWeight: active ? '600' : '400' }]}>
               {opt.label}
             </Text>
           </Pressable>
@@ -136,8 +136,8 @@ export default function IntakeFormScreen() {
   const skipScale = useSharedValue(1);
   const skipAnim  = useAnimatedStyle(() => ({ transform: [{ scale: skipScale.value }] }));
 
-  const bg      = isDark ? colors.forestInk  : colors.skyMist;
-  const textSub = isDark ? colors.stoneDim : colors.coolGray;
+  const bg      = isDark ? colors.forestInk  : colors.ivory;
+  const textSub = isDark ? colors.stoneDim : colors.stone;
 
   return (
     <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
@@ -152,7 +152,7 @@ export default function IntakeFormScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: isDark ? colors.white : colors.navyDeep }]}>A few quick questions</Text>
+        <Text style={[styles.title, { color: isDark ? colors.ivoryText : colors.ink }]}>A few quick questions</Text>
         <Text style={[styles.subtitle, { color: textSub }]}>Your doctor reviews these before your first consultation.</Text>
       </View>
 
@@ -176,14 +176,14 @@ export default function IntakeFormScreen() {
 
       <Animated.View style={skipAnim}>
         <Pressable
-          style={[styles.skipBtn, !canSkip && styles.skipMuted, { borderColor: canSkip ? (isDark ? colors.electricBlue : colors.navyDeep) : colors.borderLight }]}
+          style={[styles.skipBtn, !canSkip && styles.skipMuted, { borderColor: canSkip ? (isDark ? colors.jade : colors.forest) : colors.borderLight }]}
           onPress={handleSkip}
           onPressIn={() => { skipScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
           onPressOut={() => { skipScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
           disabled={!canSkip}
           accessibilityLabel="Skip — speak to a coordinator directly"
         >
-          <Text style={[styles.skipText, { color: canSkip ? (isDark ? colors.electricBlue : colors.navyDeep) : colors.borderLight }]}>
+          <Text style={[styles.skipText, { color: canSkip ? (isDark ? colors.jade : colors.ink) : colors.borderLight }]}>
             Skip — speak to a coordinator directly
           </Text>
         </Pressable>
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: 4,
-    backgroundColor: colors.electricBlue,
+    backgroundColor: colors.jade,
     borderRadius: 2,
   },
   stepLabel: {
@@ -240,18 +240,18 @@ const styles = StyleSheet.create({
 
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[3],
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.25)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.25)}`,
   },
   buttonMuted: { opacity: 0.40 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
 

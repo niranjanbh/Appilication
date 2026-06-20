@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_coord_session
+from app.adminui.schemas import coordinator as coord_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole
 from app.db.session import get_db
@@ -48,11 +49,18 @@ async def intake_queue(
             {"coord": coord, "queue": [], "error": "No coordinator profile."},
         )
 
-    queue = await coord_repo.list_intake_queue(db, coordinator_id=coordinator.id)
+    queue = coord_schemas.consultation_user_pairs(
+        await coord_repo.list_intake_queue(db, coordinator_id=coordinator.id)
+    )
     return templates.TemplateResponse(
         request,
         "coord/intake.html",
-        {"coord": coord, "queue": queue, "error": None},
+        {
+            "coord": coord,
+            "queue": queue,
+            "error": None,
+            "escalated": request.query_params.get("escalated"),
+        },
     )
 
 
@@ -73,21 +81,13 @@ async def confirm_intake(
     if coordinator is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
-    from sqlalchemy import select, update
-
-    from app.db.enums import ConsultationStatus
-    from app.models.clinic import Consultation
-
-    assigned = await coord_repo._get_assigned_ids(db, coordinator.id)
-    result = await db.execute(
-        select(Consultation).where(
-            Consultation.id == consultation_id,
-            Consultation.patient_id.in_(assigned),
-            Consultation.deleted_at.is_(None),
-        )
+    confirmed = await coord_repo.confirm_intake_consultation(
+        db,
+        coordinator_id=coordinator.id,
+        consultation_id=consultation_id,
+        note=notes,
     )
-    consultation = result.scalar_one_or_none()
-    if consultation is None:
+    if confirmed is None:
         await write_audit(
             db, ctx, action="coord_confirm_intake", resource_type="consultation",
             resource_id=consultation_id, allowed=False, reason="not_assigned_or_not_found",
@@ -95,18 +95,10 @@ async def confirm_intake(
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
-    # Store coordinator notes in cancellation_reason temporarily (no dedicated column).
-    # If notes provided, prepend "[COORD NOTE]" to distinguish.
-    values: dict[str, object] = {"status": ConsultationStatus.CONFIRMED}
-    if notes:
-        values["cancellation_reason"] = f"[COORD] {notes[:490]}"
-
-    await db.execute(
-        update(Consultation).where(Consultation.id == consultation_id).values(**values)
-    )
     await write_audit(
         db, ctx, action="coord_confirm_intake", resource_type="consultation",
         resource_id=consultation_id, allowed=True,
+        log_metadata={"note_added": bool(notes.strip())},
     )
 
     return RedirectResponse(url="/coord/intake", status_code=status.HTTP_302_FOUND)
@@ -129,13 +121,31 @@ async def escalate_intake(
     if coordinator is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
+    # Durable record first: persist the escalation as a PatientInteraction so it
+    # survives even if email delivery fails. None = not assigned or not found.
+    escalated = await coord_repo.escalate_intake_consultation(
+        db,
+        coordinator_id=coordinator.id,
+        consultation_id=consultation_id,
+        reason=reason,
+    )
+    if escalated is None:
+        await write_audit(
+            db, ctx, action="coord_escalate_intake", resource_type="consultation",
+            resource_id=consultation_id, allowed=False, reason="not_assigned_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
     await write_audit(
         db, ctx, action="coord_escalate_intake", resource_type="consultation",
         resource_id=consultation_id, allowed=True,
         log_metadata={"reason": reason[:200]},
     )
 
-    # Notify super admin
+    # Notify super admin — best-effort on top of the persisted record. A failure
+    # here does not lose the escalation; surface it to the coordinator.
+    email_ok = True
     try:
         from app.core.config import settings
         from app.integrations.email import send_email
@@ -151,8 +161,9 @@ async def escalate_intake(
                 text_body=f"Escalation by {coord.name}: {reason}",
             )
     except Exception:
-        pass
+        email_ok = False
 
-    return RedirectResponse(url="/coord/intake", status_code=status.HTTP_302_FOUND)
+    redirect = "/coord/intake?escalated=1" if email_ok else "/coord/intake?escalated=email_failed"
+    return RedirectResponse(url=redirect, status_code=status.HTTP_302_FOUND)
 
 

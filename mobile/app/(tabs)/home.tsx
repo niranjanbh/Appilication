@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
-import { NeumorphCard } from '../../components/ui/NeumorphCard';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { useAuth } from '../../lib/auth/context';
@@ -32,10 +32,10 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { id: 'consult',   label: 'Consult',   icon: 'medkit-outline',        tint: 'blue',   route: '/(tabs)/consultations' },
-  { id: 'reminders', label: 'Reminders', icon: 'alarm-outline',         tint: 'amber',  route: '/(tabs)/reminders' },
-  { id: 'reports',   label: 'Reports',   icon: 'flask-outline',         tint: 'green',  route: '/(tabs)/reports' },
-  { id: 'notes',     label: 'My Notes',  icon: 'create-outline',        tint: 'violet', route: '/notes' },
+  { id: 'consult',   label: 'Consult',   icon: 'medkit-outline',        tint: 'forest',  route: '/(tabs)/consultations' },
+  { id: 'reminders', label: 'Reminders', icon: 'alarm-outline',         tint: 'saffron', route: '/(tabs)/reminders' },
+  { id: 'reports',   label: 'Reports',   icon: 'flask-outline',         tint: 'sage',    route: '/(tabs)/reports' },
+  { id: 'notes',     label: 'My Notes',  icon: 'create-outline',        tint: 'peach',   route: '/notes' },
 ];
 
 function getGreeting(): string {
@@ -43,16 +43,6 @@ function getGreeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
-}
-
-function getInitials(fullName: string): string {
-  return fullName
-    .trim()
-    .split(/\s+/)
-    .map(n => n[0] ?? '')
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 }
 
 // ─── Quick action button ──────────────────────────────────────────────────────
@@ -108,7 +98,6 @@ export default function HomeScreen() {
   const recentNotes = notesData?.items ?? [];
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
-  const initials  = state.status === 'authenticated' ? getInitials(state.user.name) : 'K';
 
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
@@ -125,9 +114,6 @@ export default function HomeScreen() {
             <Text style={[styles.greeting, { color: t.textSub }]}>{getGreeting()}</Text>
             <Text style={[styles.heroName, { color: t.text }]}>{firstName || 'Welcome'}</Text>
           </View>
-          <LinearGradient colors={t.isDark ? [colors.jade, colors.forest] : [colors.navyMid, colors.navyDeep]} style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </LinearGradient>
         </View>
 
         {/* ── Hero CTA — gradient glass card ─────────────────────────────── */}
@@ -138,7 +124,7 @@ export default function HomeScreen() {
           accessibilityLabel="Book your first consultation"
         >
           <LinearGradient
-            colors={t.isDark ? [colors.jade, colors.forest] : [colors.navyMid, colors.navyDeep]}
+            colors={t.isDark ? [colors.jadeGlow, colors.forest] : [colors.jade, colors.forest]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroCard}
@@ -181,7 +167,7 @@ export default function HomeScreen() {
         </View>
 
         {/* ── Health notes preview ────────────────────────────────────────── */}
-        <NeumorphCard>
+        <GlassCard>
           <View style={styles.notesHeader}>
             <Text style={[styles.sectionTitle, { color: t.text }]}>Health Notes</Text>
             <HapticPressable
@@ -211,10 +197,10 @@ export default function HomeScreen() {
               ))}
             </View>
           )}
-        </NeumorphCard>
+        </GlassCard>
 
         {/* ── Care plan card ──────────────────────────────────────────────── */}
-        <NeumorphCard>
+        <GlassCard>
           <View style={styles.carePlanInner}>
             <Text style={[styles.eyebrow, { color: t.textSub }]}>YOUR CARE PLAN</Text>
             <Text style={[styles.carePlanTitle, { color: t.text }]}>
@@ -226,7 +212,7 @@ export default function HomeScreen() {
               first consultation.
             </Text>
           </View>
-        </NeumorphCard>
+        </GlassCard>
 
       </ScrollView>
     </View>
@@ -257,20 +243,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.white,
-    fontWeight: '700',
-  },
-
   // Hero card — gradient surface with a glass sheen and soft glow
   heroCard: {
     borderRadius: borderRadius.xxl,
@@ -301,7 +273,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
   heroSub: {
@@ -337,7 +309,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[1],
-    boxShadow: '0 4px 10px rgba(0,0,0,0.09)',
+    boxShadow: '0 4px 12px rgba(60,52,30,0.06)',
   },
   quickLabel: {
     fontFamily: fontFamily.body,

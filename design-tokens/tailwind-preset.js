@@ -21,6 +21,7 @@ module.exports = {
         display: tokens.typography.fontFamily.display,
         body:    tokens.typography.fontFamily.body,
         hindi:   tokens.typography.fontFamily.hindi,
+        data:    tokens.typography.fontFamily.data,
       },
       fontSize: {
         caption:   [tokens.typography.fontSize.caption,  { lineHeight: tokens.typography.lineHeight.caption }],
@@ -49,6 +50,17 @@ module.exports = {
       transitionTimingFunction: {
         out:    tokens.motion.easing.out,
         'in-out': tokens.motion.easing.inOut,
+      },
+      boxShadow: {
+        xs:      tokens.shadow.xs,
+        sm:      tokens.shadow.sm,
+        md:      tokens.shadow.md,
+        lg:      tokens.shadow.lg,
+        hero:    tokens.shadow.hero,
+        caution: tokens.shadow.caution,
+      },
+      backgroundImage: {
+        'screen-warm': tokens.gradient.screenWarm,
       },
     },
   },

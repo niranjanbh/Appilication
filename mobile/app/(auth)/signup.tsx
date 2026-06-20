@@ -75,11 +75,11 @@ export default function SignupScreen() {
     }
   };
 
-  const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
+  const textPri  = isDark ? colors.ivoryText        : colors.ink;
+  const textSub  = isDark ? colors.stoneDim    : colors.stone;
   const inputBg  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.35)';
   const inputBdr = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.50)';
-  const inputTxt = isDark ? colors.white        : colors.navyDeep;
+  const inputTxt = isDark ? colors.ivoryText        : colors.ink;
   const modalBg  = isDark ? colors.forestSurface : colors.white;
 
   return (
@@ -112,7 +112,7 @@ export default function SignupScreen() {
                 control={control}
                 name="name"
                 render={({ field }) => (
-                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.name ? colors.criticalRed : inputBdr }]}>
+                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.name ? colors.alert : inputBdr }]}>
                     <TextInput
                       style={[styles.textInput, { color: inputTxt }]}
                       value={field.value}
@@ -135,7 +135,7 @@ export default function SignupScreen() {
               <Text style={[styles.label, { color: textPri }]}>Phone number</Text>
               <View style={styles.phoneRow}>
                 <Pressable
-                  style={[styles.countryBtn, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.criticalRed : inputBdr }]}
+                  style={[styles.countryBtn, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.alert : inputBdr }]}
                   onPress={() => setPickerVisible(true)}
                   accessibilityLabel="Select country code"
                 >
@@ -147,7 +147,7 @@ export default function SignupScreen() {
                   control={control}
                   name="phoneNumber"
                   render={({ field }) => (
-                    <View style={[styles.inputWrap, styles.phoneInputWrap, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.criticalRed : inputBdr }]}>
+                    <View style={[styles.inputWrap, styles.phoneInputWrap, { backgroundColor: inputBg, borderColor: errors.phoneNumber ? colors.alert : inputBdr }]}>
                       <TextInput
                         style={[styles.textInput, { color: inputTxt }]}
                         value={field.value}
@@ -173,7 +173,7 @@ export default function SignupScreen() {
                 control={control}
                 name="email"
                 render={({ field }) => (
-                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.email ? colors.criticalRed : inputBdr }]}>
+                  <View style={[styles.inputWrap, { backgroundColor: inputBg, borderColor: errors.email ? colors.alert : inputBdr }]}>
                     <TextInput
                       style={[styles.textInput, { color: inputTxt }]}
                       value={field.value}
@@ -199,7 +199,7 @@ export default function SignupScreen() {
                 control={control}
                 name="password"
                 render={({ field }) => (
-                  <View style={[styles.inputWrap, styles.inputRow, { backgroundColor: inputBg, borderColor: errors.password ? colors.criticalRed : inputBdr }]}>
+                  <View style={[styles.inputWrap, styles.inputRow, { backgroundColor: inputBg, borderColor: errors.password ? colors.alert : inputBdr }]}>
                     <TextInput
                       style={[styles.textInput, styles.textInputFlex, { color: inputTxt }]}
                       value={field.value}
@@ -263,7 +263,7 @@ export default function SignupScreen() {
             {COUNTRY_CODES.map(item => (
               <Pressable
                 key={item.code}
-                style={[styles.sheetRow, item.code === countryCode && { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.iceBlue }]}
+                style={[styles.sheetRow, item.code === countryCode && { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}
                 onPress={() => { setCountryCode(item.code); setPickerVisible(false); }}
                 accessibilityLabel={`${item.name} ${item.code}`}
               >
@@ -280,19 +280,22 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, overflow: 'hidden' },
   container: {
     flexGrow: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],
     paddingBottom: spacing[8],
+    maxWidth: 480,
+    alignSelf: 'center',
+    width: '100%',
   },
 
   logoArea: { alignItems: 'center', marginBottom: spacing[6], gap: spacing[1] },
   wordmark: {
     fontFamily: fontFamily.display,
     fontSize: 48,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '500',
   },
   tagline: {
@@ -337,7 +340,7 @@ const styles = StyleSheet.create({
   fieldError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.criticalRed,
+    color: colors.alert,
   },
   phoneRow:   { flexDirection: 'row', gap: spacing[2] },
   countryBtn: {
@@ -360,22 +363,22 @@ const styles = StyleSheet.create({
   apiError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.criticalRed,
+    color: colors.alert,
     textAlign: 'center',
   },
   button: {
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
   signInLink: {

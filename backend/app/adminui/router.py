@@ -13,10 +13,12 @@ from app.adminui.views.audit_log import router as audit_log_router
 from app.adminui.views.auth import router as auth_router
 from app.adminui.views.consultations import router as consultations_router
 from app.adminui.views.content import router as content_router
+from app.adminui.views.coupons import router as coupons_router
 from app.adminui.views.dashboard import router as dashboard_router
 from app.adminui.views.doctors import router as doctors_router
 from app.adminui.views.dsr import router as dsr_router
 from app.adminui.views.payments import router as payments_router
+from app.adminui.views.pricing import router as pricing_router
 from app.adminui.views.settings import router as settings_router
 from app.adminui.views.staff import router as staff_router
 from app.adminui.views.users import router as users_router
@@ -36,6 +38,8 @@ admin_router.include_router(staff_router, dependencies=_csrf)
 admin_router.include_router(doctors_router, dependencies=_csrf)
 admin_router.include_router(consultations_router, dependencies=_csrf)
 admin_router.include_router(payments_router, dependencies=_csrf)
+admin_router.include_router(pricing_router, dependencies=_csrf)
+admin_router.include_router(coupons_router, dependencies=_csrf)
 admin_router.include_router(content_router, dependencies=_csrf)
 admin_router.include_router(dsr_router, dependencies=_csrf)
 admin_router.include_router(audit_log_router, dependencies=_csrf)

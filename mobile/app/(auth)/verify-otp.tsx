@@ -71,9 +71,9 @@ export default function VerifyOtpScreen() {
     }
   };
 
-  const textPri  = isDark ? colors.white        : colors.navyDeep;
-  const textSub  = isDark ? colors.stoneDim    : colors.coolGray;
-  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.skyMist;
+  const textPri  = isDark ? colors.ivoryText        : colors.ink;
+  const textSub  = isDark ? colors.stoneDim    : colors.stone;
+  const inputBg  = isDark ? colors.forestSurfaceRaised    : colors.ivory;
   const inputBdr = isDark ? 'rgba(255,255,255,0.10)' : colors.borderLight;
 
   return (
@@ -107,7 +107,7 @@ export default function VerifyOtpScreen() {
               <TextInput
                 style={[
                   styles.otpInput,
-                  { backgroundColor: inputBg, borderColor: errors.otp ? colors.criticalRed : inputBdr, color: textPri },
+                  { backgroundColor: inputBg, borderColor: errors.otp ? colors.alert : inputBdr, color: textPri },
                 ]}
                 value={field.value}
                 onChangeText={field.onChange}
@@ -146,7 +146,7 @@ export default function VerifyOtpScreen() {
             accessibilityLabel="Resend verification code"
             style={styles.resendBtn}
           >
-            <Text style={[styles.resendText, { color: resent ? colors.successGreen : textSub }]}>
+            <Text style={[styles.resendText, { color: resent ? colors.jade : textSub }]}>
               {resent ? '✓ Code sent again' : resending ? 'Sending…' : "Didn't receive it? Resend"}
             </Text>
           </Pressable>
@@ -159,20 +159,23 @@ export default function VerifyOtpScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, overflow: 'hidden' },
   container: {
     flex: 1,
     paddingHorizontal: spacing[6],
     paddingTop: spacing[12],
     paddingBottom: spacing[8],
     justifyContent: 'center',
+    maxWidth: 480,
+    alignSelf: 'center',
+    width: '100%',
   },
 
   logoArea: { alignItems: 'center', marginBottom: spacing[6] },
   wordmark: {
     fontFamily: fontFamily.display,
     fontSize: 40,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '500',
   },
 
@@ -214,30 +217,30 @@ const styles = StyleSheet.create({
   fieldError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
-    color: colors.criticalRed,
+    color: colors.alert,
     textAlign: 'center',
   },
   apiError: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
-    color: colors.criticalRed,
+    color: colors.alert,
     textAlign: 'center',
   },
 
   button: {
     width: '100%',
     height: 56,
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.navyDeep, 0.30)}`,
+    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
   },
   buttonBusy: { opacity: 0.70 },
   buttonText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
-    color: colors.white,
+    color: colors.ivoryText,
     fontWeight: '600',
   },
 

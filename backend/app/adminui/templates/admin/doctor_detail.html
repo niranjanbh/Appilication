@@ -32,18 +32,91 @@
     </div>
   </div>
 
+  {% if error == 'invalid_transition' %}
+  <div class="alert-bar alert-bar-error" style="margin-top:16px;">
+    That action is not allowed from the doctor's current status.
+  </div>
+  {% endif %}
+
   <!-- Pipeline actions -->
   <div class="card" style="margin-top:20px;">
-    <div class="card-title">Pipeline actions</div>
+    <div class="card-title">Lifecycle actions</div>
     <div class="action-bar">
-      <form method="POST" action="/admin/doctors/{{ doctor.id }}/verify">
+      {% if next_status %}
+      <form method="POST" action="/admin/doctors/{{ doctor.id }}/advance">
         {{ csrf_field(request) }}
-        <button type="submit" class="btn btn-secondary">Mark Verified</button>
+        <button type="submit" class="btn btn-primary">Advance to {{ next_status }}</button>
       </form>
-      <form method="POST" action="/admin/doctors/{{ doctor.id }}/activate">
+      {% endif %}
+      {% if can_suspend %}
+      <form method="POST" action="/admin/doctors/{{ doctor.id }}/suspend">
         {{ csrf_field(request) }}
-        <button type="submit" class="btn btn-primary">Activate</button>
+        <button type="submit" class="btn btn-danger">Suspend</button>
       </form>
+      {% endif %}
+      {% if can_reactivate %}
+      <form method="POST" action="/admin/doctors/{{ doctor.id }}/reactivate">
+        {{ csrf_field(request) }}
+        <button type="submit" class="btn btn-primary">Reactivate</button>
+      </form>
+      {% endif %}
+      {% if not next_status and not can_suspend and not can_reactivate %}
+      <span style="font-size:13px;color:var(--stone);">No lifecycle actions available from this status.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Credentials -->
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Credentials</div>
+    {% if cred_success == 'verified' %}
+    <div class="alert-bar alert-bar-success" style="margin:10px 0;">Credential verified.</div>
+    {% endif %}
+    {% if cred_error == 'not_found' %}
+    <div class="alert-bar alert-bar-error" style="margin:10px 0;">Credential not found.</div>
+    {% endif %}
+    <div class="table-wrap" style="margin-top:10px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th><th>Institution</th><th>Year</th><th>Document</th><th>Status</th>
+            {% if admin and admin.role.value == 'super_admin' %}<th></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for cred in credentials %}
+          <tr>
+            <td>{{ cred.credential_type.value }}</td>
+            <td style="color:var(--stone);">{{ cred.institution }}</td>
+            <td style="color:var(--stone);">{{ cred.year }}</td>
+            <td>
+              {% if cred.document_url %}
+              <a href="{{ cred.document_url }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">View</a>
+              {% else %}<span style="color:var(--stone);">—</span>{% endif %}
+            </td>
+            <td>
+              {% if cred.verified_by_admin_id %}
+              <span class="chip chip-active">Verified</span>
+              {% else %}
+              <span class="chip chip-inactive">Unverified</span>
+              {% endif %}
+            </td>
+            {% if admin and admin.role.value == 'super_admin' %}
+            <td>
+              {% if not cred.verified_by_admin_id %}
+              <form method="POST" action="/admin/doctors/{{ doctor.id }}/credentials/{{ cred.id }}/verify">
+                {{ csrf_field(request) }}
+                <button type="submit" class="btn btn-primary btn-sm">Verify</button>
+              </form>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ 6 if admin and admin.role.value == 'super_admin' else 5 }}" style="text-align:center;color:var(--stone);padding:16px;">No credentials on file.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 

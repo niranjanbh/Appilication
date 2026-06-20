@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_admin_session, require_super_admin_session
+from app.adminui.schemas import admin as admin_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, DoctorStatus
 from app.db.session import get_db
@@ -61,7 +62,7 @@ async def doctor_list(
         template,
         {
             "admin": admin,
-            "doctors": doctors,
+            "doctors": admin_schemas.doctor_pairs(doctors),
             "total": total,
             "page": page,
             "search": search,
@@ -84,7 +85,7 @@ async def doctor_pipeline(
         stage_doctors, _ = await admin_repo.list_doctors(
             db, status_filter=stage.value, page=1, page_size=100
         )
-        by_status[stage.value] = list(stage_doctors)
+        by_status[stage.value] = admin_schemas.doctor_pairs(list(stage_doctors))
 
     return templates.TemplateResponse(
         request,
@@ -119,48 +120,150 @@ async def doctor_detail(
         db, ctx, action="admin_view_doctor", resource_type="doctor",
         resource_id=doctor_id, allowed=True,
     )
+    credentials = await admin_repo.get_credentials_for_doctor(db, doctor_id=doctor_id)
+    await write_audit(
+        db, ctx, action="admin_list_credentials", resource_type="credential",
+        resource_id=doctor_id, allowed=True,
+    )
+    next_status = admin_repo.next_advance_status(doctor.status)
+    can_suspend = admin_repo.can_suspend(doctor.status)
+    can_reactivate = admin_repo.can_reactivate(doctor.status)
     return templates.TemplateResponse(
         request,
         "admin/doctor_detail.html",
         {
             "admin": admin,
-            "doctor": doctor,
-            "user": user,
+            "doctor": admin_schemas.AdminDoctorView.model_validate(doctor),
+            "user": admin_schemas.AdminUserView.model_validate(user),
+            "credentials": credentials,
             "pipeline_stages": [s.value for s in _PIPELINE_STAGES],
+            "next_status": next_status.value if next_status else None,
+            "can_suspend": can_suspend,
+            "can_reactivate": can_reactivate,
+            "error": request.query_params.get("error"),
+            "cred_error": request.query_params.get("cred_error"),
+            "cred_success": request.query_params.get("cred_success"),
         },
     )
 
 
-@router.post("/doctors/{doctor_id}/verify")
-async def verify_doctor(
+@router.post("/doctors/{doctor_id}/advance")
+async def advance_doctor(
     doctor_id: uuid.UUID,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[object, Depends(require_super_admin_session)],
 ) -> RedirectResponse:
+    """Advance a doctor one step along the credentialing pipeline.
+
+    Uses the same forward state machine as the REST advance endpoint
+    (application_received → documents_submitted → under_review → verified →
+    active). Rejects out-of-order jumps with an in-page error.
+    """
     ctx = _ctx(request, admin)
-    updated = await admin_repo.update_doctor_status(db, doctor_id, DoctorStatus.VERIFIED)
+    row = await admin_repo.get_doctor_detail(db, doctor_id)
+    if row is None:
+        await write_audit(
+            db, ctx, action="advance_doctor_status", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Doctor not found")
+
+    doctor, _user = row
+    target = admin_repo.next_advance_status(doctor.status)
+    if target is None:
+        await write_audit(
+            db, ctx, action="advance_doctor_status", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="invalid_transition",
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/admin/doctors/{doctor_id}?error=invalid_transition",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await admin_repo.update_doctor_status(db, doctor_id, target)
     await write_audit(
-        db, ctx, action="admin_verify_doctor", resource_type="doctor",
-        resource_id=doctor_id, allowed=updated is not None,
-        reason=None if updated else "not_found",
+        db, ctx, action="advance_doctor_status", resource_type="doctor",
+        resource_id=doctor_id, allowed=True,
+        log_metadata={"new_status": target.value},
     )
     return RedirectResponse(url=f"/admin/doctors/{doctor_id}", status_code=status.HTTP_302_FOUND)
 
 
-@router.post("/doctors/{doctor_id}/activate")
-async def activate_doctor(
+@router.post("/doctors/{doctor_id}/suspend")
+async def suspend_doctor(
     doctor_id: uuid.UUID,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[object, Depends(require_super_admin_session)],
 ) -> RedirectResponse:
+    """Suspend an active (or inactive) doctor. Lateral transition → suspended."""
     ctx = _ctx(request, admin)
-    updated = await admin_repo.update_doctor_status(db, doctor_id, DoctorStatus.ACTIVE)
+    row = await admin_repo.get_doctor_detail(db, doctor_id)
+    if row is None:
+        await write_audit(
+            db, ctx, action="suspend_doctor", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Doctor not found")
+
+    doctor, _user = row
+    if not admin_repo.can_suspend(doctor.status):
+        await write_audit(
+            db, ctx, action="suspend_doctor", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="invalid_transition",
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/admin/doctors/{doctor_id}?error=invalid_transition",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await admin_repo.update_doctor_status(db, doctor_id, DoctorStatus.SUSPENDED)
     await write_audit(
-        db, ctx, action="admin_activate_doctor", resource_type="doctor",
-        resource_id=doctor_id, allowed=updated is not None,
-        reason=None if updated else "not_found",
+        db, ctx, action="suspend_doctor", resource_type="doctor",
+        resource_id=doctor_id, allowed=True,
+    )
+    return RedirectResponse(url=f"/admin/doctors/{doctor_id}", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/doctors/{doctor_id}/reactivate")
+async def reactivate_doctor(
+    doctor_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+) -> RedirectResponse:
+    """Reactivate a suspended (or inactive) doctor → active."""
+    ctx = _ctx(request, admin)
+    row = await admin_repo.get_doctor_detail(db, doctor_id)
+    if row is None:
+        await write_audit(
+            db, ctx, action="reactivate_doctor", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Doctor not found")
+
+    doctor, _user = row
+    if not admin_repo.can_reactivate(doctor.status):
+        await write_audit(
+            db, ctx, action="reactivate_doctor", resource_type="doctor",
+            resource_id=doctor_id, allowed=False, reason="invalid_transition",
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/admin/doctors/{doctor_id}?error=invalid_transition",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await admin_repo.update_doctor_status(db, doctor_id, DoctorStatus.ACTIVE)
+    await write_audit(
+        db, ctx, action="reactivate_doctor", resource_type="doctor",
+        resource_id=doctor_id, allowed=True,
     )
     return RedirectResponse(url=f"/admin/doctors/{doctor_id}", status_code=status.HTTP_302_FOUND)
 
@@ -194,6 +297,41 @@ async def set_revenue_share(
     return RedirectResponse(url=f"/admin/doctors/{doctor_id}", status_code=status.HTTP_302_FOUND)
 
 
+@router.post("/doctors/{doctor_id}/credentials/{credential_id}/verify")
+async def verify_credential(
+    doctor_id: uuid.UUID,
+    credential_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+) -> RedirectResponse:
+    """Mark a doctor credential as verified by the current super admin."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    ctx = _ctx(request, admin)
+
+    credential = await admin_repo.verify_credential(
+        db, credential_id=credential_id, admin_user_id=admin.id
+    )
+    allowed = credential is not None
+    await write_audit(
+        db, ctx, action="verify_credential", resource_type="credential",
+        resource_id=credential_id, allowed=allowed,
+        reason=None if allowed else "not_found",
+    )
+    if not allowed:
+        await db.commit()
+        return RedirectResponse(
+            url=f"/admin/doctors/{doctor_id}?cred_error=not_found",
+            status_code=status.HTTP_302_FOUND,
+        )
+    return RedirectResponse(
+        url=f"/admin/doctors/{doctor_id}?cred_success=verified",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
 @router.get("/doctors/{doctor_id}/edit", response_class=HTMLResponse)
 async def doctor_edit_form(
     doctor_id: uuid.UUID,
@@ -208,7 +346,12 @@ async def doctor_edit_form(
     return templates.TemplateResponse(
         request,
         "admin/doctor_edit.html",
-        {"admin": admin, "doctor": doctor, "doctor_user": user, "error": None},
+        {
+            "admin": admin,
+            "doctor": admin_schemas.AdminDoctorView.model_validate(doctor),
+            "doctor_user": admin_schemas.AdminUserView.model_validate(user),
+            "error": None,
+        },
     )
 
 

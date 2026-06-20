@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clock, Video, VideoOff } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle, Clock, ShieldCheck, Video, VideoOff } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 import { PatientContextPanel } from './PatientContextPanel';
 import { NotesPanel } from './NotesPanel';
 import { LabOrderBuilder } from './LabOrderBuilder';
 import { PreConsultReport } from './PreConsultReport';
 import { PrescriptionPanel } from './PrescriptionPanel';
 import { CarePlanPanel } from './CarePlanPanel';
+import { DiagnosisPanel } from './DiagnosisPanel';
+import { EducationAssignPanel } from './EducationAssignPanel';
 
 interface ConsultationDetail {
   id: string;
@@ -17,6 +21,12 @@ interface ConsultationDetail {
   status: string;
   video_room_id: string | null;
   scheduled_start_at: string;
+}
+
+interface JoinResponse {
+  room_id: string;
+  token: string;
+  endpoint?: string;
 }
 
 const ACTIVE_STATUSES = new Set(['scheduled', 'confirmed', 'in_progress']);
@@ -49,15 +59,59 @@ interface VideoAreaProps {
 
 function VideoArea({ consultation }: VideoAreaProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [meetingUrl, setMeetingUrl] = useState<string | null>(null);
   const isActive = ACTIVE_STATUSES.has(consultation.status);
 
-  if (!isActive || !consultation.video_room_id) {
+  // Fetch a doctor-scoped 100ms token from the backend, then build the meeting URL.
+  // The token is requested only after the doctor acknowledges recording consent.
+  const join = useMutation({
+    mutationFn: () =>
+      apiFetch<JoinResponse>(`/v1/doctor/consultations/${consultation.id}/join`),
+    onSuccess: data => {
+      setMeetingUrl(
+        `https://app.100ms.live/meeting/${data.room_id}?token=${encodeURIComponent(data.token)}`,
+      );
+    },
+  });
+
+  if (!isActive) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-ink/90 rounded-card gap-3">
         <VideoOff size={40} className="text-stone" />
         <p className="font-body text-body text-stone">
           {consultation.status === 'completed' ? 'Consultation ended' : 'Video not yet available'}
         </p>
+      </div>
+    );
+  }
+
+  // Consent gate: the doctor must acknowledge recording before a token is issued.
+  if (!meetingUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-ink/90 rounded-card gap-4 px-8 text-center">
+        <ShieldCheck size={40} className="text-sage" />
+        <div>
+          <p className="font-body text-body text-ivory font-medium mb-1">
+            Ready to join the consultation
+          </p>
+          <p className="font-body text-caption text-stone max-w-sm">
+            This consultation may be recorded. By joining, you consent to recording for clinical
+            and compliance purposes.
+          </p>
+        </div>
+        <button
+          onClick={() => join.mutate()}
+          disabled={join.isPending}
+          className="inline-flex items-center gap-2 bg-forest text-ivory font-body text-body font-semibold px-5 py-2.5 rounded-md hover:bg-jade transition-colors disabled:opacity-50"
+        >
+          <Video size={16} />
+          {join.isPending ? 'Connecting…' : 'I consent — Join consultation'}
+        </button>
+        {join.isError && (
+          <p className="font-body text-caption text-alert">
+            Could not join: {join.error instanceof Error ? join.error.message : 'please try again'}.
+          </p>
+        )}
       </div>
     );
   }
@@ -76,7 +130,7 @@ function VideoArea({ consultation }: VideoAreaProps) {
 
       <iframe
         ref={iframeRef}
-        src={`https://app.100ms.live/meeting/${consultation.video_room_id}`}
+        src={meetingUrl}
         allow="camera; microphone; display-capture; fullscreen"
         className="flex-1 w-full border-0"
         title="Video consultation"
@@ -85,16 +139,71 @@ function VideoArea({ consultation }: VideoAreaProps) {
   );
 }
 
-type SideTab = 'notes' | 'context' | 'labs' | 'prep' | 'rx' | 'careplan';
+type SideTab = 'notes' | 'context' | 'labs' | 'prep' | 'rx' | 'careplan' | 'dx' | 'edu';
 
 const SIDE_TABS: { id: SideTab; label: string }[] = [
   { id: 'prep', label: 'Pre-consult' },
   { id: 'notes', label: 'Notes' },
   { id: 'context', label: 'Patient context' },
+  { id: 'dx', label: 'Diagnoses' },
   { id: 'rx', label: 'Prescription' },
   { id: 'careplan', label: 'Care plan' },
   { id: 'labs', label: 'Order labs' },
+  { id: 'edu', label: 'Education' },
 ];
+
+const COMPLETABLE_STATUSES = new Set(['scheduled', 'confirmed', 'in_progress']);
+
+function CompleteConsultationButton({ consultation }: { consultation: ConsultationDetail }) {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const complete = useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string; status: string }>(
+        `/v1/doctor/consultations/${consultation.id}/complete`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      setConfirming(false);
+      qc.invalidateQueries({ queryKey: ['consultation', consultation.id] });
+    },
+  });
+
+  if (!COMPLETABLE_STATUSES.has(consultation.status)) return null;
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="font-body text-caption text-stone">End this consultation?</span>
+        <button
+          onClick={() => complete.mutate()}
+          disabled={complete.isPending}
+          className="font-body text-caption font-semibold bg-forest text-ivory px-3 py-1.5 rounded-md hover:bg-jade transition-colors disabled:opacity-50"
+        >
+          {complete.isPending ? 'Ending…' : 'Yes, complete'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          disabled={complete.isPending}
+          className="font-body text-caption font-semibold text-stone hover:text-ink px-2 py-1.5 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setConfirming(true)}
+      className="inline-flex items-center gap-1.5 font-body text-caption font-semibold text-forest border border-forest rounded-md px-3 py-1.5 hover:bg-forest/5 transition-colors"
+    >
+      <CheckCircle size={14} />
+      Complete consultation
+    </button>
+  );
+}
 
 interface ConsultationVideoLayoutProps {
   consultation: ConsultationDetail;
@@ -105,62 +214,73 @@ export function ConsultationVideoLayout({ consultation }: ConsultationVideoLayou
   const isCompleted = consultation.status === 'completed';
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-0 overflow-hidden">
-      {/* Left: Video */}
-      <div className="flex-[3] min-w-0 p-4">
-        <VideoArea consultation={consultation} />
+    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+      {/* Action bar */}
+      <div className="flex items-center justify-end px-4 py-2 border-b border-stone/15 bg-white shrink-0">
+        <CompleteConsultationButton consultation={consultation} />
       </div>
 
-      {/* Right: Side panel */}
-      <div className="flex-[2] min-w-0 border-l border-stone/15 flex flex-col bg-ivory">
-        {/* Tab bar */}
-        <div className="flex border-b border-stone/15 px-2 pt-2 shrink-0">
-          {SIDE_TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setSideTab(tab.id)}
-              className={`font-body text-caption px-3 py-2 border-b-2 transition-colors whitespace-nowrap ${
-                sideTab === tab.id
-                  ? 'border-forest text-forest font-semibold'
-                  : 'border-transparent text-stone hover:text-ink'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="flex flex-1 gap-0 overflow-hidden">
+        {/* Left: Video */}
+        <div className="flex-[3] min-w-0 p-4">
+          <VideoArea consultation={consultation} />
         </div>
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {sideTab === 'prep' && <PreConsultReport consultationId={consultation.id} />}
-
-          {sideTab === 'notes' && <NotesPanel consultationId={consultation.id} />}
-
-          {sideTab === 'context' && (
-            <PatientContextPanel
-              consultationId={consultation.id}
-              patientId={consultation.patient_id}
-              patientUserId={consultation.patient_user_id}
-              patientName={consultation.patient_name}
-            />
-          )}
-
-          {sideTab === 'rx' && <PrescriptionPanel consultationId={consultation.id} />}
-
-          {sideTab === 'careplan' && <CarePlanPanel consultationId={consultation.id} />}
-
-          {sideTab === 'labs' && <LabOrderBuilder consultationId={consultation.id} />}
-        </div>
-
-        {/* Post-call summary banner (completed only) */}
-        {isCompleted && (
-          <div className="shrink-0 border-t border-stone/15 bg-sage/10 px-4 py-3">
-            <p className="font-body text-caption font-semibold text-forest mb-0.5">Post-call</p>
-            <p className="font-body text-caption text-stone">
-              Add a prescription or lab order from the tabs above, then review the patient profile.
-            </p>
+        {/* Right: Side panel */}
+        <div className="flex-[2] min-w-0 border-l border-stone/15 flex flex-col bg-ivory">
+          {/* Tab bar */}
+          <div className="flex flex-wrap border-b border-stone/15 px-2 pt-2 shrink-0">
+            {SIDE_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSideTab(tab.id)}
+                className={`font-body text-caption px-3 py-2 border-b-2 transition-colors whitespace-nowrap ${
+                  sideTab === tab.id
+                    ? 'border-forest text-forest font-semibold'
+                    : 'border-transparent text-stone hover:text-ink'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {sideTab === 'prep' && <PreConsultReport consultationId={consultation.id} />}
+
+            {sideTab === 'notes' && <NotesPanel consultationId={consultation.id} />}
+
+            {sideTab === 'context' && (
+              <PatientContextPanel
+                consultationId={consultation.id}
+                patientId={consultation.patient_id}
+                patientUserId={consultation.patient_user_id}
+                patientName={consultation.patient_name}
+              />
+            )}
+
+            {sideTab === 'dx' && <DiagnosisPanel consultationId={consultation.id} />}
+
+            {sideTab === 'rx' && <PrescriptionPanel consultationId={consultation.id} />}
+
+            {sideTab === 'careplan' && <CarePlanPanel consultationId={consultation.id} />}
+
+            {sideTab === 'labs' && <LabOrderBuilder consultationId={consultation.id} />}
+
+            {sideTab === 'edu' && <EducationAssignPanel consultationId={consultation.id} />}
+          </div>
+
+          {/* Post-call summary banner (completed only) */}
+          {isCompleted && (
+            <div className="shrink-0 border-t border-stone/15 bg-sage/10 px-4 py-3">
+              <p className="font-body text-caption font-semibold text-forest mb-0.5">Post-call</p>
+              <p className="font-body text-caption text-stone">
+                Add a prescription or lab order from the tabs above, then review the patient profile.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

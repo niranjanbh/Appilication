@@ -46,7 +46,8 @@
       {% set patient, user = selected_patient %}
       <div class="card">
         <div class="card-title">Send message to {{ user.name }}</div>
-        <form method="POST" action="/coord/communication/send" style="margin-top:16px;">
+        <form method="POST" action="/coord/communication/send" style="margin-top:16px;"
+              x-data="{ selectedTemplate: '{{ (templates.keys() | list | first) if templates else '' }}' }">
           {{ csrf_field(request) }}
           <input type="hidden" name="patient_id" value="{{ patient.id }}">
 
@@ -60,17 +61,18 @@
 
           <div style="margin-bottom:14px;">
             <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Template</label>
-            <select name="template_key" style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
+            <select name="template_key" x-model="selectedTemplate"
+                    style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;">
               {% for key, text in templates.items() %}
               <option value="{{ key }}">{{ key.replace('_', ' ').title() }}</option>
               {% endfor %}
             </select>
           </div>
 
-          <div style="background:#faf6ef;border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--stone);" x-data="{ sel: '' }">
+          <div style="background:#faf6ef;border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--stone);">
             <strong style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Message preview</strong>
             {% for key, text in templates.items() %}
-            <p style="margin:8px 0 0;font-style:italic;" id="preview-{{ key }}">{{ text }}</p>
+            <p style="margin:8px 0 0;font-style:italic;" x-show="selectedTemplate === '{{ key }}'" x-cloak>{{ text }}</p>
             {% endfor %}
           </div>
 

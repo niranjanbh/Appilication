@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.skyMist,
+    backgroundColor: colors.ivory,
     paddingHorizontal: spacing[8],
   },
   card: {
@@ -83,18 +83,18 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.display,
     fontSize: fontSize.h3,
     fontWeight: '600',
-    color: colors.navyDeep,
+    color: colors.ink,
     textAlign: 'center',
   },
   body: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
-    color: colors.coolGray,
+    color: colors.stone,
     textAlign: 'center',
     lineHeight: 22,
   },
   retryBtn: {
-    backgroundColor: colors.navyDeep,
+    backgroundColor: colors.forest,
     borderRadius: borderRadius.xxl,
     paddingVertical: spacing[3],
     paddingHorizontal: spacing[8],
@@ -104,6 +104,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
     fontWeight: '600',
-    color: colors.white,
+    color: colors.ivoryText,
   },
 });
