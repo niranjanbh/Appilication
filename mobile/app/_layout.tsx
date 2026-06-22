@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { ActivityIndicator, useColorScheme, View } from 'react-native';
-import { AuthProvider } from '../lib/auth/context';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { AuthProvider, useAuth } from '../lib/auth/context';
 import { OpenInAppBanner } from '../components/web/OpenInAppBanner';
 import { PrivacyShield } from '../components/ui/PrivacyShield';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { OfflineBanner } from '../components/ui/OfflineBanner';
+import { ServiceBanner } from '../components/ui/ServiceBanner';
 import { colors, fontFamily, fontSize } from '../lib/design-tokens';
 import { ThemeProvider, useThemePreference } from '../lib/theme-context';
 // Side-effect: registers the background sync task definition before the React tree mounts.
@@ -19,8 +20,6 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
-  const isDark = useColorScheme() === 'dark';
-
   const [fontsLoaded] = useFonts({
     'CormorantGaramond-Regular': require('@expo-google-fonts/cormorant-garamond/400Regular/CormorantGaramond_400Regular.ttf'),
     'CormorantGaramond-Medium':  require('@expo-google-fonts/cormorant-garamond/500Medium/CormorantGaramond_500Medium.ttf'),
@@ -34,8 +33,9 @@ export default function RootLayout() {
     'Newsreader-Italic':         require('@expo-google-fonts/newsreader/400Regular_Italic/Newsreader_400Regular_Italic.ttf'),
   });
 
-  const loadingBg      = isDark ? colors.forestInk : colors.ivory;
-  const loadingSpinner = isDark ? colors.saffron   : colors.forest;
+  // Pre-login splash is always light (auth flow is light-mode only).
+  const loadingBg      = colors.ivory;
+  const loadingSpinner = colors.forest;
 
   if (!fontsLoaded) {
     return (
@@ -48,15 +48,15 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <ThemeProvider>
             <OpenInAppBanner />
-            <OfflineBanner />
+            <ServiceBanner />
             <RootLayoutNav />
             {/* Covers PHI when the app is backgrounded (app-switcher snapshots). */}
             <PrivacyShield />
-          </AuthProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
@@ -65,6 +65,26 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const { colorScheme } = useThemePreference();
   const isDark = colorScheme === 'dark';
+
+  // Global auth guard: when the session ends from anywhere in the app —
+  // explicit sign-out or a 401 that triggers the unauthenticated handler —
+  // route back to login. index.tsx only gates the initial '/' entry, so
+  // without this a logged-out user stays on whatever screen they were on.
+  const { state } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (state.status === 'loading') return;
+    const inAuthGroup = segments[0] === '(auth)';
+    if (state.status === 'unauthenticated' && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (state.status === 'authenticated' && inAuthGroup) {
+      // Already signed in but sitting on an auth screen (e.g. back-navigated to
+      // login): bounce to '/' and let index.tsx route to home vs onboarding.
+      router.replace('/');
+    }
+  }, [state.status, segments, router]);
 
   const headerBg   = isDark ? colors.forestSurface : colors.forest;
   const headerText = isDark ? colors.ivoryText : colors.ivory;

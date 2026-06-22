@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, StyleSheet, TextInput, View, Pressable } from 'react-native';
+import { FlatList, Linking, StyleSheet, TextInput, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
@@ -30,7 +30,7 @@ export default function CoordinatorChatScreen() {
       <EmergencyBanner
         message="For medical emergencies, call 112"
         actionLabel="Call"
-        onPress={() => {}}
+        onPress={() => { void Linking.openURL('tel:112'); }}
       />
 
       {isEmpty ? (

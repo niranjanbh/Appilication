@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../lib/ui/alert';
 
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';

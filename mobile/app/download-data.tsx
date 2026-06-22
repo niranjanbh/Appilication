@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
   Linking,
   Platform,
   Pressable,
@@ -10,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../lib/ui/alert';
 
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';

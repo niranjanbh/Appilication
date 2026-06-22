@@ -45,7 +45,7 @@ function getInitials(name: string): string {
 // ── Vertical tab ───────────────────────────────────────────────────────────────
 
 function VerticalTab({
-  id, label, icon, selected, onPress,
+  label, icon, selected, onPress,
 }: { id: VerticalId; label: string; icon: IoniconName; selected: boolean; onPress: () => void }) {
   const t = useTheme();
   const strokeColor = selected

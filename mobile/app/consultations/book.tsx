@@ -9,10 +9,9 @@
  * screen once the doctor + slot are assigned).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Alert } from '../../lib/ui/alert';
 import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
@@ -318,6 +318,47 @@ function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
   );
 }
 
+// ── Success screen ──────────────────────────────────────────────────────────────
+
+function SuccessStep({ theme, onViewRequest, onBackToList }: {
+  theme: ThemeProps;
+  onViewRequest: () => void;
+  onBackToList: () => void;
+}) {
+  const bg = theme.isDark ? colors.forestInk : colors.ivory;
+  const successScale = useSharedValue(0.7);
+  const successAnim  = useAnimatedStyle(() => ({ transform: [{ scale: successScale.value }] }));
+  useEffect(() => {
+    successScale.value = withSpring(1, { mass: 0.6, stiffness: 200 });
+  }, [successScale]);
+
+  return (
+    <View style={[styles.successContainer, { backgroundColor: bg }]}>
+      <Animated.View style={[styles.successIconWrap, successAnim]}>
+        <Text style={styles.successIcon}>✓</Text>
+      </Animated.View>
+      <Text style={[styles.successTitle, { color: theme.textPri }]}>Request submitted!</Text>
+      <Text style={[styles.successSub, { color: theme.textSub }]}>
+        A care coordinator will review your needs and assign the right specialist. You'll be notified to confirm and pay once a doctor and time are set.
+      </Text>
+      <Pressable
+        style={styles.successBtn}
+        onPress={onViewRequest}
+        accessibilityLabel="View request"
+      >
+        <Text style={styles.successBtnText}>View request</Text>
+      </Pressable>
+      <Pressable
+        onPress={onBackToList}
+        accessibilityLabel="Back to consultations"
+        style={styles.backBtn}
+      >
+        <Text style={[styles.backBtnText, { color: theme.textSub }]}>Back to consultations</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 // ── Main flow ─────────────────────────────────────────────────────────────────
 
 type Step = 'condition' | 'requirement' | 'success';
@@ -367,37 +408,12 @@ export default function RequestConsultationScreen() {
     return <RequirementStep condition={condition} conditions={conditions} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
   }
 
-  // ── Success screen ────────────────────────────────────────────────────────
-
-  const bg = isDark ? colors.forestInk : colors.ivory;
-  const successScale = useSharedValue(0.7);
-  const successAnim  = useAnimatedStyle(() => ({ transform: [{ scale: successScale.value }] }));
-  successScale.value = withSpring(1, { mass: 0.6, stiffness: 200 });
-
   return (
-    <View style={[styles.successContainer, { backgroundColor: bg }]}>
-      <Animated.View style={[styles.successIconWrap, successAnim]}>
-        <Text style={styles.successIcon}>✓</Text>
-      </Animated.View>
-      <Text style={[styles.successTitle, { color: theme.textPri }]}>Request submitted!</Text>
-      <Text style={[styles.successSub, { color: theme.textSub }]}>
-        A care coordinator will review your needs and assign the right specialist. You'll be notified to confirm and pay once a doctor and time are set.
-      </Text>
-      <Pressable
-        style={styles.successBtn}
-        onPress={() => router.replace(`/consultations/${confirmedId}`)}
-        accessibilityLabel="View request"
-      >
-        <Text style={styles.successBtnText}>View request</Text>
-      </Pressable>
-      <Pressable
-        onPress={() => router.replace('/(tabs)/consultations')}
-        accessibilityLabel="Back to consultations"
-        style={styles.backBtn}
-      >
-        <Text style={[styles.backBtnText, { color: theme.textSub }]}>Back to consultations</Text>
-      </Pressable>
-    </View>
+    <SuccessStep
+      theme={theme}
+      onViewRequest={() => router.replace(`/consultations/${confirmedId}`)}
+      onBackToList={() => router.replace('/(tabs)/consultations')}
+    />
   );
 }
 

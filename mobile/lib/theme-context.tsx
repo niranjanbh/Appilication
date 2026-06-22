@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Platform, useColorScheme } from 'react-native';
+import { useAuth } from './auth/context';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ColorScheme = 'light' | 'dark';
@@ -44,6 +45,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
+  const { state } = useAuth();
   const [preference, setPreferenceState] = useState<ThemePreference>('light');
 
   useEffect(() => {
@@ -63,8 +65,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     void savePreference(next);
   }
 
-  const colorScheme: ColorScheme =
+  const resolved: ColorScheme =
     preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
+
+  // Force light mode for the pre-login experience (login / signup / password
+  // reset / OTP). Dark theme only applies once the user is authenticated; until
+  // then we always show the warm light palette regardless of device setting.
+  const colorScheme: ColorScheme = state.status === 'authenticated' ? resolved : 'light';
 
   return (
     <ThemeContext.Provider value={{ preference, colorScheme, setPreference }}>

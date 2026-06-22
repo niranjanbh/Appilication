@@ -71,7 +71,7 @@
           "icon": "./assets/icon.png",
           "color": "#0F3D2E"
         }
-      ],
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,24 +1,39 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
+import { getServiceHealth, subscribeServiceHealth } from '../../lib/api/service-health';
 import { useNetworkStatus } from '../../lib/hooks/useNetworkStatus';
+import { useAuth } from '../../lib/auth/context';
 import { colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 
-export function OfflineBanner() {
+/**
+ * "Kyros is unavailable" indicator. Distinct from OfflineBanner: that one means
+ * the device has no connectivity (red); this one means the device is online but
+ * the backend isn't answering — network failures or 5xx from API calls (amber).
+ *
+ * Suppressed while the device is actually offline so the two banners never stack
+ * (OfflineBanner owns that case).
+ */
+export function ServiceBanner() {
+  const health = useSyncExternalStore(subscribeServiceHealth, getServiceHealth, getServiceHealth);
   const { isConnected, isInternetReachable } = useNetworkStatus();
+  const { state } = useAuth();
   const queryClient = useQueryClient();
   const slideAnim = useRef(new Animated.Value(-60)).current;
 
-  const isOffline = !isConnected || isInternetReachable === false;
+  const deviceOffline = !isConnected || isInternetReachable === false;
+  // Only surface backend trouble inside the authenticated app — never on the
+  // login / onboarding flow, where it's noise.
+  const show = health === 'unavailable' && !deviceOffline && state.status === 'authenticated';
 
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: isOffline ? 0 : -60,
+      toValue: show ? 0 : -60,
       duration: 300,
       useNativeDriver: Platform.OS !== 'web',
     }).start();
-  }, [isOffline, slideAnim]);
+  }, [show, slideAnim]);
 
   function handleRetry() {
     queryClient.invalidateQueries();
@@ -28,14 +43,14 @@ export function OfflineBanner() {
     <Animated.View
       style={[
         styles.banner,
-        { transform: [{ translateY: slideAnim }], pointerEvents: isOffline ? 'auto' : 'none' },
+        { transform: [{ translateY: slideAnim }], pointerEvents: show ? 'auto' : 'none' },
       ]}
       accessibilityLiveRegion="polite"
     >
       <View style={styles.content}>
-        <Ionicons name="cloud-offline-outline" size={18} color={colors.white} />
-        <Text style={styles.text}>No internet connection</Text>
-        <Pressable onPress={handleRetry} style={styles.retryBtn} accessibilityLabel="Retry connection">
+        <Ionicons name="warning-outline" size={18} color={colors.ink} />
+        <Text style={styles.text}>We're having trouble reaching Kyros</Text>
+        <Pressable onPress={handleRetry} style={styles.retryBtn} accessibilityLabel="Retry">
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>
       </View>
@@ -49,8 +64,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 9999,
-    backgroundColor: colors.alert,
+    zIndex: 9998,
+    backgroundColor: colors.saffron,
     paddingTop: spacing[10],
     paddingBottom: spacing[3],
     paddingHorizontal: spacing[4],
@@ -65,11 +80,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.sm,
     fontWeight: '600',
-    color: colors.ivoryText,
+    color: colors.ink,
     flex: 1,
   },
   retryBtn: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(26,26,26,0.12)',
     borderRadius: 12,
     paddingVertical: spacing[1],
     paddingHorizontal: spacing[3],
@@ -78,6 +93,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.ivoryText,
+    color: colors.ink,
   },
 });

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../lib/ui/alert';
 import { useThemePreference } from '../lib/theme-context';
 import { listSessions, revokeSession, type Session } from '../lib/api/sessions';
 import { borderRadius, colors, fontFamily, fontSize, shadow, spacing } from '../lib/design-tokens';
