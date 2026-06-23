@@ -1,0 +1,5 @@
+{
+  "name": "kyros-platform",
+  "private": true,
+  "workspaces": ["mobile", "doctor-portal", "website"]
+}
