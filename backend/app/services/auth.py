@@ -67,6 +67,7 @@ class MfaChallenge:
 class SignupResult:
     user_id: uuid.UUID
     phone: str
+    tokens: TokenPair | None = None
 
 
 # Namespaces keep OTP flows isolated: a code issued for the public booking flow
@@ -338,6 +339,7 @@ async def signup(
     user_agent: str,
     request_id: str,
     channel: str | None = None,
+    skip_otp: bool = False,
 ) -> SignupResult:
     from app.core.security import hash_password
 
@@ -378,10 +380,17 @@ async def signup(
     )
     await write_audit(db, ctx, action="signup", resource_type="user", resource_id=user.id, allowed=True)
 
+    if skip_otp:
+        await users_repo.update_phone_verified(db, user.id)
+        tokens = await _create_token_pair(db, user, ip_address, user_agent)
+        await users_repo.update_last_login(db, user.id)
+        await write_audit(db, ctx, action="login", resource_type="user", resource_id=user.id, allowed=True)
+        return SignupResult(user_id=user.id, phone=phone, tokens=tokens)
+
     try:
         await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
     except OtpCooldownError:
-        pass  # OTP already in flight from a prior attempt; user can use the previously sent code
+        pass
     return SignupResult(user_id=user.id, phone=phone)
 
 

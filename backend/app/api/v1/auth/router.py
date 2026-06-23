@@ -61,6 +61,7 @@ async def signup(
     db: DbSession,
     redis: Redis,
 ) -> SignupResponse:
+    otp_enabled = await platform_settings_service.is_signup_otp_enabled(db)
     result = await auth_service.signup(
         db,
         redis,
@@ -72,13 +73,24 @@ async def signup(
         ip_address=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent", ""),
         request_id=getattr(request.state, "request_id", ""),
+        skip_otp=not otp_enabled,
     )
+    if not otp_enabled and result.tokens is not None:
+        return SignupResponse(
+            message="Account created.",
+            phone=result.phone,
+            otp_required=False,
+            access_token=result.tokens.access_token,
+            refresh_token=result.tokens.refresh_token,
+            expires_in=result.tokens.expires_in,
+        )
     otp_hint: str | None = None
     if settings.debug:
         otp_hint = await redis.get(f"otp:phone:{result.phone}:debug")
     return SignupResponse(
         message="Account created. Check your phone for the OTP.",
         phone=result.phone,
+        otp_required=True,
         otp_hint=otp_hint,
     )
 
@@ -273,6 +285,7 @@ async def auth_config(db: DbSession) -> AuthConfigResponse:
     """Public client config — lets the app decide whether to show Google sign-in."""
     return AuthConfigResponse(
         google_oauth_enabled=await platform_settings_service.is_google_oauth_enabled(db),
+        signup_otp_enabled=await platform_settings_service.is_signup_otp_enabled(db),
     )
 
 

@@ -18,6 +18,7 @@ from app.repositories import platform_settings as settings_repo
 # Setting keys (kept in one place so the admin UI and services agree).
 RESET_OTP_CHANNEL_DEFAULT = "reset_otp_channel_default"
 GOOGLE_OAUTH_ENABLED = "google_oauth_enabled"
+SIGNUP_OTP_ENABLED = "signup_otp_enabled"
 
 
 async def get_default_reset_channel(db: AsyncSession) -> OtpResetChannel:
@@ -51,6 +52,33 @@ async def set_default_reset_channel(
         resource_type="platform_setting",
         allowed=True,
         log_metadata={"key": RESET_OTP_CHANNEL_DEFAULT, "value": channel.value},
+    )
+
+
+async def is_signup_otp_enabled(db: AsyncSession) -> bool:
+    val = await settings_repo.get(db, SIGNUP_OTP_ENABLED)
+    if val is None:
+        return True
+    return bool(val)
+
+
+async def set_signup_otp_enabled(
+    db: AsyncSession,
+    ctx: AuditContext,
+    *,
+    enabled: bool,
+    updated_by: uuid.UUID,
+) -> None:
+    await settings_repo.upsert(
+        db, key=SIGNUP_OTP_ENABLED, value=enabled, updated_by=updated_by
+    )
+    await write_audit(
+        db,
+        ctx,
+        action="platform_setting_update",
+        resource_type="platform_setting",
+        allowed=True,
+        log_metadata={"key": SIGNUP_OTP_ENABLED, "value": enabled},
     )
 
 

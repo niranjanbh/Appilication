@@ -42,6 +42,11 @@ class SignupResponse(BaseModel):
     message: str
     phone: str
     otp_hint: str | None = None
+    otp_required: bool = True
+    access_token: str | None = None
+    token_type: str = "bearer"
+    refresh_token: str | None = None
+    expires_in: int | None = None
 
 
 class SendOtpRequest(BaseModel):
@@ -126,6 +131,7 @@ class GoogleLoginRequest(BaseModel):
 
 class AuthConfigResponse(BaseModel):
     google_oauth_enabled: bool
+    signup_otp_enabled: bool
 
 
 class MfaSetupResponse(BaseModel):
