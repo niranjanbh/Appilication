@@ -1,8 +1,8 @@
-"""Initial schema: full Kyros platform baseline (squashed from 0001–0030).
+"""Initial schema: full Kyros platform baseline (squashed from 0001–0005).
 
 Revision ID: 0001
 Revises: None
-Create Date: 2026-06-18
+Create Date: 2026-06-23
 """
 
 from __future__ import annotations
@@ -190,7 +190,7 @@ def upgrade() -> None:
     """)
     op.execute("""
         CREATE TYPE consultation_status AS ENUM (
-            'scheduled', 'confirmed', 'in_progress',
+            'requested', 'scheduled', 'confirmed', 'in_progress',
             'completed', 'cancelled', 'no_show'
         )
     """)
@@ -233,6 +233,31 @@ def upgrade() -> None:
         CREATE TYPE content_status AS ENUM (
             'draft', 'pending_review', 'approved', 'rejected', 'published', 'archived'
         )
+    """)
+    op.execute("""
+        CREATE TYPE frequency_code AS ENUM (
+            'OD', 'BD', 'TDS', 'QID', 'HS', 'SOS',
+            'ALTERNATE_DAYS', 'WEEKLY', 'BIWEEKLY', 'MONTHLY', 'OTHER'
+        )
+    """)
+    op.execute("""
+        CREATE TYPE food_relation AS ENUM (
+            'before_food', 'after_food', 'with_food', 'empty_stomach', 'anytime'
+        )
+    """)
+    op.execute("""
+        CREATE TYPE refund_status AS ENUM ('pending', 'processed', 'failed')
+    """)
+    op.execute("""
+        CREATE TYPE care_plan_status AS ENUM ('draft', 'active', 'completed', 'cancelled')
+    """)
+    op.execute("""
+        CREATE TYPE care_plan_item_category AS ENUM (
+            'medication', 'exercise', 'diet', 'lifestyle', 'follow_up', 'lab_test'
+        )
+    """)
+    op.execute("""
+        CREATE TYPE care_plan_item_priority AS ENUM ('high', 'normal', 'low')
     """)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -710,12 +735,12 @@ def upgrade() -> None:
         CREATE TABLE kc_consultations (
             id                          UUID                NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
             patient_id                  UUID                NOT NULL REFERENCES kc_patients(id) ON DELETE RESTRICT,
-            doctor_id                   UUID                NOT NULL REFERENCES dr_doctors(id) ON DELETE RESTRICT,
+            doctor_id                   UUID                REFERENCES dr_doctors(id) ON DELETE RESTRICT,
             coordinator_id              UUID                REFERENCES ad_coordinators(id) ON DELETE SET NULL,
             condition_category          condition_category  NOT NULL,
             consultation_type           consultation_type   NOT NULL DEFAULT 'initial',
-            scheduled_start_at          TIMESTAMPTZ         NOT NULL,
-            scheduled_end_at            TIMESTAMPTZ         NOT NULL,
+            scheduled_start_at          TIMESTAMPTZ,
+            scheduled_end_at            TIMESTAMPTZ,
             actual_start_at             TIMESTAMPTZ,
             actual_end_at               TIMESTAMPTZ,
             status                      consultation_status NOT NULL DEFAULT 'scheduled',
@@ -724,7 +749,9 @@ def upgrade() -> None:
             recording_consent           BOOL                NOT NULL DEFAULT FALSE,
             recording_url               VARCHAR(500),
             pre_consultation_report_id  UUID                REFERENCES kc_pre_consultation_reports(id) ON DELETE SET NULL,
-            consultation_fee_paise      INT                 NOT NULL,
+            consultation_fee_paise      INT,
+            requirement_notes           TEXT,
+            preferred_time_window       VARCHAR(50),
             coupon_id                   UUID                REFERENCES ad_coupons(id) ON DELETE RESTRICT,
             discount_paise              INT                 NOT NULL DEFAULT 0,
             payment_id                  UUID                REFERENCES kc_payments(id) ON DELETE SET NULL,
@@ -878,19 +905,22 @@ def upgrade() -> None:
     # ── kc_prescription_items ─────────────────────────────────────────────────
     op.execute("""
         CREATE TABLE kc_prescription_items (
-            id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-            prescription_id UUID        NOT NULL REFERENCES kc_prescriptions(id) ON DELETE CASCADE,
+            id              UUID           NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+            prescription_id UUID           NOT NULL REFERENCES kc_prescriptions(id) ON DELETE CASCADE,
             drug_generic_name VARCHAR(255) NOT NULL,
-            drug_form       drug_form   NOT NULL,
-            dosage          VARCHAR(100) NOT NULL,
-            frequency       VARCHAR(100) NOT NULL,
+            drug_form       drug_form      NOT NULL,
+            dosage          VARCHAR(100)   NOT NULL,
+            frequency       VARCHAR(100),
+            frequency_code  frequency_code NOT NULL DEFAULT 'OTHER',
+            timing_slots    JSONB          NOT NULL DEFAULT '[]'::jsonb,
+            food_relation   food_relation,
             duration_days   INT,
             instructions    TEXT,
-            refill_allowed  BOOLEAN     NOT NULL DEFAULT false,
-            order_index     INT         NOT NULL DEFAULT 0,
+            refill_allowed  BOOLEAN        NOT NULL DEFAULT false,
+            order_index     INT            NOT NULL DEFAULT 0,
             drug_schedule   VARCHAR(10),
-            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW()
         )
     """)
     op.execute(
@@ -1173,6 +1203,75 @@ def upgrade() -> None:
         "CREATE INDEX ix_kc_patient_notes_created_at "
         "ON kc_patient_notes (patient_user_id, created_at DESC)"
     )
+
+    # ── kc_refunds ────────────────────────────────────────────────────────────
+    op.execute("""
+        CREATE TABLE kc_refunds (
+            id                  UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+            payment_id          UUID          NOT NULL REFERENCES kc_payments(id) ON DELETE RESTRICT,
+            user_id             UUID          NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+            razorpay_refund_id  VARCHAR(100),
+            amount_paise        INT           NOT NULL,
+            currency            VARCHAR(3)    NOT NULL DEFAULT 'INR',
+            status              refund_status NOT NULL DEFAULT 'pending',
+            reason              VARCHAR(500),
+            created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+            updated_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute(
+        "CREATE INDEX ix_kc_refunds_user_created ON kc_refunds (user_id, created_at DESC)"
+    )
+    op.execute(
+        "CREATE INDEX ix_kc_refunds_payment ON kc_refunds (payment_id)"
+    )
+    op.execute(
+        "CREATE INDEX ix_kc_refunds_razorpay_refund "
+        "ON kc_refunds (razorpay_refund_id) WHERE razorpay_refund_id IS NOT NULL"
+    )
+
+    # ── kc_care_plans ─────────────────────────────────────────────────────────
+    op.execute("""
+        CREATE TABLE kc_care_plans (
+            id                  UUID            NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+            consultation_id     UUID            NOT NULL REFERENCES kc_consultations(id) ON DELETE RESTRICT,
+            doctor_id           UUID            NOT NULL REFERENCES dr_doctors(id) ON DELETE RESTRICT,
+            patient_id          UUID            NOT NULL REFERENCES kc_patients(id) ON DELETE RESTRICT,
+            title               VARCHAR(255)    NOT NULL,
+            status              care_plan_status NOT NULL DEFAULT 'draft',
+            condition_category  VARCHAR(50),
+            goals               TEXT,
+            notes               TEXT,
+            valid_from          DATE,
+            valid_until         DATE,
+            activated_at        TIMESTAMPTZ,
+            completed_at        TIMESTAMPTZ,
+            version             INT             NOT NULL DEFAULT 1,
+            created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+            updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX ix_kc_care_plans_consultation ON kc_care_plans (consultation_id)")
+    op.execute("CREATE INDEX ix_kc_care_plans_doctor ON kc_care_plans (doctor_id)")
+    op.execute("CREATE INDEX ix_kc_care_plans_patient_status ON kc_care_plans (patient_id, status)")
+
+    # ── kc_care_plan_items ────────────────────────────────────────────────────
+    op.execute("""
+        CREATE TABLE kc_care_plan_items (
+            id              UUID                    NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+            care_plan_id    UUID                    NOT NULL REFERENCES kc_care_plans(id) ON DELETE CASCADE,
+            category        care_plan_item_category NOT NULL,
+            title           VARCHAR(255)            NOT NULL,
+            description     TEXT,
+            frequency       VARCHAR(100),
+            duration        VARCHAR(100),
+            priority        care_plan_item_priority NOT NULL DEFAULT 'normal',
+            order_index     INT                     NOT NULL DEFAULT 0,
+            created_at      TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ             NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX ix_kc_care_plan_items_plan ON kc_care_plan_items (care_plan_id)")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 5. TRIGGERS
