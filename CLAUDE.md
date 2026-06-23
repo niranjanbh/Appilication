@@ -116,6 +116,13 @@ One prompt = one session. After finishing Pn, end the session. Start Pn+1 fresh.
 - **When uncertain about a clinical claim, regulatory rule, or vocabulary choice, stop and
   read `.claude/skills/kyros-clinical-compliance/SKILL.md` before proceeding.**
 
+## Plugin overrides
+
+When the `agent-skills` plugin is active, Kyros's own rules take precedence in all conflicts:
+- `.claude/rules/security.md` (20 non-negotiables) overrides the plugin's `security-and-hardening` skill.
+- `.claude/skills/kyros-clinical-compliance/` overrides any generic compliance guidance.
+- Do not enable the `simplify-ignore` or `sdd-cache` hooks from the plugin on this codebase.
+
 ## What not to do
 
 - Do not propose microservices, gRPC internal communication, or Kubernetes.
