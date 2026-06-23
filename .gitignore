@@ -30,6 +30,7 @@ mobile/.env.*
 
 # ── Credentials & keys (never commit) ───────────────────────
 *.pem
+*.pub
 *.p12
 *.p8
 *.keystore
