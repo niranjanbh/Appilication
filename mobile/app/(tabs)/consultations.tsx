@@ -35,6 +35,8 @@ type ConsultationStatus =
 interface Consultation {
   id: string;
   doctor_id: string | null;
+  doctor_name: string | null;
+  doctor_specialty: string[] | null;
   condition_category: string;
   consultation_type: string;
   scheduled_start_at: string | null;
@@ -270,7 +272,12 @@ function ConsultationCard({
             <View style={styles.cardBody}>
               <View style={styles.assignRow}>
                 <Ionicons name="medkit-outline" size={15} color={colors.jade} />
-                <Text style={[styles.cardNote, { color: t.text }]}>Doctor assigned</Text>
+                <Text style={[styles.cardNote, { color: t.text }]}>
+                  {item.doctor_name ? `Dr ${item.doctor_name}` : 'Doctor assigned'}
+                  {item.doctor_specialty && item.doctor_specialty.length > 0
+                    ? ` · ${formatCat(item.doctor_specialty[0])}`
+                    : ''}
+                </Text>
               </View>
               {slot && (
                 <Text style={[styles.countdown, { color: t.primary }]}>
@@ -283,6 +290,17 @@ function ConsultationCard({
 
           {item.status === 'confirmed' && (
             <View style={styles.cardBody}>
+              {item.doctor_name && (
+                <View style={styles.assignRow}>
+                  <Ionicons name="medkit-outline" size={15} color={colors.jade} />
+                  <Text style={[styles.cardNote, { color: t.text }]}>
+                    Dr {item.doctor_name}
+                    {item.doctor_specialty && item.doctor_specialty.length > 0
+                      ? ` · ${formatCat(item.doctor_specialty[0])}`
+                      : ''}
+                  </Text>
+                </View>
+              )}
               {slot && (
                 <Text style={[styles.countdown, { color: t.primary }]}>
                   {formatCountdown(slot)} · {formatWhen(slot)}

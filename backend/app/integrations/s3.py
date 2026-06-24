@@ -24,6 +24,10 @@ logger = structlog.get_logger(__name__)
 ALLOWED_CONTENT_TYPES = frozenset({"application/pdf", "image/jpeg", "image/png"})
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# Image-only allowlist for medication-catalog and reminder photos (no PDF).
+IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
 
 def _s3_client() -> Any:
     kwargs: dict[str, Any] = {
@@ -61,6 +65,46 @@ def lab_report_s3_key(
     filename: str,
 ) -> str:
     return f"patients/{patient_uuid}/lab-reports/{lab_report_uuid}/{filename}"
+
+
+def medication_catalog_s3_key(catalog_uuid: uuid.UUID, filename: str) -> str:
+    return f"medication-catalog/{catalog_uuid}/{filename}"
+
+
+def reminder_image_s3_key(
+    user_uuid: uuid.UUID,
+    reminder_uuid: uuid.UUID,
+    filename: str,
+) -> str:
+    return f"patients/{user_uuid}/reminders/{reminder_uuid}/{filename}"
+
+
+def generate_image_upload_url(
+    *,
+    s3_key: str,
+    content_type: str,
+) -> dict[str, Any]:
+    """Presigned POST for an image (≤5 MB) at an explicit key, valid 15 minutes.
+
+    Pins content-type and enforces the size limit at the S3 layer. Used for
+    medication-catalog and reminder photos. The caller owns key construction.
+    """
+    client = _s3_client()
+    result: dict[str, Any] = client.generate_presigned_post(
+        Bucket=settings.s3_bucket,
+        Key=s3_key,
+        Fields={"Content-Type": content_type},
+        Conditions=[
+            {"Content-Type": content_type},
+            ["content-length-range", 1, MAX_IMAGE_SIZE_BYTES],
+        ],
+        ExpiresIn=900,  # 15 minutes
+    )
+    return {
+        "upload_url": _to_public_url(result["url"]),
+        "fields": result["fields"],
+        "s3_key": s3_key,
+    }
 
 
 def generate_upload_url(

@@ -1,4 +1,7 @@
+import 'react-native-gesture-handler';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
@@ -46,6 +49,7 @@ export default function RootLayout() {
   }
 
   return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
@@ -59,6 +63,7 @@ export default function RootLayout() {
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
+      </GestureHandlerRootView >
   );
 }
 

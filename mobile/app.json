@@ -71,6 +71,13 @@
           "icon": "./assets/icon.png",
           "color": "#0F3D2E"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kyros uses your photos so you can attach an image to a reminder (e.g. a photo of your medication).",
+          "cameraPermission": "Kyros uses your camera so you can photograph your medication for a reminder."
+        }
       ]
     ],
     "experiments": {
@@ -78,7 +85,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
+        "projectId": "b1a2763c-c321-4506-9f57-6b82ae2666ae"
       }
     }
   }

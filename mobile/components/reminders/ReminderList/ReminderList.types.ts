@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+import type { RefreshControlProps } from 'react-native';
 import type { DailySummary, Reminder, WeekDaySummary } from '../../../types/wellness';
 
 export interface ReminderListProps {
@@ -10,4 +12,5 @@ export interface ReminderListProps {
   onTakeNow: (reminder: Reminder) => void;
   dailySummary?: DailySummary | null;
   weekSummary?: WeekDaySummary[] | null;
+  refreshControl?: ReactElement<RefreshControlProps>;
 }

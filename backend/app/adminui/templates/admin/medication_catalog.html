@@ -1,0 +1,157 @@
+{% extends "admin/base.html" %}
+{% from "_csrf.html" import csrf_field %}
+{% block title %}Medication Catalog — Kyros Clinic Admin{% endblock %}
+{% block content %}
+{% set is_super = admin and admin.role.value == 'super_admin' %}
+<div class="page-header">
+  <h2>Medication Catalog <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+</div>
+
+{% if success %}
+<div class="alert-bar alert-bar-success" style="margin-bottom:14px;">
+  {% if success == 'created' %}Medication created.
+  {% elif success == 'updated' %}Medication updated.
+  {% elif success == 'deleted' %}Medication removed.
+  {% elif success == 'image_uploaded' %}Image uploaded.
+  {% else %}Saved.{% endif %}
+</div>
+{% endif %}
+{% if error %}
+<div class="alert-bar alert-bar-error" style="margin-bottom:14px;">
+  {% if error == 'create_failed' %}Could not create — the name may already exist or be invalid.
+  {% elif error == 'update_failed' %}Could not update — the name may already exist.
+  {% elif error == 'bad_image_type' %}Image must be JPEG, PNG, or WebP.
+  {% elif error == 'bad_image' %}Image is too large (max 5 MB) or invalid.
+  {% elif error == 'not_found' %}That medication no longer exists.
+  {% else %}Could not save ({{ error }}).{% endif %}
+</div>
+{% endif %}
+
+<form class="filter-bar" method="GET" action="/admin/medication-catalog">
+  <div>
+    <label>Search</label>
+    <input type="text" name="search" value="{{ search }}" placeholder="Name…">
+  </div>
+  <button type="submit" class="btn btn-sm">Search</button>
+  {% if search %}<a href="/admin/medication-catalog" class="btn btn-sm">Clear</a>{% endif %}
+</form>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Image</th><th>Name</th><th>Generic</th><th>Form</th><th>Strength</th><th>Status</th>
+        {% if is_super %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in items %}
+      <tr x-data="{ editing: false }">
+        <td>
+          {% if m.image_s3_key %}
+          <img src="/admin/medication-catalog/{{ m.id }}/image-view" alt="{{ m.name }}"
+               style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--peach-mist);">
+          {% else %}
+          <span style="font-size:11px;color:var(--stone);">—</span>
+          {% endif %}
+        </td>
+        <td><strong style="font-size:13px;">{{ m.name }}</strong></td>
+        <td style="color:var(--stone);">{{ m.generic_name or '—' }}</td>
+        <td style="color:var(--stone);">{{ m.form.value if m.form else '—' }}</td>
+        <td style="color:var(--stone);">{{ m.strength or '—' }}</td>
+        <td>
+          {% if m.active %}<span class="chip chip-active">Active</span>
+          {% else %}<span class="chip chip-inactive">Inactive</span>{% endif %}
+        </td>
+        {% if is_super %}
+        <td style="white-space:nowrap;">
+          <button type="button" class="btn btn-sm" @click="editing = !editing">Edit</button>
+          <form method="POST" action="/admin/medication-catalog/{{ m.id }}/delete" style="display:inline;"
+                onsubmit="return confirm('Remove {{ m.name }}?');">
+            {{ csrf_field(request) }}
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% if is_super %}
+      <tr x-show="editing" x-cloak>
+        <td colspan="7" style="background:var(--ivory);">
+          <div style="display:flex;gap:24px;flex-wrap:wrap;padding:8px 0;">
+            <form method="POST" action="/admin/medication-catalog/{{ m.id }}/update"
+                  style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+              {{ csrf_field(request) }}
+              <div class="form-group" style="margin:0;"><label>Name</label>
+                <input name="name" value="{{ m.name }}" required></div>
+              <div class="form-group" style="margin:0;"><label>Generic</label>
+                <input name="generic_name" value="{{ m.generic_name or '' }}"></div>
+              <div class="form-group" style="margin:0;"><label>Form</label>
+                <select name="form">
+                  <option value="">—</option>
+                  {% for f in forms %}<option value="{{ f }}" {% if m.form and m.form.value == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+                </select></div>
+              <div class="form-group" style="margin:0;"><label>Strength</label>
+                <input name="strength" value="{{ m.strength or '' }}" placeholder="e.g. 500 mg"></div>
+              <div class="form-group" style="margin:0;"><label>Active</label>
+                <select name="active">
+                  <option value="1" {% if m.active %}selected{% endif %}>Active</option>
+                  <option value="" {% if not m.active %}selected{% endif %}>Inactive</option>
+                </select></div>
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </form>
+            <form method="POST" action="/admin/medication-catalog/{{ m.id }}/image"
+                  enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;">
+              {{ csrf_field(request) }}
+              <div class="form-group" style="margin:0;"><label>Image (JPEG/PNG/WebP, ≤5 MB)</label>
+                <input type="file" name="image" accept="image/jpeg,image/png,image/webp" required></div>
+              <button type="submit" class="btn btn-sm">Upload image</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="{{ 7 if is_super else 6 }}" style="text-align:center;color:var(--stone);padding:20px;">No medications found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not search and total > page_size %}
+<div class="pagination">
+  {% if page > 1 %}<a href="/admin/medication-catalog?page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ ((total - 1) // page_size) + 1 }}</span>
+  {% if page * page_size < total %}<a href="/admin/medication-catalog?page={{ page + 1 }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% if is_super %}
+<div class="card" style="margin-top:20px;max-width:620px;">
+  <div class="card-title">Add medication</div>
+  <form method="POST" action="/admin/medication-catalog" style="margin-top:10px;">
+    {{ csrf_field(request) }}
+    <div class="form-group">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required placeholder="e.g. Thyronorm 50mcg">
+    </div>
+    <div class="form-group">
+      <label for="generic_name">Generic name (optional)</label>
+      <input id="generic_name" name="generic_name" type="text" placeholder="e.g. Levothyroxine">
+    </div>
+    <div class="form-group">
+      <label for="form">Form</label>
+      <select id="form" name="form">
+        <option value="">—</option>
+        {% for f in forms %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="strength">Strength (optional)</label>
+      <input id="strength" name="strength" type="text" placeholder="e.g. 50 mcg">
+    </div>
+    <button type="submit" class="btn btn-primary">Add medication</button>
+    <p style="font-size:12px;color:var(--stone);margin-top:8px;">Upload an image after creating, via the row's Edit panel.</p>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

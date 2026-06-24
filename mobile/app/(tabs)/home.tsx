@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback } from 'react';
+import { Dimensions, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
@@ -56,13 +57,20 @@ function findRequested(items: Consultation[]): Consultation | null {
   return items.find(c => c.status === 'requested') ?? null;
 }
 
-/** The soonest scheduled/confirmed/in-progress consult that has a slot. */
+/** The soonest upcoming (or currently in-progress) consult that has a slot.
+ *  We now fetch all consults, so exclude scheduled/confirmed slots already in
+ *  the past; an in-progress consult is kept regardless (it's happening now). */
 function findNextScheduled(items: Consultation[]): Consultation | null {
+  const now = Date.now();
   const withSlot = items
-    .filter(c =>
-      (c.status === 'scheduled' || c.status === 'confirmed' || c.status === 'in_progress') &&
-      c.scheduled_start_at != null,
-    )
+    .filter(c => {
+      if (c.scheduled_start_at == null) return false;
+      if (c.status === 'in_progress') return true;
+      if (c.status === 'scheduled' || c.status === 'confirmed') {
+        return new Date(c.scheduled_start_at).getTime() >= now;
+      }
+      return false;
+    })
     .sort((a, b) =>
       new Date(a.scheduled_start_at!).getTime() - new Date(b.scheduled_start_at!).getTime(),
     );
@@ -113,22 +121,44 @@ export default function HomeScreen() {
   const router    = useRouter();
   const t         = useTheme();
 
-  const { data: notesData } = useQuery({
+  const { data: notesData, refetch: refetchNotes } = useQuery({
     queryKey: ['patient-notes'],
     queryFn: () => listPatientNotesApi(1, 3),
     staleTime: 60_000,
   });
 
-  const { data: consultData } = useQuery({
-    queryKey: ['consultations', 'upcoming'],
-    queryFn: () => listConsultations({ upcoming: true }),
+  const {
+    data: consultData,
+    refetch: refetchConsults,
+    isFetching: consultFetching,
+    isLoading: consultLoading,
+  } = useQuery({
+    // Fetch all consults (no `upcoming` server filter) and classify locally —
+    // the backend's upcoming=true excludes `requested`, which the
+    // RequestedConsultBanner depends on. Mirrors the consultations tab.
+    queryKey: ['consultations', 'home'],
+    queryFn: () => listConsultations({ pageSize: 50 }),
     staleTime: 60_000,
   });
 
+  const onRefresh = useCallback(() => {
+    void refetchNotes();
+    void refetchConsults();
+  }, [refetchNotes, refetchConsults]);
+
+  // A coordinator assigns the consult server-side, so the patient app only
+  // learns of it on a refetch. Refetch whenever Home regains focus, so a stale
+  // "request under review" banner clears without a manual pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void refetchConsults();
+    }, [refetchConsults]),
+  );
+
   const recentNotes  = notesData?.items ?? [];
-  const upcoming     = consultData?.items ?? [];
-  const requested    = findRequested(upcoming);
-  const nextScheduled = findNextScheduled(upcoming);
+  const consults     = consultData?.items ?? [];
+  const requested    = findRequested(consults);
+  const nextScheduled = findNextScheduled(consults);
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
 
@@ -139,6 +169,13 @@ export default function HomeScreen() {
         style={styles.flex}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={consultFetching && !consultLoading}
+            onRefresh={onRefresh}
+            tintColor={t.primary}
+          />
+        }
       >
 
         {/* ── Header ─────────────────────────────────────────────────────── */}

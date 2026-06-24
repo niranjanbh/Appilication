@@ -4456,3 +4456,105 @@ async def test_get_patient_care_plan_doctor_returns_403(
         headers=make_auth_headers(doctor),
     )
     assert resp.status_code == 403
+
+
+# ── /v1/admin/medication-catalog (POST) — super_admin only ──────────────────
+
+
+async def test_create_medication_catalog_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post("/v1/admin/medication-catalog", json={"name": "X", "form": "tablet"})
+    assert resp.status_code == 401
+
+
+async def test_create_medication_catalog_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        "/v1/admin/medication-catalog",
+        headers=make_auth_headers(patient),
+        json={"name": "X", "form": "tablet"},
+    )
+    assert resp.status_code == 403
+
+
+async def test_create_medication_catalog_read_only_admin_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await create_admin_user(db_session)
+    resp = await client.post(
+        "/v1/admin/medication-catalog",
+        headers=make_auth_headers(admin),
+        json={"name": "X", "form": "tablet"},
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/admin/medication-catalog (GET) — admin tier + super_admin ───────────
+
+
+async def test_list_medication_catalog_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/admin/medication-catalog")
+    assert resp.status_code == 401
+
+
+async def test_list_medication_catalog_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/admin/medication-catalog", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
+# ── /v1/doctor/medication-catalog (GET) — doctor only ───────────────────────
+
+
+async def test_search_medication_catalog_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/doctor/medication-catalog")
+    assert resp.status_code == 401
+
+
+async def test_search_medication_catalog_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        "/v1/doctor/medication-catalog", headers=make_auth_headers(patient)
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/wellness/reminders/{id}/image-* — patient only ──────────────────────
+
+
+async def test_reminder_image_initiate_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(f"/v1/wellness/reminders/{uuid.uuid4()}/image-initiate", json={})
+    assert resp.status_code == 401
+
+
+async def test_reminder_image_initiate_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        f"/v1/wellness/reminders/{uuid.uuid4()}/image-initiate",
+        headers=make_auth_headers(doctor),
+        json={"filename": "x.png", "content_type": "image/png", "file_size_bytes": 1024},
+    )
+    assert resp.status_code == 403
+
+
+async def test_reminder_image_url_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/wellness/reminders/{uuid.uuid4()}/image-url")
+    assert resp.status_code == 401
+
+
+async def test_reminder_image_delete_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.delete(
+        f"/v1/wellness/reminders/{uuid.uuid4()}/image",
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403

@@ -392,6 +392,20 @@ export default function ConsultationDetailScreen() {
 
       {/* Details card */}
       <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBdr }]}>
+        {consultation.doctor_name && (
+          <Row
+            label="Doctor"
+            value={
+              `Dr ${consultation.doctor_name}` +
+              (consultation.doctor_specialty && consultation.doctor_specialty.length > 0
+                ? ` · ${formatCategory(consultation.doctor_specialty[0])}`
+                : '')
+            }
+            textPri={textPri}
+            textSub={textSub}
+            borderColor={divider}
+          />
+        )}
         {consultation.scheduled_start_at && (
           <Row label="Scheduled" value={formatDateTime(consultation.scheduled_start_at)} textPri={textPri} textSub={textSub} borderColor={divider} />
         )}

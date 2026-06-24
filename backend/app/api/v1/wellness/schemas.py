@@ -56,6 +56,24 @@ class ReminderListResponse(BaseModel):
     total: int
 
 
+class ReminderImageInitiateRequest(BaseModel):
+    filename: str = Field(..., min_length=1, max_length=255)
+    content_type: str
+    file_size_bytes: int = Field(..., ge=1)
+
+
+class ReminderImageInitiateResponse(BaseModel):
+    reminder_id: uuid.UUID
+    upload_url: str
+    fields: dict[str, str]
+    s3_key: str
+    content_type: str
+
+
+class ReminderImageUrlResponse(BaseModel):
+    url: str
+
+
 class DailySummaryResponse(BaseModel):
     date: str
     total: int

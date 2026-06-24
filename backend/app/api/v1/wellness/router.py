@@ -13,6 +13,9 @@ from app.api.v1.wellness.schemas import (
     HealthSyncRequest,
     HealthSyncResponse,
     ReminderCreate,
+    ReminderImageInitiateRequest,
+    ReminderImageInitiateResponse,
+    ReminderImageUrlResponse,
     ReminderListResponse,
     ReminderRead,
     ReminderUpdate,
@@ -265,6 +268,136 @@ async def delete_reminder(
         resource_type="reminder",
         resource_id=reminder_id,
         allowed=True,
+    )
+
+
+@router.post(
+    "/reminders/{reminder_id}/image-initiate",
+    response_model=ReminderImageInitiateResponse,
+)
+async def initiate_reminder_image(
+    reminder_id: uuid.UUID,
+    body: ReminderImageInitiateRequest,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> ReminderImageInitiateResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    reminder = await reminders_repo.get_reminder_for_user(
+        db, reminder_id=reminder_id, user_id=user.id
+    )
+    await cross_user_404(
+        db, reminder, ctx,
+        action="upload_reminder_image", resource_type="reminder", resource_id=reminder_id,
+    )
+    assert reminder is not None
+    try:
+        result = await reminders_service.initiate_image_upload(
+            db,
+            reminder=reminder,
+            filename=body.filename,
+            content_type=body.content_type,
+            file_size_bytes=body.file_size_bytes,
+        )
+    except reminders_service.ReminderImageError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await write_audit(
+        db, ctx, action="upload_reminder_image", resource_type="reminder",
+        resource_id=reminder_id, allowed=True,
+    )
+    return ReminderImageInitiateResponse(**result)
+
+
+@router.post("/reminders/{reminder_id}/image-finalize")
+async def finalize_reminder_image(
+    reminder_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> dict[str, object]:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    reminder = await reminders_repo.get_reminder_for_user(
+        db, reminder_id=reminder_id, user_id=user.id
+    )
+    await cross_user_404(
+        db, reminder, ctx,
+        action="finalize_reminder_image", resource_type="reminder", resource_id=reminder_id,
+    )
+    assert reminder is not None
+    try:
+        await reminders_service.finalize_image_upload(db, reminder=reminder)
+    except reminders_service.ReminderImageError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await write_audit(
+        db, ctx, action="finalize_reminder_image", resource_type="reminder",
+        resource_id=reminder_id, allowed=True,
+    )
+    return {"reminder_id": str(reminder_id), "image_uploaded": True}
+
+
+@router.get("/reminders/{reminder_id}/image-url", response_model=ReminderImageUrlResponse)
+async def get_reminder_image_url(
+    reminder_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> ReminderImageUrlResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    reminder = await reminders_repo.get_reminder_for_user(
+        db, reminder_id=reminder_id, user_id=user.id
+    )
+    await cross_user_404(
+        db, reminder, ctx,
+        action="view_reminder_image", resource_type="reminder", resource_id=reminder_id,
+    )
+    assert reminder is not None
+    url = await reminders_service.get_image_url(db, reminder=reminder)
+    if url is None:
+        await write_audit(
+            db, ctx, action="view_reminder_image", resource_type="reminder",
+            resource_id=reminder_id, allowed=False, reason="no_image",
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    await write_audit(
+        db, ctx, action="view_reminder_image", resource_type="reminder",
+        resource_id=reminder_id, allowed=True,
+    )
+    return ReminderImageUrlResponse(url=url)
+
+
+@router.delete("/reminders/{reminder_id}/image", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def delete_reminder_image(
+    reminder_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> None:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    reminder = await reminders_repo.get_reminder_for_user(
+        db, reminder_id=reminder_id, user_id=user.id
+    )
+    await cross_user_404(
+        db, reminder, ctx,
+        action="delete_reminder_image", resource_type="reminder", resource_id=reminder_id,
+    )
+    assert reminder is not None
+    await reminders_service.remove_image(db, reminder=reminder)
+    await write_audit(
+        db, ctx, action="delete_reminder_image", resource_type="reminder",
+        resource_id=reminder_id, allowed=True,
     )
 
 

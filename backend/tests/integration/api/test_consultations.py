@@ -974,3 +974,72 @@ async def test_list_available_slots_returns_open_slots(
     assert str(slot2.id) not in ids
 
 
+
+
+async def test_get_consultation_includes_assigned_doctor_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Once a coordinator assigns a doctor, the patient sees the doctor's name
+    and specialty — not just an opaque doctor_id."""
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(doctor_user, UserModel)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+
+    now = datetime.now(UTC)
+    consultation = Consultation(
+        patient_id=patient.id,
+        doctor_id=doctor.id,
+        condition_category="thyroid",
+        consultation_type="initial",
+        scheduled_start_at=now + timedelta(days=2),
+        scheduled_end_at=now + timedelta(days=2, minutes=20),
+        consultation_fee_paise=_FEE_PAISE,
+        status=ConsultationStatus.SCHEDULED,
+    )
+    db_session.add(consultation)
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/v1/clinic/patient/consultations/{consultation.id}",
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["doctor_name"] == doctor_user.name
+    assert data["doctor_specialty"] == ["endocrinologist"]
+
+
+async def test_requested_consultation_has_no_doctor_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A request with no doctor yet exposes null doctor display fields."""
+    from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    patient = await _create_patient_profile(db_session, patient_user.id)
+
+    consultation = Consultation(
+        patient_id=patient.id,
+        doctor_id=None,
+        condition_category="thyroid",
+        consultation_type="initial",
+        status=ConsultationStatus.REQUESTED,
+    )
+    db_session.add(consultation)
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/v1/clinic/patient/consultations/{consultation.id}",
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["doctor_name"] is None
+    assert data["doctor_specialty"] is None

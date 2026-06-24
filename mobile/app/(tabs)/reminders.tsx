@@ -2,17 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
+import { useTheme } from '../../lib/theme';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -30,24 +30,17 @@ import {
 } from '../../lib/api/reminders';
 import {
   addNotificationResponseListener,
+  cancelReminderNotifications,
   registerNotificationCategories,
   requestNotificationPermissions,
   scheduleReminderNotification,
+  scheduleRepeatingReminder,
 } from '../../lib/native/notifications';
-import { KyrosSlider } from '../../components/ui/KyrosSlider';
-import { borderRadius, colors, fontFamily, fontSize, spacing, type TintName , withAlpha } from '../../lib/design-tokens';
+import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 import { ReminderList } from '../../components/reminders/ReminderList';
-import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
+import { ReminderFormModal } from '../../components/reminders/ReminderFormModal';
+import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate } from '../../types/wellness';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-const TYPE_ICON: Record<ReminderType, { icon: IoniconName; tint: TintName }> = {
-  water:      { icon: 'water-outline',         tint: 'sage' },
-  supplement: { icon: 'leaf-outline',          tint: 'forest' },
-  medication: { icon: 'medical-outline',       tint: 'peach' },
-  gym:        { icon: 'barbell-outline',       tint: 'saffron' },
-  custom:     { icon: 'notifications-outline', tint: 'sage' },
-};
 
 function formatCronTime(cron: string): string {
   const parts = cron.split(' ');
@@ -64,223 +57,6 @@ function formatCronFreq(intervalMinutes: number | null, cron: string | null): st
   return 'As needed';
 }
 
-const REMINDER_TYPES: { value: ReminderType; label: string }[] = [
-  { value: 'water',      label: 'Water' },
-  { value: 'supplement', label: 'Supplement' },
-  { value: 'medication', label: 'Medication' },
-  { value: 'gym',        label: 'Gym' },
-  { value: 'custom',     label: 'Custom' },
-];
-
-// ── Reminder form modal ───────────────────────────────────────────────────────
-
-interface ReminderFormState {
-  type: ReminderType;
-  label: string;
-  scheduleHour: string;
-  scheduleMinute: string;
-  intervalMinutes: string;
-}
-
-const DEFAULT_FORM: ReminderFormState = {
-  type: 'water', label: '', scheduleHour: '08', scheduleMinute: '00', intervalMinutes: '',
-};
-
-interface ReminderFormModalProps {
-  visible: boolean;
-  editing: Reminder | null;
-  onClose: () => void;
-  onSave: (payload: ReminderCreate, editing: Reminder | null) => void;
-  isSaving: boolean;
-  isDark: boolean;
-}
-
-function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark }: ReminderFormModalProps) {
-  const [form, setForm] = useState<ReminderFormState>(DEFAULT_FORM);
-
-  useEffect(() => {
-    if (editing) {
-      const cron = editing.schedule_cron ?? '';
-      const cronParts = cron.split(' ');
-      setForm({
-        type: editing.type, label: editing.label,
-        scheduleHour: cronParts[1] ?? '08', scheduleMinute: cronParts[0] ?? '00',
-        intervalMinutes: editing.schedule_interval_minutes ? String(editing.schedule_interval_minutes) : '',
-      });
-    } else {
-      setForm(DEFAULT_FORM);
-    }
-  }, [editing, visible]);
-
-  function handleSave() {
-    if (!form.label.trim()) {
-      Alert.alert('Label required', 'Please enter a name for this reminder.');
-      return;
-    }
-    const hour    = parseInt(form.scheduleHour, 10);
-    const minute  = parseInt(form.scheduleMinute, 10);
-    const validH  = !isNaN(hour)   && hour   >= 0 && hour   <= 23;
-    const validM  = !isNaN(minute) && minute >= 0 && minute <= 59;
-    const intervalMin = form.intervalMinutes ? parseInt(form.intervalMinutes, 10) || null : null;
-    const payload: ReminderCreate = {
-      type: form.type,
-      label: form.label.trim(),
-      schedule_cron: intervalMin ? null : (validH && validM ? `${minute} ${hour} * * *` : null),
-      schedule_interval_minutes: intervalMin,
-      notification_channels: ['push'],
-    };
-    onSave(payload, editing);
-  }
-
-  const modalBg  = isDark ? colors.forestSurface       : colors.white;
-  const sheetBg  = isDark ? colors.forestInk           : colors.ivory;
-  const textPri  = isDark ? colors.ivoryText           : colors.ink;
-  const textSub  = isDark ? colors.stoneDim            : colors.stone;
-  const inputBg  = isDark ? colors.forestSurfaceRaised : colors.white;
-  const inputBdr = isDark ? 'rgba(79,163,131,0.20)'   : colors.borderLight;
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[m.container, { backgroundColor: sheetBg }]}>
-        {/* Header */}
-        <View style={[m.header, { backgroundColor: modalBg, borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : colors.borderLight }]}>
-          <Pressable onPress={onClose} accessibilityLabel="Cancel">
-            <Text style={[m.cancel, { color: textSub }]}>Cancel</Text>
-          </Pressable>
-          <Text style={[m.title, { color: textPri }]}>{editing ? 'Edit reminder' : 'New reminder'}</Text>
-          <Pressable onPress={handleSave} disabled={isSaving} accessibilityLabel="Save reminder">
-            {isSaving ? <ActivityIndicator color={colors.jadeGlow} size="small" /> : <Text style={m.save}>Save</Text>}
-          </Pressable>
-        </View>
-
-        <ScrollView contentContainerStyle={m.body}>
-          {/* Type chips */}
-          <Text style={[m.fieldLabel, { color: textSub }]}>Type</Text>
-          <View style={m.typeRow}>
-            {REMINDER_TYPES.map(t => {
-              const active = form.type === t.value;
-              return (
-                <Pressable
-                  key={t.value}
-                  style={[m.typeChip, { backgroundColor: active ? colors.forest : (isDark ? colors.forestSurfaceRaised : colors.white), borderColor: active ? colors.forest : inputBdr }]}
-                  onPress={() => setForm(f => ({ ...f, type: t.value }))}
-                  accessibilityLabel={`Reminder type ${t.label}`}
-                >
-                  <Ionicons
-                    name={TYPE_ICON[t.value].icon}
-                    size={14}
-                    color={active ? colors.white : textPri}
-                  />
-                  <Text style={[m.typeChipText, { color: active ? colors.white : textPri }]}>{t.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Label */}
-          <Text style={[m.fieldLabel, { color: textSub }]}>Name</Text>
-          <View style={[m.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-            <TextInput
-              style={[m.input, { color: textPri }]}
-              value={form.label}
-              onChangeText={v => setForm(f => ({ ...f, label: v }))}
-              placeholder="e.g. Vitamin D, 8 glasses water"
-              placeholderTextColor={textSub}
-              maxLength={255}
-              accessibilityLabel="Reminder name"
-            />
-          </View>
-
-          {/* Schedule time — skeuomorphic sliders */}
-          <KyrosSlider
-            label="Hour"
-            min={0}
-            max={23}
-            step={1}
-            value={parseInt(form.scheduleHour, 10) || 0}
-            onValueChange={v => setForm(f => ({ ...f, scheduleHour: String(v).padStart(2, '0') }))}
-            formatValue={v => `${String(v).padStart(2, '0')}:${form.scheduleMinute}`}
-            accessibilityLabel="Schedule hour"
-          />
-          <KyrosSlider
-            label="Minute"
-            min={0}
-            max={59}
-            step={5}
-            value={parseInt(form.scheduleMinute, 10) || 0}
-            onValueChange={v => setForm(f => ({ ...f, scheduleMinute: String(v).padStart(2, '0') }))}
-            formatValue={v => `${form.scheduleHour}:${String(v).padStart(2, '0')}`}
-            accessibilityLabel="Schedule minute"
-          />
-
-          {/* Interval (water only) */}
-          {form.type === 'water' && (
-            <>
-              <Text style={[m.fieldLabel, { color: textSub }]}>Or repeat every (minutes)</Text>
-              <View style={[m.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-                <TextInput
-                  style={[m.input, { color: textPri }]}
-                  value={form.intervalMinutes}
-                  onChangeText={v => setForm(f => ({ ...f, intervalMinutes: v }))}
-                  keyboardType="number-pad"
-                  placeholder="e.g. 90"
-                  placeholderTextColor={textSub}
-                  accessibilityLabel="Interval in minutes"
-                />
-              </View>
-            </>
-          )}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
-
-const m = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[4],
-    borderBottomWidth: 1,
-  },
-  title:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700' },
-  cancel: { fontFamily: fontFamily.body, fontSize: fontSize.body },
-  save:   { fontFamily: fontFamily.body, fontSize: fontSize.body, color: colors.jadeGlow, fontWeight: '700' },
-  body:   { padding: spacing[5], gap: spacing[4] },
-  fieldLabel: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: -spacing[2],
-  },
-  inputWrap: {
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  input: { fontFamily: fontFamily.body, fontSize: fontSize.body, padding: 0 },
-  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  typeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: borderRadius.full,
-    borderWidth: 1,
-  },
-  typeChipText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '500' },
-  timeRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  timeInput: { flex: 1 },
-  timeCenter: { textAlign: 'center' },
-  timeSep: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '600' },
-});
 
 // ── Adherence dialog ──────────────────────────────────────────────────────────
 
@@ -352,9 +128,10 @@ const ad = StyleSheet.create({
 
 export default function RemindersScreen() {
   const qc     = useQueryClient();
+  const router = useRouter();
+  const t      = useTheme();
   const isDark = useThemePreference().colorScheme === 'dark';
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [adherenceState, setAdherenceState] = useState<{
     visible: boolean; reminderId: string; scheduledAt: string; label: string;
@@ -401,41 +178,40 @@ export default function RemindersScreen() {
     qc.invalidateQueries({ queryKey: ['week-summary'] });
   }
 
+  function onRefresh() {
+    remindersQuery.refetch();
+    summaryQuery.refetch();
+    weekQuery.refetch();
+  }
+
+  const refreshing = remindersQuery.isFetching && !remindersQuery.isLoading;
+
   const createMutation = useMutation({
     mutationFn: createReminderApi,
     onSuccess: async (reminder) => {
       invalidateAll();
-      const cron = reminder.schedule_cron;
-      if (cron) {
-        const parts = cron.split(' ');
-        const hour = parseInt(parts[1] ?? '8', 10);
-        const minute = parseInt(parts[0] ?? '0', 10);
-        const next = new Date();
-        next.setHours(hour, minute, 0, 0);
-        if (next <= new Date()) next.setDate(next.getDate() + 1);
-        await scheduleReminderNotification(reminder.id, reminder.label, next);
-      }
+      // Repeating trigger: fires today if the time is still ahead, else the
+      // next occurrence, then daily/interval thereafter.
+      if (reminder.active) await scheduleRepeatingReminder(reminder);
       setModalVisible(false);
     },
     onError: () => Alert.alert('Error', 'Could not create reminder. Please try again.'),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ReminderCreate }) => updateReminderApi(id, payload),
-    onSuccess: () => { invalidateAll(); setModalVisible(false); setEditingReminder(null); },
-    onError: () => Alert.alert('Error', 'Could not update reminder.'),
-  });
-
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       updateReminderApi(id, { active }),
-    onSuccess: invalidateAll,
+    onSuccess: async (reminder) => {
+      invalidateAll();
+      if (reminder.active) await scheduleRepeatingReminder(reminder);
+      else await cancelReminderNotifications(reminder.id);
+    },
     onError: () => Alert.alert('Error', 'Could not update reminder.'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteReminderApi,
-    onSuccess: invalidateAll,
+    onSuccess: (_data, id) => { invalidateAll(); void cancelReminderNotifications(id); },
     onError: () => Alert.alert('Error', 'Could not delete reminder.'),
   });
 
@@ -446,13 +222,12 @@ export default function RemindersScreen() {
     onError: () => Alert.alert('Error', 'Could not log adherence.'),
   });
 
-  function handleSave(payload: ReminderCreate, editing: Reminder | null) {
-    if (editing) updateMutation.mutate({ id: editing.id, payload });
-    else createMutation.mutate(payload);
+  function handleSave(payload: ReminderCreate) {
+    createMutation.mutate(payload);
   }
 
-  function openEdit(r: Reminder)   { setEditingReminder(r); setModalVisible(true); }
-  function openCreate()             { setEditingReminder(null); setModalVisible(true); }
+  function openDetail(r: Reminder) { router.push(`/reminders/${r.id}`); }
+  function openCreate()             { setModalVisible(true); }
   function handleToggle(r: Reminder) {
     toggleMutation.mutate({ id: r.id, active: !r.active });
   }
@@ -517,12 +292,19 @@ export default function RemindersScreen() {
             reminders={reminders}
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
-            onEdit={openEdit}
+            onEdit={openDetail}
             onDelete={confirmDelete}
             onToggle={handleToggle}
             onTakeNow={handleTakeNow}
             dailySummary={summaryQuery.data ?? null}
             weekSummary={weekQuery.data?.days ?? null}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={t.primary}
+              />
+            }
           />
           <HapticPressable
             haptic="medium"
@@ -538,10 +320,10 @@ export default function RemindersScreen() {
 
       <ReminderFormModal
         visible={modalVisible}
-        editing={editingReminder}
-        onClose={() => { setModalVisible(false); setEditingReminder(null); }}
+        editing={null}
+        onClose={() => setModalVisible(false)}
         onSave={handleSave}
-        isSaving={createMutation.isPending || updateMutation.isPending}
+        isSaving={createMutation.isPending}
         isDark={isDark}
       />
 

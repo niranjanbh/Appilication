@@ -550,3 +550,30 @@ class DrugCatalogue(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     requires_vertical: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class MedicationCatalog(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
+    """Admin-curated medication reference with a representative image.
+
+    Doctors search this by ``name`` when building a reminder/prescription; the
+    matched entry's image is shown to the patient ("which tablet to take"). The
+    image itself lives in S3 (SSE-KMS, private) — only the key is stored here.
+    Patient-created reminders never write to this table; they fall back to
+    built-in default illustrations or a patient-uploaded photo.
+    """
+
+    __tablename__ = "kc_medication_catalog"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    generic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    form: Mapped[DrugForm | None] = mapped_column(
+        SAEnum(DrugForm, name="drug_form", create_type=False, values_callable=enum_values),
+        nullable=True,
+    )
+    strength: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )

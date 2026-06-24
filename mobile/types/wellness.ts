@@ -79,6 +79,7 @@ export interface ReminderUpdate {
   schedule_interval_minutes?: number | null;
   active?: boolean;
   notification_channels?: string[];
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface DailySummary {

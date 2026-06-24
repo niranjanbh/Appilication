@@ -107,6 +107,101 @@ export async function cancelReminderNotification(notificationId: string): Promis
   }
 }
 
+/**
+ * Cancel every scheduled notification belonging to a reminder.
+ *
+ * Notification IDs are not persisted, so we discover them by scanning the OS
+ * scheduled queue and matching on our own `data.reminderId`. Used before
+ * (re)scheduling on edit/toggle and on delete, to keep scheduling idempotent
+ * and avoid duplicate daily notifications stacking up.
+ */
+export async function cancelReminderNotifications(reminderId: string): Promise<void> {
+  if (!isAvailable()) return;
+  try {
+    const Notifications = require('expo-notifications');
+    const scheduled: Array<{
+      identifier: string;
+      content?: { data?: Partial<ReminderNotificationData> };
+    }> = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter(n => n.content?.data?.reminderId === reminderId)
+        .map(n => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export interface ReminderSchedule {
+  id: string;
+  label: string;
+  schedule_cron: string | null;
+  schedule_interval_minutes: number | null;
+}
+
+function parseCronHourMinute(cron: string): { hour: number; minute: number } | null {
+  const parts = cron.split(' ');
+  const minute = parseInt(parts[0] ?? '', 10);
+  const hour = parseInt(parts[1] ?? '', 10);
+  if (isNaN(hour) || isNaN(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+/**
+ * Schedule (or reschedule) a reminder as a *repeating* local notification.
+ *
+ * - Interval reminders → repeating TIME_INTERVAL trigger.
+ * - Daily (cron) reminders → repeating DAILY trigger at hour:minute. A DAILY
+ *   trigger fires at the next occurrence of that time — *today* if it is still
+ *   ahead, otherwise tomorrow — then every day after. This is what fixes a
+ *   reminder set for 8:00 AM not firing today.
+ *
+ * Existing notifications for the reminder are cancelled first so repeated calls
+ * (e.g. on edit) don't stack duplicates. No-op on web / Expo Go.
+ */
+export async function scheduleRepeatingReminder(
+  reminder: ReminderSchedule,
+): Promise<string | null> {
+  if (!isAvailable()) return null;
+  await cancelReminderNotifications(reminder.id);
+  try {
+    const Notifications = require('expo-notifications');
+    const types = Notifications.SchedulableTriggerInputTypes;
+
+    let trigger: Record<string, unknown> | null = null;
+    if (reminder.schedule_interval_minutes && reminder.schedule_interval_minutes > 0) {
+      trigger = {
+        type: types.TIME_INTERVAL,
+        seconds: Math.max(60, reminder.schedule_interval_minutes * 60),
+        repeats: true,
+      };
+    } else if (reminder.schedule_cron) {
+      const hm = parseCronHourMinute(reminder.schedule_cron);
+      if (hm) trigger = { type: types.DAILY, hour: hm.hour, minute: hm.minute };
+    }
+    if (!trigger) return null;
+
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Reminder',
+        body: reminder.label,
+        data: {
+          reminderId: reminder.id,
+          scheduledAt: new Date().toISOString(),
+          label: reminder.label,
+        } satisfies ReminderNotificationData,
+        categoryIdentifier: 'REMINDER_ADHERENCE',
+      },
+      trigger,
+    });
+    return id as string;
+  } catch {
+    return null;
+  }
+}
+
 export function registerNotificationCategories(): void {
   if (!isAvailable()) return;
   try {

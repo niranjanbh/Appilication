@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { MedicationCatalogPicker } from './MedicationCatalogPicker';
 
 interface CarePlanItemInput {
   category: string;
@@ -379,12 +380,20 @@ export function CarePlanPanel({ consultationId }: CarePlanPanelProps) {
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
-              <input
-                value={item.title}
-                onChange={e => updateItem(i, { title: e.target.value })}
-                placeholder="Item title"
-                className="flex-1 font-body text-body text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
-              />
+              {item.category === 'medication' ? (
+                <MedicationCatalogPicker
+                  value={item.title}
+                  onChange={name => updateItem(i, { title: name })}
+                  placeholder="Search medication…"
+                />
+              ) : (
+                <input
+                  value={item.title}
+                  onChange={e => updateItem(i, { title: e.target.value })}
+                  placeholder="Item title"
+                  className="flex-1 font-body text-body text-ink border border-stone/30 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest/50"
+                />
+              )}
               <select
                 value={item.priority}
                 onChange={e => updateItem(i, { priority: e.target.value })}

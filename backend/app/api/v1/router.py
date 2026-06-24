@@ -8,6 +8,7 @@ from app.api.v1.admin.coupons import router as admin_coupons_router
 from app.api.v1.admin.doctors import router as admin_doctors_router
 from app.api.v1.admin.dsr import router as admin_dsr_router
 from app.api.v1.admin.internal import router as admin_internal_router
+from app.api.v1.admin.medication_catalog import router as admin_medication_catalog_router
 from app.api.v1.admin.pricing import router as admin_pricing_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.clinic.abha import router as abha_router
@@ -55,3 +56,4 @@ api_v1_router.include_router(admin_pricing_router, prefix="/admin")
 api_v1_router.include_router(admin_coupons_router, prefix="/admin")
 api_v1_router.include_router(admin_dsr_router, prefix="/admin")
 api_v1_router.include_router(admin_internal_router, prefix="/admin")
+api_v1_router.include_router(admin_medication_catalog_router, prefix="/admin")

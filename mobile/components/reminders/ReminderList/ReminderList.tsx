@@ -508,6 +508,36 @@ function isRxReminder(metadata: Record<string, unknown> | null): boolean {
   return !!(metadata.care_plan_id || metadata.prescription_id);
 }
 
+// Build a short, type-specific detail string from the reminder's metadata,
+// e.g. "2 glasses", "1 tablet · with food", "45 min · Strength".
+function formatDetail(type: ReminderType, metadata: Record<string, unknown> | null): string {
+  if (!metadata) return '';
+  const parts: string[] = [];
+  switch (type) {
+    case 'water': {
+      const amount = metadata.amount;
+      if (amount) parts.push(`${amount} ${metadata.unit === 'ml' ? 'ml' : 'glasses'}`);
+      break;
+    }
+    case 'supplement':
+    case 'medication': {
+      if (metadata.dosage) parts.push(String(metadata.dosage));
+      if (metadata.with_food === true) parts.push('with food');
+      break;
+    }
+    case 'gym': {
+      if (metadata.duration_minutes) parts.push(`${metadata.duration_minutes} min`);
+      if (metadata.activity) parts.push(String(metadata.activity));
+      break;
+    }
+    case 'custom': {
+      if (metadata.notes) parts.push(String(metadata.notes));
+      break;
+    }
+  }
+  return parts.join(' · ');
+}
+
 const SWIPE_ACTION_WIDTH = 80;
 
 function SwipeLeftAction({ progress }: { progress: SharedValue<number> }) {
@@ -540,6 +570,7 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
   const hasAdherence = reminder.adherence_rate > 0;
   const adherencePct = Math.round(reminder.adherence_rate * 100);
   const rx = isRxReminder(reminder.metadata);
+  const detail = formatDetail(reminder.type, reminder.metadata);
 
   const handleSwipeOpen = useCallback((direction: SwipeDirection) => {
     if (direction === SwipeDirection.LEFT) {
@@ -607,7 +638,9 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
               )}
             </View>
             <View style={row.bottomLine}>
-              <Text style={[row.freq, { color: t.textSub }]}>{freq}</Text>
+              <Text style={[row.freq, { color: t.textSub }]} numberOfLines={1}>
+                {detail ? `${freq} · ${detail}` : freq}
+              </Text>
               {rx && (
                 <View style={[row.rxBadge, { backgroundColor: withAlpha(colors.jade, t.isDark ? 0.20 : 0.10) }]}>
                   <Text style={[row.rxText, { color: t.isDark ? colors.jadeGlow : colors.jade }]}>Rx</Text>
@@ -616,25 +649,33 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
             </View>
           </View>
 
-          <Switch
-            value={reminder.active}
-            trackColor={{
-              false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
-              true:  withAlpha(colors.jadeGlow, 0.50),
-            }}
-            thumbColor={reminder.active ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
-            ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
-            accessibilityLabel={`${reminder.active ? 'Disable' : 'Enable'} ${reminder.label}`}
-            onValueChange={() => onToggle(reminder)}
-          />
-
-          <Pressable
-            onPress={() => onDelete(reminder)}
-            hitSlop={8}
-            accessibilityLabel={`Delete ${reminder.label}`}
+          {/* Claim the touch so toggling / deleting never bubbles up to the
+              row's edit onPress. */}
+          <View
+            style={row.controls}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => {}}
           >
-            <Ionicons name="trash-outline" size={16} color={t.textSub} />
-          </Pressable>
+            <Switch
+              value={reminder.active}
+              trackColor={{
+                false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
+                true:  withAlpha(colors.jadeGlow, 0.50),
+              }}
+              thumbColor={reminder.active ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
+              ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
+              accessibilityLabel={`${reminder.active ? 'Disable' : 'Enable'} ${reminder.label}`}
+              onValueChange={() => onToggle(reminder)}
+            />
+
+            <Pressable
+              onPress={() => onDelete(reminder)}
+              hitSlop={8}
+              accessibilityLabel={`Delete ${reminder.label}`}
+            >
+              <Ionicons name="trash-outline" size={16} color={t.textSub} />
+            </Pressable>
+          </View>
         </View>
       </HapticPressable>
     </ReanimatedSwipeable>
@@ -660,6 +701,11 @@ const row = StyleSheet.create({
     letterSpacing: 0.3,
   },
   body: { flex: 1, gap: 2 },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
   topLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -684,6 +730,7 @@ const row = StyleSheet.create({
   freq: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.caption,
+    flexShrink: 1,
   },
   rxBadge: {
     paddingHorizontal: spacing[2],
@@ -725,7 +772,7 @@ const swipe = StyleSheet.create({
 
 // ── ReminderList ──────────────────────────────────────────────────────────────
 
-export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onDelete, onToggle, onTakeNow, dailySummary, weekSummary }: ReminderListProps) {
+export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onDelete, onToggle, onTakeNow, dailySummary, weekSummary, refreshControl }: ReminderListProps) {
   const t = useTheme();
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const now = useMemo(() => new Date(), []);
@@ -751,14 +798,11 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={list.scroll}
+      refreshControl={refreshControl}
     >
       {dailySummary && <TodayProgressCard summary={dailySummary} />}
 
-      <NextUpCard
-        reminders={filtered}
-        selectedDate={selectedDate}
-        onTakeNow={onTakeNow}
-      />
+
 
       <WeekStrip
         selectedDate={selectedDate}
@@ -771,7 +815,11 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
       {calendarExpanded && (
         <MonthCalendar selectedDate={selectedDate} onSelectDate={handleCalendarSelect} />
       )}
-
+      <NextUpCard
+          reminders={filtered}
+          selectedDate={selectedDate}
+          onTakeNow={onTakeNow}
+      />
       <Text style={[list.dateHeading, { color: t.isDark ? colors.jadeGlow : colors.forest }]}>
         {displayDate}
       </Text>
