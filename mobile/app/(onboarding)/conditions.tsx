@@ -4,16 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
-
-const CONDITIONS = [
-  { slug: 'thyroid',             label: 'Thyroid',              icon: '🦋' },
-  { slug: 'pcos',                label: 'PCOS',                 icon: '🌿' },
-  { slug: 'weight-management',   label: 'Weight management',    icon: '⚖️' },
-  { slug: 'skin-and-hair',       label: 'Skin & hair',          icon: '✨' },
-  { slug: 'mens-intimate-health', label: "Men's intimate health", icon: '🛡️' },
-  { slug: 'hormones-trt',        label: 'Hormones & TRT',       icon: '⚡' },
-  { slug: 'longevity',           label: 'Longevity & energy',   icon: '🌱' },
-] as const;
+import { CONDITION_OPTIONS } from '../../lib/onboarding/intake';
+import { useOnboardingIntake } from '../../lib/onboarding/intake-context';
 
 const TOTAL_STEPS = 4;
 const STEP = 1;
@@ -21,22 +13,18 @@ const STEP = 1;
 export default function ConditionsScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { intake, update } = useOnboardingIntake();
+  const [selected, setSelected] = useState<string[]>(intake.conditions);
 
   const toggle = (slug: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
+    setSelected(prev =>
+      prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug],
+    );
   };
 
   const handleContinue = () => {
-    router.push({
-      pathname: '/(onboarding)/intake-form',
-      params: { conditions: [...selected].join(',') },
-    });
+    update({ conditions: selected });
+    router.push('/(onboarding)/intake-form');
   };
 
   const btnScale = useSharedValue(1);
@@ -65,8 +53,8 @@ export default function ConditionsScreen() {
 
       {/* Condition chips */}
       <View style={styles.grid}>
-        {CONDITIONS.map(({ slug, label, icon }) => {
-          const active = selected.has(slug);
+        {CONDITION_OPTIONS.map(({ slug, label, icon }) => {
+          const active = selected.includes(slug);
           return (
             <Pressable
               key={slug}
@@ -98,11 +86,11 @@ export default function ConditionsScreen() {
       <View style={styles.footer}>
         <Animated.View style={btnAnim}>
           <Pressable
-            style={[styles.button, selected.size === 0 && styles.buttonMuted]}
+            style={[styles.button, selected.length === 0 && styles.buttonMuted]}
             onPress={handleContinue}
             onPressIn={() => { btnScale.value = withSpring(0.97, { mass: 0.3, stiffness: 500 }); }}
             onPressOut={() => { btnScale.value = withSpring(1,   { mass: 0.3, stiffness: 500 }); }}
-            disabled={selected.size === 0}
+            disabled={selected.length === 0}
             accessibilityLabel="Continue"
           >
             <Text style={styles.buttonText}>Continue</Text>

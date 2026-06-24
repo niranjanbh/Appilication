@@ -44,6 +44,20 @@ def _audit_ctx(request: Request, user: object) -> AuditContext:
     )
 
 
+async def _attach_doctor_display(
+    db: DbSession, reads: list[PatientConsultationRead]
+) -> None:
+    """Populate doctor_name/doctor_specialty on patient consultation reads so the
+    patient sees which doctor the coordinator assigned."""
+    doctor_ids = {r.doctor_id for r in reads if r.doctor_id is not None}
+    if not doctor_ids:
+        return
+    display = await consultations_repo.get_doctor_display_map(db, doctor_ids)
+    for r in reads:
+        if r.doctor_id is not None and r.doctor_id in display:
+            r.doctor_name, r.doctor_specialty = display[r.doctor_id]
+
+
 @router.get("/consultations/slots", response_model=list[AvailableSlotRead])
 async def list_available_slots(
     request: Request,
@@ -92,8 +106,10 @@ async def list_consultations(
     await write_audit(db, ctx, action="list_consultations", resource_type="consultation", allowed=True)
 
     pages = max(1, -(-total // page_size))
+    reads = [PatientConsultationRead.model_validate(c) for c in items]
+    await _attach_doctor_display(db, reads)
     return PatientConsultationListResponse(
-        items=[PatientConsultationRead.model_validate(c) for c in items],
+        items=reads,
         total=total,
         page=page,
         page_size=page_size,
@@ -130,6 +146,7 @@ async def get_consultation(
     )
 
     read = PatientConsultationRead.model_validate(consultation)
+    await _attach_doctor_display(db, [read])
     # Surface the Razorpay order so the app can collect payment once a coordinator
     # has assigned the doctor + slot (status='scheduled', payment not yet captured).
     if (
@@ -242,7 +259,9 @@ async def confirm_payment(
         db, ctx, action="confirm_payment",
         resource_type="consultation", resource_id=consultation.id, allowed=True
     )
-    return PatientConsultationRead.model_validate(consultation)
+    read = PatientConsultationRead.model_validate(consultation)
+    await _attach_doctor_display(db, [read])
+    return read
 
 
 @router.post("/consultations/{consultation_id}/cancel", response_model=ConsultationCancelResponse)

@@ -130,6 +130,11 @@ class PatientConsultationRead(BaseModel):
     id: uuid.UUID
     # None while status == 'requested' (no doctor/slot/fee assigned yet).
     doctor_id: uuid.UUID | None = None
+    # Assigned doctor's display details — populated by the router once a
+    # coordinator assigns a doctor, so the patient sees who they'll consult.
+    # None while status == 'requested'.
+    doctor_name: str | None = None
+    doctor_specialty: list[str] | None = None
     condition_category: str
     consultation_type: ConsultationType
     scheduled_start_at: datetime | None = None

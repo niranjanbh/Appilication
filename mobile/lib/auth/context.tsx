@@ -24,6 +24,9 @@ interface AuthContextValue {
   signIn: (tokens: AuthTokens) => Promise<void>;
   signOut: () => Promise<void>;
   markOnboardingComplete: () => Promise<void>;
+  /** Re-fetch the current user (e.g. after capturing a phone number) so gates
+   *  keyed on user fields re-evaluate. No-op unless authenticated. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -82,6 +85,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: 'authenticated', user, onboardingComplete });
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const user = await getMeApi();
+    setState(prev =>
+      prev.status === 'authenticated' ? { ...prev, user } : prev,
+    );
+  }, []);
+
   const markOnboardingComplete = useCallback(async () => {
     await setOnboardingComplete();
     setState(prev =>
@@ -92,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ state, signIn, signOut, markOnboardingComplete }}>
+    <AuthContext.Provider value={{ state, signIn, signOut, markOnboardingComplete, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

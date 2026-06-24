@@ -8,7 +8,12 @@ import {
 } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
-import { apiFetch } from '../../lib/api/client';
+import {
+  isUpcoming,
+  listConsultations,
+  type Consultation,
+  type ConsultationStatus,
+} from '../../lib/api/consultations';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
@@ -19,36 +24,8 @@ import { Button } from '../../components/Button';
 import { borderRadius, colors, fontFamily, fontSize, spacing } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type ConsultationStatus =
-  | 'requested' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
-
-interface Consultation {
-  id: string;
-  doctor_id: string | null;
-  condition_category: string;
-  consultation_type: string;
-  scheduled_start_at: string | null;
-  scheduled_end_at: string | null;
-  status: ConsultationStatus;
-  consultation_fee_paise: number | null;
-  payment_id: string | null;
-  cancellation_reason: string | null;
-}
-
-interface ListResponse {
-  items: Consultation[];
-  total: number;
-  page: number;
-  page_size: number;
-  pages: number;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const UPCOMING_STATUSES: ConsultationStatus[] = ['requested', 'scheduled', 'confirmed', 'in_progress'];
-function isUpcoming(c: Consultation): boolean { return UPCOMING_STATUSES.includes(c.status); }
 function formatDate(iso: string) { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
 function formatTime(iso: string) { return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }); }
 function formatRupees(p: number) { return `₹${(p / 100).toFixed(0)}`; }
@@ -108,6 +85,14 @@ function ConsultationCard({
           <Text style={[styles.cardCategory, { color: textPri }]}>
             {formatCat(item.condition_category)}
           </Text>
+          {item.doctor_name ? (
+            <Text style={[styles.cardDoctor, { color: textPri }]}>
+              Dr {item.doctor_name}
+              {item.doctor_specialty && item.doctor_specialty.length > 0
+                ? ` · ${formatCat(item.doctor_specialty[0])}`
+                : ''}
+            </Text>
+          ) : null}
           <Text style={[styles.cardMeta, { color: textSub }]}>
             {item.consultation_type === 'initial' ? 'Initial consultation' : 'Follow-up'}
             {item.consultation_fee_paise != null ? ` · ${formatRupees(item.consultation_fee_paise)}` : ''}
@@ -127,7 +112,7 @@ export default function ConsultationsScreen() {
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['consultations'],
-    queryFn: () => apiFetch<ListResponse>('/v1/clinic/patient/consultations?page_size=50'),
+    queryFn: () => listConsultations({ pageSize: 50 }),
     staleTime: 60_000,
   });
 
@@ -264,6 +249,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.body,
     fontSize: fontSize.bodyLg,
     fontWeight: '700',
+  },
+  cardDoctor: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    fontWeight: '600',
   },
   cardMeta: {
     fontFamily: fontFamily.body,

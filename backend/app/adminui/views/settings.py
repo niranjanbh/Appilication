@@ -45,6 +45,7 @@ async def settings_page(
     admin: Annotated[object, Depends(require_admin_session)],
 ) -> HTMLResponse:
     google_enabled = await platform_settings_service.is_google_oauth_enabled(db)
+    signup_otp_enabled = await platform_settings_service.is_signup_otp_enabled(db)
     default_channel = await platform_settings_service.get_default_reset_channel(db)
     return templates.TemplateResponse(
         request,
@@ -52,6 +53,7 @@ async def settings_page(
         {
             "admin": admin,
             "google_enabled": google_enabled,
+            "signup_otp_enabled": signup_otp_enabled,
             "default_channel": default_channel.value,
             "google_client_ids_configured": bool(app_settings.google_oauth_client_id_list),
             "saved": request.query_params.get("saved") == "ok",
@@ -71,6 +73,23 @@ async def update_google_oauth(
     assert isinstance(admin, UserModel)
     ctx = _ctx(request, admin)
     await platform_settings_service.set_google_oauth_enabled(
+        db, ctx, enabled=bool(enabled), updated_by=admin.id
+    )
+    return RedirectResponse(url="/admin/settings?saved=ok", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/settings/signup-otp")
+async def update_signup_otp(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+    enabled: str = Form(default=""),
+) -> Response:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    ctx = _ctx(request, admin)
+    await platform_settings_service.set_signup_otp_enabled(
         db, ctx, enabled=bool(enabled), updated_by=admin.id
     )
     return RedirectResponse(url="/admin/settings?saved=ok", status_code=status.HTTP_302_FOUND)

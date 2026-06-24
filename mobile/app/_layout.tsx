@@ -77,14 +77,23 @@ function RootLayoutNav() {
   useEffect(() => {
     if (state.status === 'loading') return;
     const inAuthGroup = segments[0] === '(auth)';
+    const onPhoneGate = segments[0] === 'add-phone';
     if (state.status === 'unauthenticated' && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (state.status === 'authenticated' && inAuthGroup) {
       // Already signed in but sitting on an auth screen (e.g. back-navigated to
       // login): bounce to '/' and let index.tsx route to home vs onboarding.
       router.replace('/');
+    } else if (
+      state.status === 'authenticated' &&
+      (!state.user.phone || !state.user.phone_verified) &&
+      !onPhoneGate
+    ) {
+      // A reachable mobile number is mandatory (Google sign-in carries none).
+      // Pin the user to the capture screen no matter how they got here.
+      router.replace('/add-phone');
     }
-  }, [state.status, segments, router]);
+  }, [state, segments, router]);
 
   const headerBg   = isDark ? colors.forestSurface : colors.forest;
   const headerText = isDark ? colors.ivoryText : colors.ivory;
@@ -107,6 +116,7 @@ function RootLayoutNav() {
           Stack header so its default title (the literal group segment name,
           e.g. "(tabs)" / "(auth)") never appears. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="add-phone" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />

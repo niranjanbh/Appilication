@@ -12,6 +12,12 @@ export interface SignupResult {
   message: string;
   phone: string;
   otp_hint?: string | null;
+  // When signup OTP is admin-disabled, otp_required is false and the token
+  // fields are populated so the client can sign in immediately.
+  otp_required: boolean;
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expires_in?: number | null;
 }
 
 export interface VerifyOtpPayload {
@@ -65,6 +71,7 @@ export interface PasswordResetConfirmPayload {
 
 export interface AuthConfig {
   google_oauth_enabled: boolean;
+  signup_otp_enabled: boolean;
 }
 
 export function requestPasswordResetApi(
@@ -98,4 +105,30 @@ export function getAuthConfigApi(): Promise<AuthConfig> {
 
 export function getMeApi(): Promise<UserMe> {
   return apiFetch('/v1/users/me');
+}
+
+export interface PhoneCaptureResult {
+  message: string;
+  phone: string;
+  // When signup OTP is admin-enabled the number must be confirmed via
+  // confirmPhoneCaptureApi; when disabled it is stored verified immediately.
+  otp_required: boolean;
+  otp_hint?: string | null;
+}
+
+/** Attach a mobile number to the signed-in account (e.g. after Google sign-in). */
+export function requestPhoneCaptureApi(phone: string): Promise<PhoneCaptureResult> {
+  return apiFetch('/v1/auth/me/phone/request', {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export function confirmPhoneCaptureApi(
+  payload: VerifyOtpPayload,
+): Promise<{ message: string; phone: string }> {
+  return apiFetch('/v1/auth/me/phone/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

@@ -1,18 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { TAB_DOCK_CLEARANCE } from '../../components/ui/GlassTabBar';
 import { HapticPressable } from '../../components/ui/HapticPressable';
+import { AdaptiveHero } from '../../components/home/AdaptiveHero';
+import { BiomarkerSparkStrip } from '../../components/home/BiomarkerSparkStrip';
+import { CarePlanCard } from '../../components/home/CarePlanCard';
+import { RequestedConsultBanner } from '../../components/home/RequestedConsultBanner';
 import { useAuth } from '../../lib/auth/context';
 import { listPatientNotesApi } from '../../lib/api/patient-notes';
+import { listConsultations, type Consultation } from '../../lib/api/consultations';
 import {
   borderRadius, colors, fontFamily, fontSize, spacing, tintSoft, withAlpha, type TintName,
 } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
-import { useQuery } from '@tanstack/react-query';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD = spacing[6];
@@ -43,6 +47,26 @@ function getGreeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+// ─── Upcoming-consult derivation ────────────────────────────────────────────────
+
+/** First consult still awaiting coordinator assignment, if any. */
+function findRequested(items: Consultation[]): Consultation | null {
+  return items.find(c => c.status === 'requested') ?? null;
+}
+
+/** The soonest scheduled/confirmed/in-progress consult that has a slot. */
+function findNextScheduled(items: Consultation[]): Consultation | null {
+  const withSlot = items
+    .filter(c =>
+      (c.status === 'scheduled' || c.status === 'confirmed' || c.status === 'in_progress') &&
+      c.scheduled_start_at != null,
+    )
+    .sort((a, b) =>
+      new Date(a.scheduled_start_at!).getTime() - new Date(b.scheduled_start_at!).getTime(),
+    );
+  return withSlot[0] ?? null;
 }
 
 // ─── Quick action button ──────────────────────────────────────────────────────
@@ -95,7 +119,16 @@ export default function HomeScreen() {
     staleTime: 60_000,
   });
 
-  const recentNotes = notesData?.items ?? [];
+  const { data: consultData } = useQuery({
+    queryKey: ['consultations', 'upcoming'],
+    queryFn: () => listConsultations({ upcoming: true }),
+    staleTime: 60_000,
+  });
+
+  const recentNotes  = notesData?.items ?? [];
+  const upcoming     = consultData?.items ?? [];
+  const requested    = findRequested(upcoming);
+  const nextScheduled = findNextScheduled(upcoming);
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
 
@@ -116,40 +149,20 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Hero CTA — gradient glass card ─────────────────────────────── */}
-        <HapticPressable
-          haptic="medium"
-          scaleTo={0.97}
-          onPress={() => router.push('/consultations/book')}
-          accessibilityLabel="Book your first consultation"
-        >
-          <LinearGradient
-            colors={t.isDark ? [colors.jadeGlow, colors.forest] : [colors.jade, colors.forest]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
-          >
-            {/* glass sheen along the top edge */}
-            <LinearGradient
-              colors={[withAlpha(colors.white, 0.14), withAlpha(colors.white, 0)]}
-              style={[styles.heroSheen, { pointerEvents: 'none' }]}
-            />
-            <View style={styles.heroRow}>
-              <View style={styles.heroIconWrap}>
-                <Ionicons name="shield-checkmark-outline" size={22} color={colors.white} />
-              </View>
-              <View style={styles.heroContent}>
-                <Text style={styles.heroTitle}>Complete your health profile</Text>
-                <Text style={styles.heroSub}>5 quick questions · ~2 min</Text>
-              </View>
-              <Ionicons name="arrow-forward" size={20} color={withAlpha(colors.white, 0.6)} />
-            </View>
-            {/* progress bar */}
-            <View style={styles.progressTrack}>
-              <View style={styles.progressFill} />
-            </View>
-          </LinearGradient>
-        </HapticPressable>
+        {/* ── Coordinator "request under review" banner ──────────────────── */}
+        {requested && (
+          <RequestedConsultBanner onPress={() => router.push('/(tabs)/consultations')} />
+        )}
+
+        {/* ── Adaptive hero — countdown or booking CTA ───────────────────── */}
+        <AdaptiveHero
+          consult={nextScheduled}
+          onBook={() => router.push('/consultations/book')}
+          onOpenConsult={(id) => router.push(`/consultations/${id}`)}
+        />
+
+        {/* ── Biomarker spark-strip ──────────────────────────────────────── */}
+        <BiomarkerSparkStrip />
 
         {/* ── Quick actions ───────────────────────────────────────────────── */}
         <View style={styles.section}>
@@ -200,19 +213,7 @@ export default function HomeScreen() {
         </GlassCard>
 
         {/* ── Care plan card ──────────────────────────────────────────────── */}
-        <GlassCard>
-          <View style={styles.carePlanInner}>
-            <Text style={[styles.eyebrow, { color: t.textSub }]}>YOUR CARE PLAN</Text>
-            <Text style={[styles.carePlanTitle, { color: t.text }]}>
-              Personalized care starts here
-            </Text>
-            <Text style={[styles.carePlanBody, { color: t.textSub }]}>
-              Talk to a Kyros specialist about your hormonal health. Your care plan —
-              prescriptions, reminders, and lab orders — will appear here after your
-              first consultation.
-            </Text>
-          </View>
-        </GlassCard>
+        <CarePlanCard />
 
       </ScrollView>
     </View>
@@ -242,56 +243,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '600',
     marginTop: 2,
-  },
-  // Hero card — gradient surface with a glass sheen and soft glow
-  heroCard: {
-    borderRadius: borderRadius.xxl,
-    padding: spacing[4],
-    gap: spacing[4],
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    overflow: 'hidden',
-    boxShadow: `0 14px 24px ${withAlpha(colors.forest, 0.40)}`,
-  },
-  heroSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 56,
-  },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  heroIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.xl,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroContent: { flex: 1 },
-  heroTitle: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.bodyLg,
-    color: colors.ivoryText,
-    fontWeight: '600',
-  },
-  heroSub: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    color: 'rgba(255,255,255,0.58)',
-    marginTop: 2,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 2,
-  },
-  progressFill: {
-    height: 3,
-    width: '30%',
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderRadius: 2,
   },
 
   // Section
@@ -325,24 +276,4 @@ const styles = StyleSheet.create({
   notePreviewRow: { borderTopWidth: 1, paddingTop: spacing[2], gap: spacing[1] },
   notePreviewBody: { fontFamily: fontFamily.body, fontSize: fontSize.body, lineHeight: 20 },
   notePreviewTime: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
-
-  carePlanInner: { gap: spacing[2] },
-  eyebrow: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  carePlanTitle: {
-    fontFamily: fontFamily.display,
-    fontSize: 22,
-    fontWeight: '500',
-    lineHeight: 28,
-  },
-  carePlanBody: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.body,
-    lineHeight: 22,
-  },
 });

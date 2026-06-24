@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
@@ -17,10 +17,12 @@ import {
 } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
-import { signupApi } from '../../lib/api/auth';
+import { getAuthConfigApi, googleLoginApi, signupApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
+import { useAuth } from '../../lib/auth/context';
 import { AuthBackdrop } from '../../components/ui/AuthBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { GoogleSignInButton } from '../../components/ui/GoogleSignInButton';
 import { HapticPressable } from '../../components/ui/HapticPressable';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
@@ -44,11 +46,45 @@ type FormValues = z.infer<typeof schema>;
 
 export default function SignupScreen() {
   const router  = useRouter();
+  const { signIn } = useAuth();
   const isDark  = useThemePreference().colorScheme === 'dark';
   const [apiError, setApiError]         = useState<string | null>(null);
   const [countryCode, setCountryCode]   = useState('+91');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleBusy, setGoogleBusy]     = useState(false);
+
+  // Whether to show "Sign up with Google" is admin-controlled (server config).
+  useEffect(() => {
+    let active = true;
+    getAuthConfigApi()
+      .then((cfg) => {
+        if (active) setGoogleEnabled(cfg.google_oauth_enabled);
+      })
+      .catch(() => {
+        // Config unreachable → leave Google hidden; the form still works.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleGoogleToken = async (idToken: string) => {
+    setApiError(null);
+    setGoogleBusy(true);
+    try {
+      const tokens = await googleLoginApi(idToken);
+      await signIn(tokens);
+      // Google carries no phone — the index gate routes to /add-phone to
+      // capture a mobile number before the app proper.
+      router.replace('/');
+    } catch {
+      setApiError('Google sign-up is unavailable right now. Please try again.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -62,7 +98,18 @@ export default function SignupScreen() {
     setApiError(null);
     const phone = `${countryCode}${values.phoneNumber}`;
     try {
-      await signupApi({ name: values.name, phone, email: values.email, password: values.password });
+      const result = await signupApi({ name: values.name, phone, email: values.email, password: values.password });
+      // When the admin has signup OTP disabled, the backend auto-verifies the
+      // account and returns tokens — sign in and go straight to onboarding.
+      if (!result.otp_required && result.access_token && result.refresh_token && result.expires_in != null) {
+        await signIn({
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+          expires_in: result.expires_in,
+        });
+        router.replace('/');
+        return;
+      }
       router.push({ pathname: '/(auth)/verify-otp', params: { phone } });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -246,6 +293,21 @@ export default function SignupScreen() {
             )}
           </HapticPressable>
 
+          {googleEnabled ? (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: inputBdr }]} />
+                <Text style={[styles.dividerText, { color: textSub }]}>or</Text>
+                <View style={[styles.dividerLine, { backgroundColor: inputBdr }]} />
+              </View>
+              <GoogleSignInButton
+                onToken={handleGoogleToken}
+                onError={setApiError}
+                busy={googleBusy}
+              />
+            </>
+          ) : null}
+
           <Link href="/(auth)/login" style={[styles.signInLink, { color: textSub }]}>
             Already have an account? Sign in
           </Link>
@@ -386,6 +448,16 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: 'center',
     paddingVertical: spacing[2],
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
   },
 
   // Modal sheet

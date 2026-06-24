@@ -268,6 +268,7 @@ async def main(hash_password=None) -> None:
             },
         ]
 
+        assigned_ids: list[str] = []
         for p in patients_seed:
             patient_user = await db.scalar(select(User).where(User.phone == p["phone"]))
             if patient_user is None:
@@ -300,6 +301,18 @@ async def main(hash_password=None) -> None:
                     intake_complete_at=datetime.now(UTC),
                 )
                 db.add(patient)
+                await db.flush()
+            assigned_ids.append(str(patient.id))
+
+        # Keep BOTH sides of the coordinator↔patient link in sync. The
+        # coordinator portal scopes every query by Coordinator.assigned_patient_ids,
+        # so setting only Patient.assigned_coordinator_id (above) would leave the
+        # portal showing no patients and no consultations. Merge idempotently.
+        merged = list(coord.assigned_patient_ids or [])
+        for pid in assigned_ids:
+            if pid not in merged:
+                merged.append(pid)
+        coord.assigned_patient_ids = merged
 
         await db.commit()
 

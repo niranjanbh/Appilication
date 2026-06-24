@@ -118,22 +118,23 @@ services:
       KYROS_APP_ENV: "development"
     volumes:
       - ./backend:/app:cached
-      - celery_beat_data:/app/beat
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Write the schedule shelf to the kyros user's home dir (uid 1000 owns it).
+    # A named volume on /app/beat is created root-owned and the non-root user
+    # can't write it; the schedule file is only a last-run-times cache, so it
+    # doesn't need a durable volume in dev.
     command: >
       celery -A app.worker.celery_app beat
       --loglevel=INFO
-      --schedule=/app/beat/celerybeat-schedule
+      --schedule=/home/kyros/celerybeat-schedule
 
 volumes:
   postgres_data:
     name: kyros_postgres_data
-  celery_beat_data:
-    name: kyros_celery_beat_data
 
 networks:
   default:

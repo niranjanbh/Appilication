@@ -97,6 +97,55 @@ async def test_auth_config_public_returns_200(client: AsyncClient) -> None:
     assert "google_oauth_enabled" in resp.json()
 
 
+# ── /v1/auth/me/phone/* — patient only (mandatory number capture) ────────────
+
+
+async def test_phone_capture_request_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post("/v1/auth/me/phone/request", json={"phone": "+919000000111"})
+    assert resp.status_code == 401
+
+
+async def test_phone_capture_request_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        "/v1/auth/me/phone/request",
+        json={"phone": "+919000000111"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
+async def test_phone_capture_request_missing_body_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.post(
+        "/v1/auth/me/phone/request", json={}, headers=make_auth_headers(patient)
+    )
+    assert resp.status_code == 422
+
+
+async def test_phone_capture_confirm_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/v1/auth/me/phone/confirm", json={"phone": "+919000000111", "otp": "123456"}
+    )
+    assert resp.status_code == 401
+
+
+async def test_phone_capture_confirm_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.post(
+        "/v1/auth/me/phone/confirm",
+        json={"phone": "+919000000111", "otp": "123456"},
+        headers=make_auth_headers(doctor),
+    )
+    assert resp.status_code == 403
+
+
 # ── /v1/users/me — patient-scoped endpoints ───────────────────────────────────
 # Role matrix: patient=200/202, no-auth=401, doctor/coordinator=403.
 # Full cross-role and task tests live in test_users_me.py.

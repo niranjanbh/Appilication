@@ -42,6 +42,13 @@ class SignupResponse(BaseModel):
     message: str
     phone: str
     otp_hint: str | None = None
+    # When signup OTP is admin-disabled, otp_required is False and the token
+    # fields are populated so the client can sign in immediately. When OTP is
+    # enabled, otp_required is True and the token fields are null.
+    otp_required: bool = True
+    access_token: str | None = None
+    refresh_token: str | None = None
+    expires_in: int | None = None
 
 
 class SendOtpRequest(BaseModel):
@@ -71,6 +78,13 @@ class VerifyOtpRequest(BaseModel):
 class LoginRequest(BaseModel):
     email_or_phone: str
     password: str
+
+    @field_validator("email_or_phone")
+    @classmethod
+    def _trim_identifier(cls, v: str) -> str:
+        # Stray leading/trailing whitespace (common from autofill/paste) must
+        # not break the email/phone lookup.
+        return v.strip()
 
 
 class TokenResponse(BaseModel):
@@ -124,8 +138,47 @@ class GoogleLoginRequest(BaseModel):
     id_token: str
 
 
+class PhoneCaptureRequest(BaseModel):
+    """Attach a mobile number to the signed-in account (e.g. after Google
+    sign-in, which carries no phone). E.164 enforced, like signup."""
+
+    phone: str
+    channel: OtpChannel | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def _check_phone(cls, v: str) -> str:
+        return _validate_e164(v)
+
+
+class PhoneCaptureResponse(BaseModel):
+    message: str
+    phone: str
+    # When signup OTP is admin-enabled, the number must be confirmed via OTP
+    # (otp_required=True). When disabled, the number is stored verified
+    # immediately and no confirm step is needed.
+    otp_required: bool
+    otp_hint: str | None = None
+
+
+class PhoneConfirmRequest(BaseModel):
+    phone: str
+    otp: str
+
+    @field_validator("phone")
+    @classmethod
+    def _check_phone(cls, v: str) -> str:
+        return _validate_e164(v)
+
+
+class PhoneConfirmResponse(BaseModel):
+    message: str
+    phone: str
+
+
 class AuthConfigResponse(BaseModel):
     google_oauth_enabled: bool
+    signup_otp_enabled: bool
 
 
 class MfaSetupResponse(BaseModel):

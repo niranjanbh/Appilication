@@ -54,7 +54,7 @@ async def login_submit(
     from app.models.identity import User as UserModel
     from app.repositories import users as users_repo
 
-    user = await users_repo.get_by_email_or_phone(db, email_or_phone)
+    user = await users_repo.get_by_email_or_phone(db, email_or_phone.strip())
     if (
         user is None
         or not isinstance(user, UserModel)

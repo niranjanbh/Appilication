@@ -34,6 +34,22 @@ async def get_consultation_for_patient(
     return result.scalar_one_or_none()
 
 
+async def get_doctor_display_map(
+    db: AsyncSession, doctor_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, list[Any]]]:
+    """Map doctor_id -> (name, specialty) so patient-facing responses can show
+    the assigned doctor. None ids are ignored; empty input returns {}."""
+    ids = {d for d in doctor_ids if d is not None}
+    if not ids:
+        return {}
+    result = await db.execute(
+        select(Doctor.id, User.name, Doctor.specialty)
+        .join(User, User.id == Doctor.user_id)
+        .where(Doctor.id.in_(ids))
+    )
+    return {row.id: (row.name, list(row.specialty or [])) for row in result}
+
+
 async def list_consultations_for_patient(
     db: AsyncSession,
     *,

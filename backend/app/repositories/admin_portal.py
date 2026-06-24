@@ -547,7 +547,10 @@ async def list_all_consultations(
         select(Consultation, PatientUser, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)
         .join(PatientUser, PatientUser.id == Patient.user_id)
-        .join(Doctor, Doctor.id == Consultation.doctor_id)
+        # Left join: `requested` consultations have no doctor yet (doctor_id is
+        # NULL until a coordinator assigns one). An inner join here would drop
+        # every unassigned request from the admin list.
+        .outerjoin(Doctor, Doctor.id == Consultation.doctor_id)
         .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
         .where(*base_filter)
         .order_by(Consultation.scheduled_start_at.desc())

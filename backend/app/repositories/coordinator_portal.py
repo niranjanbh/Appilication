@@ -194,20 +194,19 @@ async def list_requested_consultations(
 ) -> list[tuple[Consultation, User]]:
     """Patient-submitted requests awaiting a doctor + slot assignment.
 
-    Returns (Consultation, patient_user) for status='requested' patients assigned
-    to this coordinator. No clinical fields — only the requirement notes and
-    preferred time window the patient supplied.
+    Returns (Consultation, patient_user) for status='requested' consultations
+    routed to this coordinator. Scoped by ``Consultation.coordinator_id`` (not
+    patient membership): consultations are load-balanced per request, so a
+    coordinator's queue is exactly the requests routed to them. No clinical
+    fields — only the requirement notes and preferred time window the patient
+    supplied.
     """
-    assigned = await _get_assigned_ids(db, coordinator_id)
-    if not assigned:
-        return []
-
     result = await db.execute(
         select(Consultation, User)
         .join(Patient, Patient.id == Consultation.patient_id)
         .join(User, User.id == Patient.user_id)
         .where(
-            Consultation.patient_id.in_(assigned),
+            Consultation.coordinator_id == coordinator_id,
             Consultation.status == ConsultationStatus.REQUESTED,
             Consultation.deleted_at.is_(None),
         )

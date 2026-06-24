@@ -18,6 +18,7 @@ from app.repositories import platform_settings as settings_repo
 # Setting keys (kept in one place so the admin UI and services agree).
 RESET_OTP_CHANNEL_DEFAULT = "reset_otp_channel_default"
 GOOGLE_OAUTH_ENABLED = "google_oauth_enabled"
+SIGNUP_OTP_ENABLED = "signup_otp_enabled"
 
 
 async def get_default_reset_channel(db: AsyncSession) -> OtpResetChannel:
@@ -32,6 +33,19 @@ async def get_default_reset_channel(db: AsyncSession) -> OtpResetChannel:
 
 async def is_google_oauth_enabled(db: AsyncSession) -> bool:
     return bool(await settings_repo.get(db, GOOGLE_OAUTH_ENABLED))
+
+
+async def is_signup_otp_enabled(db: AsyncSession) -> bool:
+    """Whether new signups must verify their phone via OTP.
+
+    Secure default: when the key has never been set, OTP verification is ON
+    (phone_verified stays False until an OTP is confirmed). An admin must
+    explicitly disable it.
+    """
+    raw = await settings_repo.get(db, SIGNUP_OTP_ENABLED)
+    if raw is None:
+        return True
+    return bool(raw)
 
 
 async def set_default_reset_channel(
@@ -71,4 +85,24 @@ async def set_google_oauth_enabled(
         resource_type="platform_setting",
         allowed=True,
         log_metadata={"key": GOOGLE_OAUTH_ENABLED, "value": enabled},
+    )
+
+
+async def set_signup_otp_enabled(
+    db: AsyncSession,
+    ctx: AuditContext,
+    *,
+    enabled: bool,
+    updated_by: uuid.UUID,
+) -> None:
+    await settings_repo.upsert(
+        db, key=SIGNUP_OTP_ENABLED, value=enabled, updated_by=updated_by
+    )
+    await write_audit(
+        db,
+        ctx,
+        action="platform_setting_update",
+        resource_type="platform_setting",
+        allowed=True,
+        log_metadata={"key": SIGNUP_OTP_ENABLED, "value": enabled},
     )

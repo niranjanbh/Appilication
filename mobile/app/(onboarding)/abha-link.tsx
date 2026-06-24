@@ -11,8 +11,12 @@ import {
 } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useQueryClient } from '@tanstack/react-query';
 import { confirmAbhaCreation, initAbhaCreation, linkAbhaNumber } from '../../lib/api/abha';
+import { requestConsultation } from '../../lib/api/consultations';
 import { useAuth } from '../../lib/auth/context';
+import { composeRequirementNotes, primaryCategory } from '../../lib/onboarding/intake';
+import { useOnboardingIntake } from '../../lib/onboarding/intake-context';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 
 type Tab        = 'link' | 'create';
@@ -25,6 +29,8 @@ const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 export default function AbhaLinkScreen() {
   const router = useRouter();
   const { markOnboardingComplete } = useAuth();
+  const { intake } = useOnboardingIntake();
+  const queryClient = useQueryClient();
   const isDark = useThemePreference().colorScheme === 'dark';
 
   const [tab,          setTab]          = useState<Tab>('link');
@@ -37,8 +43,28 @@ export default function AbhaLinkScreen() {
   const [txnId,        setTxnId]        = useState('');
   const [otp,          setOtp]          = useState('');
 
+  // Turn the onboarding intake answers into a consultation request so the
+  // patient lands on Home with their request already under coordinator review —
+  // rather than being asked to book a first consultation from scratch.
+  // Best-effort: a failure here must not trap the patient in onboarding; they
+  // can still book from Home.
+  const submitConsultationRequest = async () => {
+    const category = primaryCategory(intake);
+    if (!category) return;
+    try {
+      await requestConsultation({
+        condition_category: category,
+        requirement_notes: composeRequirementNotes(intake),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['consultations'] });
+    } catch {
+      // Non-fatal — Home will simply show the "Book your first consultation" CTA.
+    }
+  };
+
   // Preserve all existing ABHA logic
   const finish = async () => {
+    await submitConsultationRequest();
     await markOnboardingComplete();
     router.replace('/(tabs)/home');
   };

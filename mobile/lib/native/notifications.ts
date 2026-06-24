@@ -20,21 +20,13 @@ export interface ReminderNotificationData {
   label: string;
 }
 
-function isAvailable(): boolean {
-  if (Platform.OS === 'web') return false;
-  try {
-    require('expo-notifications');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Expo Go dropped remote (push) notification support in SDK 53 — calling
- * getExpoPushTokenAsync / addPushTokenListener there throws and logs a noisy
- * warning. Local notifications still work in Expo Go, so this only gates the
- * remote-push paths. A real build (standalone/bare/dev-client) returns false.
+ * Expo Go dropped expo-notifications support in SDK 53 — and importantly,
+ * merely importing the module on Android Expo Go logs a noisy ERROR about
+ * removed push functionality (the require succeeds, it does not throw). So we
+ * must detect Expo Go *before* touching expo-notifications. expo-constants is
+ * still present in Expo Go and importing it is silent. A real build
+ * (standalone/bare/dev-client) returns false here.
  */
 function isExpoGo(): boolean {
   try {
@@ -45,11 +37,23 @@ function isExpoGo(): boolean {
   }
 }
 
+function isAvailable(): boolean {
+  if (Platform.OS === 'web') return false;
+  // Treat Expo Go like web — notifications are unavailable there since SDK 53.
+  // Short-circuiting before require('expo-notifications') avoids the module's
+  // own import-time ERROR log. Use a development build for notifications.
+  if (isExpoGo()) return false;
+  try {
+    require('expo-notifications');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isRemotePushSupported(): boolean {
-  // Check Expo Go first: it only requires expo-constants. Calling isAvailable()
-  // first would require('expo-notifications'), which itself logs the Expo Go
-  // "push removed in SDK 53" warning before we ever get to skip it.
-  return !isExpoGo() && isAvailable();
+  // isAvailable() already excludes Expo Go and web.
+  return isAvailable();
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {

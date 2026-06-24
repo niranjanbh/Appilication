@@ -40,6 +40,8 @@ interface RazorpayOrderInfo {
 interface Consultation {
   id: string;
   doctor_id: string | null;
+  doctor_name: string | null;
+  doctor_specialty: string[] | null;
   condition_category: string;
   consultation_type: string;
   scheduled_start_at: string | null;

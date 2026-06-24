@@ -21,6 +21,12 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  // A reachable mobile number is mandatory (Google sign-in carries none).
+  // Gate before onboarding/home so it can't be skipped, on every app entry.
+  if (!state.user.phone || !state.user.phone_verified) {
+    return <Redirect href="/add-phone" />;
+  }
+
   if (!state.onboardingComplete) {
     return <Redirect href="/(onboarding)/welcome" />;
   }

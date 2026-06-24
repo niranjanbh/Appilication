@@ -94,6 +94,21 @@ async def update_phone_verified(db: AsyncSession, user_id: uuid.UUID) -> None:
     )
 
 
+async def set_phone_verified(
+    db: AsyncSession, user_id: uuid.UUID, phone: str
+) -> None:
+    """Attach a phone to an account and mark it verified in one update.
+
+    Used when a number is captured after the fact (e.g. Google sign-in, which
+    carries no phone). The caller is responsible for the uniqueness check.
+    """
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(phone=phone, phone_verified=True, updated_at=datetime.now(UTC))
+    )
+
+
 async def get_by_google_sub(db: AsyncSession, google_sub: str) -> User | None:
     result = await db.execute(
         select(User).where(User.google_sub == google_sub, User.deleted_at.is_(None))

@@ -17,6 +17,10 @@ from app.api.v1.auth.schemas import (
     PasswordResetConfirmResponse,
     PasswordResetRequest,
     PasswordResetRequestResponse,
+    PhoneCaptureRequest,
+    PhoneCaptureResponse,
+    PhoneConfirmRequest,
+    PhoneConfirmResponse,
     RefreshRequest,
     SendOtpRequest,
     SendOtpResponse,
@@ -28,7 +32,7 @@ from app.api.v1.auth.schemas import (
 from app.core.audit import AuditContext
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
-from app.core.rbac import get_any_staff_user, require_mfa
+from app.core.rbac import get_any_staff_user, get_patient_user, require_mfa
 from app.db.enums import ActorRole
 from app.services import auth as auth_service
 from app.services import platform_settings_service
@@ -73,6 +77,16 @@ async def signup(
         user_agent=request.headers.get("user-agent", ""),
         request_id=getattr(request.state, "request_id", ""),
     )
+    if not result.otp_required and result.tokens is not None:
+        # Signup OTP disabled by admin — account is auto-verified and signed in.
+        return SignupResponse(
+            message="Account created.",
+            phone=result.phone,
+            otp_required=False,
+            access_token=result.tokens.access_token,
+            refresh_token=result.tokens.refresh_token,
+            expires_in=result.tokens.expires_in,
+        )
     otp_hint: str | None = None
     if settings.debug:
         otp_hint = await redis.get(f"otp:phone:{result.phone}:debug")
@@ -80,6 +94,7 @@ async def signup(
         message="Account created. Check your phone for the OTP.",
         phone=result.phone,
         otp_hint=otp_hint,
+        otp_required=True,
     )
 
 
@@ -273,7 +288,70 @@ async def auth_config(db: DbSession) -> AuthConfigResponse:
     """Public client config — lets the app decide whether to show Google sign-in."""
     return AuthConfigResponse(
         google_oauth_enabled=await platform_settings_service.is_google_oauth_enabled(db),
+        signup_otp_enabled=await platform_settings_service.is_signup_otp_enabled(db),
     )
+
+
+@router.post(
+    "/me/phone/request",
+    response_model=PhoneCaptureResponse,
+    dependencies=[Depends(rate_limit("auth_phone_capture", limit=5))],
+)
+async def request_phone_capture(
+    body: PhoneCaptureRequest,
+    request: Request,
+    db: DbSession,
+    redis: Redis,
+    user: object = Depends(get_patient_user),
+) -> PhoneCaptureResponse:
+    """Attach a mobile number to the signed-in patient (e.g. after Google
+    sign-in). When signup OTP is enabled, an OTP is sent and must be confirmed
+    via /me/phone/confirm; otherwise the number is stored verified immediately."""
+    result = await auth_service.request_phone_capture(
+        db,
+        redis,
+        user=user,  # type: ignore[arg-type]
+        phone=body.phone,
+        channel=body.channel,
+        ip_address=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", ""),
+        request_id=getattr(request.state, "request_id", ""),
+    )
+    otp_hint: str | None = None
+    if settings.debug and result.otp_required:
+        otp_hint = await redis.get(f"otp:phone:{result.phone}:debug")
+    return PhoneCaptureResponse(
+        message="OTP sent." if result.otp_required else "Mobile number saved.",
+        phone=result.phone,
+        otp_required=result.otp_required,
+        otp_hint=otp_hint,
+    )
+
+
+@router.post(
+    "/me/phone/confirm",
+    response_model=PhoneConfirmResponse,
+    dependencies=[Depends(rate_limit("auth_phone_confirm", limit=10))],
+)
+async def confirm_phone_capture(
+    body: PhoneConfirmRequest,
+    request: Request,
+    db: DbSession,
+    redis: Redis,
+    user: object = Depends(get_patient_user),
+) -> PhoneConfirmResponse:
+    """Confirm the OTP sent to a captured number and mark it verified."""
+    await auth_service.confirm_phone_capture(
+        db,
+        redis,
+        user=user,  # type: ignore[arg-type]
+        phone=body.phone,
+        otp=body.otp,
+        ip_address=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", ""),
+        request_id=getattr(request.state, "request_id", ""),
+    )
+    return PhoneConfirmResponse(message="Mobile number verified.", phone=body.phone)
 
 
 @router.post("/mfa/setup", response_model=MfaSetupResponse)

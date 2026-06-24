@@ -20,7 +20,10 @@ export function ServiceBanner() {
   const { isConnected, isInternetReachable } = useNetworkStatus();
   const { state } = useAuth();
   const queryClient = useQueryClient();
-  const slideAnim = useRef(new Animated.Value(-60)).current;
+  // Hidden offset must exceed the banner's full height (paddingTop spacing[10]
+  // + content + paddingBottom) or a saffron sliver peeks below the top edge on
+  // every screen. -120 clears it with margin.
+  const slideAnim = useRef(new Animated.Value(-120)).current;
 
   const deviceOffline = !isConnected || isInternetReachable === false;
   // Only surface backend trouble inside the authenticated app — never on the
@@ -29,7 +32,7 @@ export function ServiceBanner() {
 
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: show ? 0 : -60,
+      toValue: show ? 0 : -120,
       duration: 300,
       useNativeDriver: Platform.OS !== 'web',
     }).start();

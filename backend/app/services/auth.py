@@ -38,6 +38,7 @@ from app.integrations import authkey
 from app.models.admin import StaffMfa
 from app.models.identity import User
 from app.repositories import auth as auth_repo
+from app.repositories import patients as patients_repo
 from app.repositories import staff_mfa as staff_mfa_repo
 from app.repositories import users as users_repo
 
@@ -67,6 +68,12 @@ class MfaChallenge:
 class SignupResult:
     user_id: uuid.UUID
     phone: str
+    # When signup OTP is admin-disabled the account is auto-verified and a
+    # session is minted immediately; otp_required is False and tokens are set.
+    # When OTP is enabled, otp_required is True and tokens is None (the client
+    # must complete /verify-otp).
+    otp_required: bool = True
+    tokens: TokenPair | None = None
 
 
 # Namespaces keep OTP flows isolated: a code issued for the public booking flow
@@ -378,11 +385,30 @@ async def signup(
     )
     await write_audit(db, ctx, action="signup", resource_type="user", resource_id=user.id, allowed=True)
 
+    # Every patient needs a 1:1 clinic profile; create it now so consultations,
+    # lab reports, and ABHA work from the first request.
+    await patients_repo.get_or_create_for_user(db, user_id=user.id)
+
+    from app.services import platform_settings_service
+
+    if not await platform_settings_service.is_signup_otp_enabled(db):
+        # Admin has turned signup OTP off: skip phone verification entirely and
+        # mint a session immediately so the client can go straight to onboarding.
+        await users_repo.update_phone_verified(db, user.id)
+        await write_audit(
+            db, ctx, action="phone_verified", resource_type="user",
+            resource_id=user.id, allowed=True, reason="signup_otp_disabled",
+        )
+        tokens = await _create_token_pair(db, user, ip_address, user_agent)
+        await users_repo.update_last_login(db, user.id)
+        await write_audit(db, ctx, action="login", resource_type="user", resource_id=user.id, allowed=True)
+        return SignupResult(user_id=user.id, phone=phone, otp_required=False, tokens=tokens)
+
     try:
         await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
     except OtpCooldownError:
         pass  # OTP already in flight from a prior attempt; user can use the previously sent code
-    return SignupResult(user_id=user.id, phone=phone)
+    return SignupResult(user_id=user.id, phone=phone, otp_required=True)
 
 
 async def send_otp(
@@ -445,6 +471,112 @@ async def verify_otp(
     await users_repo.update_last_login(db, user.id)
     await write_audit(db, ctx, action="login", resource_type="user", resource_id=user.id, allowed=True)
     return tokens
+
+
+@dataclass
+class PhoneCaptureResult:
+    phone: str
+    # Mirrors signup: when signup OTP is admin-enabled the number must be
+    # confirmed via /me/phone/confirm (otp_required=True). When disabled the
+    # number is stored verified immediately and no confirm step is needed.
+    otp_required: bool
+
+
+async def request_phone_capture(
+    db: AsyncSession,
+    redis: RedisClient,
+    *,
+    user: User,
+    phone: str,
+    ip_address: str,
+    user_agent: str,
+    request_id: str,
+    channel: str | None = None,
+) -> PhoneCaptureResult:
+    """Attach a mobile number to the signed-in account.
+
+    Used after Google sign-in (which carries no phone) to force-collect a
+    reachable number for communication. Honours the admin signup-OTP toggle:
+    when OTP is enabled the number is held pending an OTP confirm; when disabled
+    it is stored verified immediately.
+    """
+    from app.services import platform_settings_service
+
+    ctx = AuditContext(
+        actor_user_id=user.id,
+        actor_role=ActorRole(user.role.value),
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
+
+    # A number already verified by a *different* account cannot be claimed.
+    existing = await users_repo.get_by_phone(db, phone)
+    if existing is not None and existing.id != user.id and existing.phone_verified:
+        await write_audit(
+            db, ctx, action="phone_capture_request", resource_type="user",
+            resource_id=user.id, allowed=False, reason="phone_already_registered",
+        )
+        await db.commit()
+        raise ConflictError("phone_already_registered")
+
+    if not await platform_settings_service.is_signup_otp_enabled(db):
+        # OTP disabled by admin: store the number verified straight away.
+        await users_repo.set_phone_verified(db, user.id, phone)
+        await write_audit(
+            db, ctx, action="phone_verified", resource_type="user",
+            resource_id=user.id, allowed=True, reason="signup_otp_disabled",
+        )
+        return PhoneCaptureResult(phone=phone, otp_required=False)
+
+    await write_audit(
+        db, ctx, action="phone_capture_request", resource_type="user",
+        resource_id=user.id, allowed=True,
+    )
+    try:
+        await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
+    except OtpCooldownError:
+        pass  # A code is already in flight; the user can use the previous one.
+    return PhoneCaptureResult(phone=phone, otp_required=True)
+
+
+async def confirm_phone_capture(
+    db: AsyncSession,
+    redis: RedisClient,
+    *,
+    user: User,
+    phone: str,
+    otp: str,
+    ip_address: str,
+    user_agent: str,
+    request_id: str,
+) -> None:
+    """Confirm the OTP for a captured number and mark it verified on the account."""
+    ctx = AuditContext(
+        actor_user_id=user.id,
+        actor_role=ActorRole(user.role.value),
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
+
+    # Re-check the race: someone may have verified this number meanwhile.
+    existing = await users_repo.get_by_phone(db, phone)
+    if existing is not None and existing.id != user.id and existing.phone_verified:
+        await write_audit(
+            db, ctx, action="phone_capture_confirm", resource_type="user",
+            resource_id=user.id, allowed=False, reason="phone_already_registered",
+        )
+        await db.commit()
+        raise ConflictError("phone_already_registered")
+
+    await _verify_otp_code(redis, phone, otp)
+
+    await users_repo.set_phone_verified(db, user.id, phone)
+    await write_audit(
+        db, ctx, action="phone_verified", resource_type="user",
+        resource_id=user.id, allowed=True,
+    )
 
 
 async def login(
@@ -890,6 +1022,8 @@ async def google_login(
         user_agent=user_agent,
         request_id=request_id,
     )
+    # Google patients (new, linked, or returning) all need a clinic profile.
+    await patients_repo.get_or_create_for_user(db, user_id=user.id)
     tokens = await _create_token_pair(db, user, ip_address, user_agent)
     await users_repo.update_last_login(db, user.id)
     await write_audit(

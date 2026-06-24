@@ -160,7 +160,7 @@ export default function LoginScreen() {
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <AuthBackdrop />
+       <AuthBackdrop />
       <ScrollView
         contentContainerStyle={[
           styles.container,

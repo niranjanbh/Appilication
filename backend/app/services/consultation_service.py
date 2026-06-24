@@ -17,6 +17,7 @@ from app.models.doctor import Doctor
 from app.models.payment import Payment
 from app.repositories import consent as consent_repo
 from app.repositories import consultations as consultations_repo
+from app.repositories import patients as patients_repo
 from app.repositories import payments as payments_repo
 from app.services import payment_service
 
@@ -79,10 +80,14 @@ async def request_consultation(
     if patient is None:
         raise ConsultationError("patient_profile_not_found")
 
+    # Per-consultation load balancing: route this request to the active
+    # coordinator currently handling the fewest patients (None if none exist).
+    coordinator_id = await patients_repo.route_consultation_to_coordinator(db, patient)
+
     consultation = await consultations_repo.create_consultation_request(
         db,
         patient_id=patient.id,
-        coordinator_id=patient.assigned_coordinator_id,
+        coordinator_id=coordinator_id,
         condition_category=condition_category,
         consultation_type=consultation_type,
         requirement_notes=requirement_notes,

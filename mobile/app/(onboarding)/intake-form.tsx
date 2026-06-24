@@ -1,31 +1,16 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
-
-const GENDER_OPTIONS           = [
-  { value: 'male',   label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other',  label: 'Prefer not to say' },
-];
-const SYMPTOM_DURATION_OPTIONS = [
-  { value: 'less_than_3_months', label: 'Less than 3 months' },
-  { value: '3_to_6_months',      label: '3 – 6 months' },
-  { value: 'more_than_6_months', label: 'More than 6 months' },
-  { value: 'more_than_2_years',  label: 'More than 2 years' },
-];
-const PREVIOUS_DIAGNOSIS_OPTIONS = [
-  { value: 'yes_diagnosed', label: 'Yes, I have a diagnosis' },
-  { value: 'yes_suspected', label: 'Yes, it was suspected but not confirmed' },
-  { value: 'no',            label: 'No previous diagnosis' },
-];
-const PREVIOUS_TREATMENT_OPTIONS = [
-  { value: 'yes_currently',  label: 'Yes, currently on treatment' },
-  { value: 'yes_previously', label: 'Yes, previously treated' },
-  { value: 'no',             label: 'No treatment yet' },
-];
+import {
+  GENDER_OPTIONS,
+  PREVIOUS_DIAGNOSIS_OPTIONS,
+  PREVIOUS_TREATMENT_OPTIONS,
+  SYMPTOM_DURATION_OPTIONS,
+} from '../../lib/onboarding/intake';
+import { useOnboardingIntake } from '../../lib/onboarding/intake-context';
 
 const TOTAL_STEPS = 4;
 const STEP = 2;
@@ -34,7 +19,7 @@ const STEP = 2;
 
 interface OptionGroupProps {
   label: string;
-  options: { value: string; label: string }[];
+  options: readonly { value: string; label: string }[];
   selected: string | null;
   onSelect: (v: string) => void;
   isDark: boolean;
@@ -114,21 +99,24 @@ const g = StyleSheet.create({
 export default function IntakeFormScreen() {
   const router  = useRouter();
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const params  = useLocalSearchParams<{ conditions?: string }>();
+  const { intake, update } = useOnboardingIntake();
 
-  const [gender,    setGender]    = useState<string | null>(null);
-  const [duration,  setDuration]  = useState<string | null>(null);
-  const [diagnosis, setDiagnosis] = useState<string | null>(null);
-  const [treatment, setTreatment] = useState<string | null>(null);
+  const [gender,    setGender]    = useState<string | null>(intake.gender);
+  const [duration,  setDuration]  = useState<string | null>(intake.duration);
+  const [diagnosis, setDiagnosis] = useState<string | null>(intake.diagnosis);
+  const [treatment, setTreatment] = useState<string | null>(intake.treatment);
 
   const allAnswered = gender !== null && duration !== null && diagnosis !== null && treatment !== null;
   const canSkip     = gender !== null;
 
   const handleSkip = () => {
-    router.push({ pathname: '/(onboarding)/consent', params: { conditions: params.conditions, gender, skipped_intake: 'true' } });
+    // Skipped the symptom questions — keep gender, clear the rest.
+    update({ gender, duration: null, diagnosis: null, treatment: null });
+    router.push('/(onboarding)/consent');
   };
   const handleContinue = () => {
-    router.push({ pathname: '/(onboarding)/consent', params: { conditions: params.conditions, gender } });
+    update({ gender, duration, diagnosis, treatment });
+    router.push('/(onboarding)/consent');
   };
 
   const btnScale  = useSharedValue(1);

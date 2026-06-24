@@ -187,6 +187,28 @@ async def test_login_wrong_password_returns_401(
     assert resp.status_code == 401
 
 
+async def test_login_trims_whitespace_in_identifier(
+    client: AsyncClient,
+    redis_client: object,
+) -> None:
+    # A leading/trailing space (autofill/paste) must not break the lookup.
+    phone = _synth_phone()
+    email = _synth_email()
+    await client.post(
+        "/v1/auth/signup",
+        json={"name": "F", "phone": phone, "email": email, "password": "RightPass1!"},
+    )
+    otp = await _get_debug_otp(redis_client, phone)
+    await client.post("/v1/auth/verify-otp", json={"phone": phone, "otp": otp})
+
+    resp = await client.post(
+        "/v1/auth/login",
+        json={"email_or_phone": f"  {email}  ", "password": "RightPass1!"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["access_token"]
+
+
 async def test_login_unverified_phone_returns_403(
     client: AsyncClient,
 ) -> None:
