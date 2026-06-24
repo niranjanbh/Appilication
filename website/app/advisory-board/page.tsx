@@ -18,18 +18,22 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'AboutPage',
-  '@id': 'https://kyrosclinic.com/advisory-board',
-  name: 'Advisory Board — Kyros Clinic',
-  url: 'https://kyrosclinic.com/advisory-board',
-  description: 'Kyros Clinic advisory board — clinical, regulatory, and operational expertise.',
-  breadcrumb: {
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
-      { '@type': 'ListItem', position: 2, name: 'Advisory Board', item: 'https://kyrosclinic.com/advisory-board' },
-    ],
-  },
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'Advisory Board', item: 'https://kyrosclinic.com/advisory-board' },
+      ],
+    },
+    {
+      '@type': 'AboutPage',
+      '@id': 'https://kyrosclinic.com/advisory-board',
+      name: 'Advisory Board — Kyros Clinic',
+      url: 'https://kyrosclinic.com/advisory-board',
+      description: 'Kyros Clinic advisory board — clinical, regulatory, and operational expertise.',
+    },
+  ],
 };
 
 export default function AdvisoryBoardPage() {

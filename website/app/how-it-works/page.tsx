@@ -22,46 +22,64 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'HowTo',
-  name: 'How to get a Kyros Clinic consultation',
-  description:
-    'Step-by-step guide to consulting a specialist doctor at Kyros Clinic for hormonal health conditions.',
-  step: [
+  '@graph': [
     {
-      '@type': 'HowToStep',
-      position: 1,
-      name: 'Choose your condition',
-      text: 'Select the clinical vertical closest to your symptoms. A care coordinator reviews your intake.',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'How It Works', item: 'https://kyrosclinic.com/how-it-works' },
+      ],
     },
     {
-      '@type': 'HowToStep',
-      position: 2,
-      name: 'Complete a short intake',
-      text: 'Answer 4–6 questions about your symptoms and history. Your doctor reads this before the call.',
-    },
-    {
-      '@type': 'HowToStep',
-      position: 3,
-      name: 'Book and pay',
-      text: 'Choose a time that suits you. Pay ₹400–600 via UPI, card, or wallet. Cancel up to 2 hours before for a full refund.',
-    },
-    {
-      '@type': 'HowToStep',
-      position: 4,
-      name: 'Consult with your doctor',
-      text: 'A 20-minute video consultation with a specialist. No waiting room, no commute.',
-    },
-    {
-      '@type': 'HowToStep',
-      position: 5,
-      name: 'Receive a plan',
-      text: 'After the consultation: a prescription if indicated, lab orders, follow-up date, and a written note from your doctor within 24 hours.',
-    },
-    {
-      '@type': 'HowToStep',
-      position: 6,
-      name: 'Follow up and adjust',
-      text: 'Your health data, labs, and doctor notes accumulate in one place. Your doctor adjusts the plan at every follow-up.',
+      '@type': 'HowTo',
+      '@id': 'https://kyrosclinic.com/how-it-works',
+      name: 'How to get a Kyros Clinic consultation',
+      description:
+        'Step-by-step guide to consulting a specialist doctor at Kyros Clinic for hormonal health conditions.',
+      totalTime: 'PT48H',
+      estimatedCost: {
+        '@type': 'MonetaryAmount',
+        currency: 'INR',
+        value: '600',
+      },
+      step: [
+        {
+          '@type': 'HowToStep',
+          position: 1,
+          name: 'Choose your condition',
+          text: 'Select the clinical vertical closest to your symptoms. A care coordinator reviews your intake.',
+        },
+        {
+          '@type': 'HowToStep',
+          position: 2,
+          name: 'Complete a short intake',
+          text: 'Answer 4–6 questions about your symptoms and history. Your doctor reads this before the call.',
+        },
+        {
+          '@type': 'HowToStep',
+          position: 3,
+          name: 'Book and pay',
+          text: 'Choose a time that suits you. Pay ₹400–600 via UPI, card, or wallet. Cancel up to 2 hours before for a full refund.',
+        },
+        {
+          '@type': 'HowToStep',
+          position: 4,
+          name: 'Consult with your doctor',
+          text: 'A 20-minute video consultation with a specialist. No waiting room, no commute.',
+        },
+        {
+          '@type': 'HowToStep',
+          position: 5,
+          name: 'Receive a plan',
+          text: 'After the consultation: a prescription if indicated, lab orders, follow-up date, and a written note from your doctor within 24 hours.',
+        },
+        {
+          '@type': 'HowToStep',
+          position: 6,
+          name: 'Follow up and adjust',
+          text: 'Your health data, labs, and doctor notes accumulate in one place. Your doctor adjusts the plan at every follow-up.',
+        },
+      ],
     },
   ],
 };

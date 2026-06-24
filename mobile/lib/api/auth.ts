@@ -12,6 +12,11 @@ export interface SignupResult {
   message: string;
   phone: string;
   otp_hint?: string | null;
+  otp_required: boolean;
+  access_token?: string | null;
+  token_type?: string;
+  refresh_token?: string | null;
+  expires_in?: number | null;
 }
 
 export interface VerifyOtpPayload {
@@ -65,6 +70,7 @@ export interface PasswordResetConfirmPayload {
 
 export interface AuthConfig {
   google_oauth_enabled: boolean;
+  signup_otp_enabled: boolean;
 }
 
 export function requestPasswordResetApi(

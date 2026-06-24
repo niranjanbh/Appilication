@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date as date_type
 from typing import Any
 
 import structlog
@@ -119,6 +120,15 @@ async def _parse_lab_report_async(lab_report_id: str) -> dict[str, Any]:
         else LabReportStatus.OCR_COMPLETE
     )
 
+    lab_name = parsed.get("lab_name")
+    report_date_str = parsed.get("report_date")
+    report_date: date_type | None = None
+    if report_date_str:
+        try:
+            report_date = date_type.fromisoformat(report_date_str)
+        except (ValueError, TypeError):
+            report_date = None
+
     async with AsyncSessionLocal() as save_db:
         await lab_reports_repo.set_ocr_result(
             save_db,
@@ -127,6 +137,8 @@ async def _parse_lab_report_async(lab_report_id: str) -> dict[str, Any]:
             ocr_confidence_avg=overall_confidence,
             low_confidence_fields=low_confidence_fields,
             status=final_status,
+            lab_name=lab_name,
+            report_date=report_date,
         )
         await save_db.commit()
 

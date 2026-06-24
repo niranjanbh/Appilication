@@ -19,6 +19,7 @@ import { useThemePreference } from '../../lib/theme-context';
 import { z } from 'zod';
 import { signupApi } from '../../lib/api/auth';
 import { ApiError } from '../../lib/api/client';
+import { useAuth } from '../../lib/auth/context';
 import { AuthBackdrop } from '../../components/ui/AuthBackdrop';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { HapticPressable } from '../../components/ui/HapticPressable';
@@ -44,6 +45,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function SignupScreen() {
   const router  = useRouter();
+  const { signIn } = useAuth();
   const isDark  = useThemePreference().colorScheme === 'dark';
   const [apiError, setApiError]         = useState<string | null>(null);
   const [countryCode, setCountryCode]   = useState('+91');
@@ -62,8 +64,17 @@ export default function SignupScreen() {
     setApiError(null);
     const phone = `${countryCode}${values.phoneNumber}`;
     try {
-      await signupApi({ name: values.name, phone, email: values.email, password: values.password });
-      router.push({ pathname: '/(auth)/verify-otp', params: { phone } });
+      const result = await signupApi({ name: values.name, phone, email: values.email, password: values.password });
+      if (!result.otp_required && result.access_token && result.refresh_token && result.expires_in) {
+        await signIn({
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+          expires_in: result.expires_in,
+        });
+        router.replace('/');
+      } else {
+        router.push({ pathname: '/(auth)/verify-otp', params: { phone } });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setApiError('An account with this phone or email already exists.');

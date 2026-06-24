@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ContactForm } from './ContactForm';
 import { JsonLD } from '../../components/schema/JsonLD';
+import { ORG, ORG_ID } from '../../lib/organization';
 
 export const metadata: Metadata = {
   title: 'Contact',
@@ -21,35 +22,61 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'ContactPage',
-  '@id': 'https://kyrosclinic.com/contact',
-  name: 'Contact — Kyros Clinic',
-  url: 'https://kyrosclinic.com/contact',
-  description: 'Contact Kyros Clinic for consultation enquiries, support, doctor applications, and press.',
-  mainEntity: {
-    '@type': 'Organization',
-    name: 'Kyros Clinic',
-    url: 'https://kyrosclinic.com',
-    contactPoint: [
-      {
-        '@type': 'ContactPoint',
-        email: 'hello@kyrosclinic.com',
-        contactType: 'customer support',
-        availableLanguage: ['English', 'Hindi'],
-        hoursAvailable: { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '09:00', closes: '21:00' },
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'Contact', item: 'https://kyrosclinic.com/contact' },
+      ],
+    },
+    {
+      '@type': 'ContactPage',
+      '@id': 'https://kyrosclinic.com/contact',
+      name: 'Contact — Kyros Clinic',
+      url: 'https://kyrosclinic.com/contact',
+      description: 'Contact Kyros Clinic for consultation enquiries, support, doctor applications, and press.',
+      mainEntity: { '@id': ORG_ID },
+    },
+    {
+      '@type': 'Organization',
+      '@id': ORG_ID,
+      name: ORG.name,
+      url: ORG.url,
+      logo: ORG.logoUrl,
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: ORG.address.locality,
+        addressRegion: ORG.address.region,
+        addressCountry: ORG.address.country,
       },
-      {
-        '@type': 'ContactPoint',
-        email: 'doctors@kyrosclinic.com',
-        contactType: 'recruiting',
-      },
-      {
-        '@type': 'ContactPoint',
-        email: 'press@kyrosclinic.com',
-        contactType: 'press',
-      },
-    ],
-  },
+      sameAs: [...ORG.sameAs],
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          email: ORG.email,
+          contactType: 'customer support',
+          availableLanguage: [...ORG.languages],
+          hoursAvailable: {
+            '@type': 'OpeningHoursSpecification',
+            dayOfWeek: [...ORG.hours.days],
+            opens: ORG.hours.opens,
+            closes: ORG.hours.closes,
+          },
+        },
+        {
+          '@type': 'ContactPoint',
+          email: 'doctors@kyrosclinic.com',
+          contactType: 'recruiting',
+        },
+        {
+          '@type': 'ContactPoint',
+          email: 'press@kyrosclinic.com',
+          contactType: 'press',
+        },
+      ],
+    },
+  ],
 };
 
 export default function ContactPage() {
@@ -120,7 +147,7 @@ export default function ContactPage() {
               <div className="mt-8 bg-peach-mist rounded-card p-6">
                 <p className="font-display text-h3 font-medium text-forest mb-2">Care team hours</p>
                 <p className="font-body text-body text-ink">
-                  Monday to Saturday, 9 AM to 9 PM IST
+                  {ORG.hours.display}
                 </p>
                 <p className="font-body text-caption text-stone mt-2">
                   For urgent medical concerns, please contact emergency services or go to the

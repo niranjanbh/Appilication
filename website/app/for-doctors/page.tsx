@@ -17,19 +17,23 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'WebPage',
-  '@id': 'https://kyrosclinic.com/for-doctors',
-  name: 'For Doctors — Join Kyros Clinic',
-  url: 'https://kyrosclinic.com/for-doctors',
-  description:
-    'Join the Kyros Clinic specialist panel. NMC-registered endocrinologists, dermatologists, and urologists building longitudinal patient relationships in telemedicine.',
-  breadcrumb: {
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
-      { '@type': 'ListItem', position: 2, name: 'For Doctors', item: 'https://kyrosclinic.com/for-doctors' },
-    ],
-  },
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'For Doctors', item: 'https://kyrosclinic.com/for-doctors' },
+      ],
+    },
+    {
+      '@type': 'WebPage',
+      '@id': 'https://kyrosclinic.com/for-doctors',
+      name: 'For Doctors — Join Kyros Clinic',
+      url: 'https://kyrosclinic.com/for-doctors',
+      description:
+        'Join the Kyros Clinic specialist panel. NMC-registered endocrinologists, dermatologists, and urologists building longitudinal patient relationships in telemedicine.',
+    },
+  ],
 };
 
 export default function ForDoctorsPage() {

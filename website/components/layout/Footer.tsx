@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ORG } from '../../lib/organization';
 
 const VERTICALS = [
   { href: '/conditions/thyroid', label: 'Thyroid' },
@@ -71,28 +72,50 @@ export function Footer() {
           <FooterColumn title="Legal" links={LEGAL} />
         </div>
 
-        <div className="border-t border-ivory/15 pt-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="border-t border-ivory/15 pt-8 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
           <div>
-            <p className="font-display text-h3 font-medium text-ivory mb-1">Kyros Clinic</p>
-            <p className="font-body text-caption text-ivory/60">
-              Doctor-first hormonal health. India.
+            <p className="font-display text-h3 font-medium text-ivory mb-1">{ORG.name}</p>
+            <p className="font-body text-caption text-ivory/60 mb-3">
+              {ORG.address.locality}, {ORG.address.region}, {ORG.address.countryName}
             </p>
-          </div>
-          <div className="text-right">
             <p className="font-body text-caption text-ivory/60">
-              Kyros Health Technologies Pvt. Ltd.
+              <a
+                href={`mailto:${ORG.email}`}
+                className="text-ivory/80 hover:text-ivory transition-colors duration-micro"
+              >
+                {ORG.email}
+              </a>
+            </p>
+            <p className="font-body text-caption text-ivory/60 mt-1">
+              {ORG.hours.display}
+            </p>
+            <div className="flex gap-4 mt-3">
+              <a
+                href={ORG.sameAs[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-body text-caption text-ivory/60 hover:text-ivory transition-colors duration-micro"
+                aria-label="Kyros Clinic on X (Twitter)"
+              >
+                {ORG.twitterHandle}
+              </a>
+            </div>
+          </div>
+          <div className="md:text-right">
+            <p className="font-body text-caption text-ivory/60">
+              {ORG.legalName}
             </p>
             <p className="font-body text-caption text-ivory/60">
               Data Protection Officer:{' '}
               <a
-                href="mailto:dpo@kyrosclinic.com"
+                href={`mailto:${ORG.dpoEmail}`}
                 className="text-ivory/80 hover:text-ivory transition-colors duration-micro"
               >
-                dpo@kyrosclinic.com
+                {ORG.dpoEmail}
               </a>
             </p>
             <p className="font-body text-caption text-ivory/60 mt-1">
-              © {new Date().getFullYear()} Kyros Health Technologies Pvt. Ltd.
+              © {new Date().getFullYear()} {ORG.legalName}
             </p>
           </div>
         </div>

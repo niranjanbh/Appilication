@@ -25,17 +25,29 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: FAQ_DATA.flatMap((section) =>
-      section.items.map((faq) => ({
-        '@type': 'Question',
-        name: faq.q,
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: faq.a,
-        },
-      }))
-  ),
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'FAQ', item: 'https://kyrosclinic.com/faq' },
+      ],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://kyrosclinic.com/faq',
+      mainEntity: FAQ_DATA.flatMap((section) =>
+          section.items.map((faq) => ({
+            '@type': 'Question',
+            name: faq.q,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: faq.a,
+            },
+          }))
+      ),
+    },
+  ],
 };
 
 export default function FAQPage() {

@@ -1,8 +1,14 @@
+import type { Metadata } from 'next';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { PullQuote } from '../../components/ui/PullQuote';
 import { Stat } from '../../components/ui/Stat';
 import { Tag } from '../../components/ui/Tag';
+
+export const metadata: Metadata = {
+  title: 'Design System',
+  robots: { index: false, follow: false },
+};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

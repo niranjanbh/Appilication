@@ -22,11 +22,24 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'MedicalWebPage',
-  name: 'Our Doctors — Kyros Clinic',
-  url: 'https://kyrosclinic.com/our-doctors',
-  description:
-    'NMC-registered specialist doctors at Kyros Clinic, covering thyroid, PCOS, weight management, hormones, skin & hair, sexual health, diabetes, and longevity.',
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'Our Doctors', item: 'https://kyrosclinic.com/our-doctors' },
+      ],
+    },
+    {
+      '@type': 'MedicalWebPage',
+      '@id': 'https://kyrosclinic.com/our-doctors',
+      name: 'Our Doctors — Kyros Clinic',
+      url: 'https://kyrosclinic.com/our-doctors',
+      description:
+        'NMC-registered specialist doctors at Kyros Clinic, covering thyroid, PCOS, weight management, hormones, skin & hair, sexual health, diabetes, and longevity.',
+      specialty: ['Endocrinology', 'Dermatology', 'Urology', 'Preventive Medicine'],
+    },
+  ],
 };
 
 export default function OurDoctorsPage() {

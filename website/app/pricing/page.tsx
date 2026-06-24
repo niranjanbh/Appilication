@@ -46,6 +46,13 @@ const schema = {
   '@context': 'https://schema.org',
   '@graph': [
     {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'Pricing', item: 'https://kyrosclinic.com/pricing' },
+      ],
+    },
+    {
       '@type': 'MedicalWebPage',
       '@id': 'https://kyrosclinic.com/pricing',
       name: 'Kyros Clinic Pricing',

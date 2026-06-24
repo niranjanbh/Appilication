@@ -81,6 +81,23 @@ export interface ReminderUpdate {
   notification_channels?: string[];
 }
 
+export interface DailySummary {
+  date: string;
+  total: number;
+  completed: number;
+  streak: number;
+}
+
+export interface WeekDaySummary {
+  date: string;
+  total: number;
+  completed: number;
+}
+
+export interface WeekSummaryResponse {
+  days: WeekDaySummary[];
+}
+
 export interface AdherenceLogRequest {
   scheduled_at: string; // ISO 8601
   action: ReminderAction;

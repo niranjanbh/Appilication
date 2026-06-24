@@ -99,8 +99,27 @@ class LabReportListResponse(BaseModel):
     pages: int
 
 
+class BiomarkerCorrection(BaseModel):
+    name: str
+    value: str
+    unit: str
+    ref_low: str | None = None
+    ref_high: str | None = None
+    flag: str | None = None
+    confidence: float
+    needs_patient_correction: bool = False
+
+
+class ParsedJsonCorrection(BaseModel):
+    lab_name: str | None = None
+    report_date: str | None = None
+    patient_info: dict[str, Any] | None = None
+    biomarkers: list[BiomarkerCorrection]
+    overall_confidence: float
+
+
 class PatientCorrectionRequest(BaseModel):
-    parsed_json: dict[str, Any]
+    parsed_json: ParsedJsonCorrection
 
 
 class DownloadUrlResponse(BaseModel):
@@ -344,7 +363,7 @@ async def correct_lab_report(
         db,
         lab_report_id=lab_report_id,
         patient_user_id=user.id,
-        parsed_json=body.parsed_json,
+        parsed_json=body.parsed_json.model_dump(),
     )
 
     if report is None:

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { JsonLD } from '../../components/schema/JsonLD';
 import { PullQuote } from '../../components/ui/PullQuote';
 import { CTASection } from '../../components/marketing/CTASection';
+import { ORG, ORG_ID } from '../../lib/organization';
 
 export const metadata: Metadata = {
   title: 'About Kyros Clinic',
@@ -25,19 +26,26 @@ const schema = {
   '@context': 'https://schema.org',
   '@graph': [
     {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'About', item: 'https://kyrosclinic.com/about' },
+      ],
+    },
+    {
       '@type': 'AboutPage',
       '@id': 'https://kyrosclinic.com/about',
       url: 'https://kyrosclinic.com/about',
       name: 'About Kyros Clinic',
       description: 'Doctor-first telemedicine clinic for hormonal health in India.',
-      mainEntity: { '@id': 'https://kyrosclinic.com/#organization' },
+      mainEntity: { '@id': ORG_ID },
     },
     {
       '@type': 'Person',
       '@id': 'https://kyrosclinic.com/about#founder',
       name: 'Niranjan Bhimanadham',
       jobTitle: 'Founder & CEO',
-      worksFor: { '@id': 'https://kyrosclinic.com/#organization' },
+      worksFor: { '@id': ORG_ID },
       description:
         'Founder of Kyros Clinic. Building India\'s first doctor-first telemedicine clinic for hormonal health.',
     },
@@ -163,10 +171,10 @@ export default function AboutPage() {
           <h2 className="font-display text-h2 font-medium text-forest mb-6">Company details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { label: 'Legal name', value: 'Kyros Health Technologies Pvt. Ltd.' },
-              { label: 'Founded', value: '2026' },
-              { label: 'Headquarters', value: 'Bengaluru, Karnataka, India' },
-              { label: 'Data Protection Officer', value: 'dpo@kyrosclinic.com' },
+              { label: 'Legal name', value: ORG.legalName },
+              { label: 'Founded', value: ORG.foundingDate },
+              { label: 'Headquarters', value: `${ORG.address.locality}, ${ORG.address.region}, ${ORG.address.countryName}` },
+              { label: 'Data Protection Officer', value: ORG.dpoEmail },
               { label: 'Stage', value: 'Early-stage startup' },
               { label: 'Data residency', value: 'All data in ap-south-1 (Mumbai)' },
             ].map(({ label, value }) => (

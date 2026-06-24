@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { CONDITIONS } from '../lib/conditions';
+import { ORG, ORG_ID, BIZ_ID } from '../lib/organization';
 import { JsonLD } from '../components/schema/JsonLD';
 import { PullQuote } from '../components/ui/PullQuote';
 import { FadeIn } from '../components/ui/FadeIn';
@@ -26,32 +27,66 @@ export const metadata: Metadata = {
   },
 };
 
+const HOME_FAQS = [
+  {
+    q: 'How is Kyros different from other Indian telemedicine platforms?',
+    a: 'Most Indian telemedicine platforms connect you to any available doctor for a single visit. Kyros assigns you to one specialist who stays with you — reading your labs, adjusting your plan, and building a clinical record over time.',
+  },
+  {
+    q: 'How long does it take from filling the form to seeing a doctor?',
+    a: 'The intake form takes 5–10 minutes. Same-day and next-day slots are typically available. Most patients see their doctor within 24–48 hours of booking.',
+  },
+  {
+    q: 'Do I have to know which specialist I need before signing up?',
+    a: 'No. Choose the condition closest to your concern. If you are unsure, a care coordinator can help match you to the right specialist before your consultation.',
+  },
+  {
+    q: 'Is my health data private?',
+    a: "Yes. Kyros operates under India's Digital Personal Data Protection Act. Your health data stays on servers in India, condition names never appear in notifications, and you can export or delete your data at any time.",
+  },
+  {
+    q: 'Can my parents, partner, or child use my Kyros account?',
+    a: 'No. Every adult must have their own individual account to ensure clinical safety and data privacy.',
+  },
+];
+
 const schema = {
   '@context': 'https://schema.org',
   '@graph': [
     {
-      '@type': 'MedicalOrganization',
-      '@id': 'https://kyrosclinic.com/#organization',
-      name: 'Kyros Clinic',
-      url: 'https://kyrosclinic.com',
-      foundingDate: '2026',
-      logo: { '@type': 'ImageObject', url: 'https://kyrosclinic.com/kyros-logo.png' },
-      areaServed: { '@type': 'Country', name: 'India' },
-      priceRange: '₹400–₹1,500',
-      description:
-        'India-first doctor-first telemedicine clinic covering hormonal health, PCOS, thyroid, weight management, skin and hair, sexual and intimate health, TRT, diabetes, and longevity.',
+      '@type': 'MedicalBusiness',
+      '@id': BIZ_ID,
+      name: ORG.name,
+      url: ORG.url,
+      logo: ORG.logoUrl,
+      image: ORG.ogImage,
+      priceRange: '₹400–₹600',
+      currenciesAccepted: 'INR',
+      paymentAccepted: 'UPI, Credit Card, Debit Card, Wallet',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: ORG.address.locality,
+        addressRegion: ORG.address.region,
+        addressCountry: ORG.address.country,
+      },
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: ORG.geo.latitude,
+        longitude: ORG.geo.longitude,
+      },
+      openingHoursSpecification: {
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: [...ORG.hours.days],
+        opens: ORG.hours.opens,
+        closes: ORG.hours.closes,
+      },
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'customer support',
-        email: 'hello@kyrosclinic.com',
-        availableLanguage: ['English', 'Hindi'],
+        email: ORG.email,
+        availableLanguage: [...ORG.languages],
       },
-    },
-    {
-      '@type': 'MedicalBusiness',
-      '@id': 'https://kyrosclinic.com/#medical-business',
-      name: 'Kyros Clinic',
-      url: 'https://kyrosclinic.com',
+      isAcceptingNewPatients: true,
       medicalSpecialty: [
         'Endocrinology',
         'Dermatology',
@@ -62,6 +97,17 @@ const schema = {
         '@type': 'MedicalTherapy',
         name: c.name,
         url: `https://kyrosclinic.com/conditions/${c.slug}`,
+      })),
+      sameAs: [...ORG.sameAs],
+      parentOrganization: { '@id': ORG_ID },
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://kyrosclinic.com/#faq',
+      mainEntity: HOME_FAQS.map((faq) => ({
+        '@type': 'Question',
+        name: faq.q,
+        acceptedAnswer: { '@type': 'Answer', text: faq.a },
       })),
     },
   ],
