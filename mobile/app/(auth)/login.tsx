@@ -175,8 +175,8 @@ export default function LoginScreen() {
 
         {/* ── Logo area ───────────────────────────────────────────────────── */}
         <View style={styles.logoArea}>
-          <Text style={styles.wordmark}>Kyros</Text>
-          <Text style={styles.tagline}>Doctor-first hormonal health</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
+          <Text style={[styles.tagline, { color: isDark ? 'rgba(255,255,255,0.60)' : colors.stone }]}>Doctor-first hormonal health</Text>
         </View>
 
         {/* ── Form card (frosted glass over the gradient) ─────────────────── */}

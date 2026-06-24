@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';

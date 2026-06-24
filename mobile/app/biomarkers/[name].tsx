@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -91,7 +92,7 @@ function yDomain(data: ChartDatum[], refLow: number | null, refHigh: number | nu
 function TrendBadge({ trend, isDark }: { trend: TrendDirection; isDark: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [trend, opacity]);
 
   const badgeBg = isDark ? colors.forestSurfaceRaised : colors.white;

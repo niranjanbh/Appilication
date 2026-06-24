@@ -30,6 +30,28 @@ function isAvailable(): boolean {
   }
 }
 
+/**
+ * Expo Go dropped remote (push) notification support in SDK 53 — calling
+ * getExpoPushTokenAsync / addPushTokenListener there throws and logs a noisy
+ * warning. Local notifications still work in Expo Go, so this only gates the
+ * remote-push paths. A real build (standalone/bare/dev-client) returns false.
+ */
+function isExpoGo(): boolean {
+  try {
+    const Constants = require('expo-constants').default;
+    return Constants?.executionEnvironment === 'storeClient';
+  } catch {
+    return false;
+  }
+}
+
+function isRemotePushSupported(): boolean {
+  // Check Expo Go first: it only requires expo-constants. Calling isAvailable()
+  // first would require('expo-notifications'), which itself logs the Expo Go
+  // "push removed in SDK 53" warning before we ever get to skip it.
+  return !isExpoGo() && isAvailable();
+}
+
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (!isAvailable()) return false;
   try {
@@ -120,7 +142,7 @@ function getProjectId(): string | undefined {
 }
 
 async function getExpoPushToken(): Promise<string | null> {
-  if (!isAvailable()) return null;
+  if (!isRemotePushSupported()) return null;
   try {
     const Notifications = require('expo-notifications');
     const projectId = getProjectId();
@@ -143,7 +165,7 @@ async function getExpoPushToken(): Promise<string | null> {
  * harmless. No PHI is involved — only the opaque Expo push token.
  */
 export async function registerForPushNotifications(): Promise<boolean> {
-  if (!isAvailable()) return false;
+  if (!isRemotePushSupported()) return false;
   try {
     const granted = await requestNotificationPermissions();
     if (!granted) return false;
@@ -169,7 +191,7 @@ export async function registerForPushNotifications(): Promise<boolean> {
  * Returns a subscription with remove(); no-op on web/unavailable.
  */
 export function addPushTokenChangeListener(): NotificationResponseListener {
-  if (!isAvailable()) return { remove: () => {} };
+  if (!isRemotePushSupported()) return { remove: () => {} };
   try {
     const Notifications = require('expo-notifications');
     const sub = Notifications.addPushTokenListener(() => {

@@ -65,7 +65,7 @@ export default function ResetPasswordScreen() {
       <AuthBackdrop />
       <View style={styles.container}>
         <View style={styles.logoArea}>
-          <Text style={styles.wordmark}>Kyros</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
         </View>
 
         <GlassCard strong unpadded style={styles.cardShadow}>

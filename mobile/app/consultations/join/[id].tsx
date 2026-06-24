@@ -11,17 +11,48 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import type { ComponentType } from 'react';
 import { useThemePreference } from '../../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { HMSPrebuilt } from '@100mslive/react-native-room-kit';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
+
+// Expo Go never bundles native modules, so requiring 100ms there makes its
+// react-native-hms dependency log "module was not found" (a console.error → red
+// LogBox) before it throws. Detect Expo Go and skip the require entirely to keep
+// the dev console clean; the call phase shows a fallback when HMSPrebuilt is null.
+function isExpoGo(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Constants = require('expo-constants').default;
+    return Constants?.executionEnvironment === 'storeClient';
+  } catch {
+    return false;
+  }
+}
+
+// 100ms room kit is a native-only SDK. Importing it on web triggers a
+// "react-native-hms module was not found" crash, so load it lazily on a real
+// native build only. Web and Expo Go show a "join on the app" fallback instead.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party SDK has no typed web fallback
+let HMSPrebuilt: ComponentType<any> | null = null;
+if (Platform.OS !== 'web' && !isExpoGo()) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    HMSPrebuilt = require('@100mslive/react-native-room-kit').HMSPrebuilt;
+  } catch {
+    // Native 100ms SDK isn't present. Leave HMSPrebuilt null so the call phase
+    // renders the "join from a real build" fallback instead of crashing.
+    HMSPrebuilt = null;
+  }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -36,6 +67,12 @@ type ScreenState =
 const POLL_INTERVAL_MS  = 5000;
 const MAX_POLL_ATTEMPTS = 24;
 const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
+
+// 100ms token + layout services (data residency: media stays in-region via the
+// auth token / room template; the init endpoint is the India cluster supplied
+// by the backend in JoinResponse.endpoint).
+const HMS_TOKEN_ENDPOINT  = 'https://auth.100ms.live/v2/token';
+const HMS_LAYOUT_ENDPOINT = 'https://api.100ms.live/v2/layouts/ui';
 
 // ── Waiting room ──────────────────────────────────────────────────────────────
 
@@ -286,16 +323,27 @@ export default function JoinScreen() {
     );
   }
 
-  // phase === 'call' — full-screen HMS SDK, keep black bg
+  // phase === 'call' — full-screen HMS SDK, keep black bg.
+  // The 100ms SDK is native-only; on the web portal, direct patients to the app.
+  if (!HMSPrebuilt) {
+    const message =
+      Platform.OS === 'web'
+        ? 'Video consultations are available in the Kyros mobile app. Please open this consultation on your phone to join the call.'
+        : 'Video calling needs the full Kyros app build. Please update to the latest version of the app to join your consultation.';
+    return <ErrorState message={message} onBack={() => router.back()} isDark={isDark} />;
+  }
+
   return (
     <View style={styles.callContainer}>
       <HMSPrebuilt
-        roomCode=""
+        token={state.joinResp.token}
         options={{
-          roomID: state.joinResp.room_id,
-          authToken: state.joinResp.token,
-          endPoints: { init: state.joinResp.endpoint },
           userName: 'Patient',
+          endPoints: {
+            init: state.joinResp.endpoint,
+            token: HMS_TOKEN_ENDPOINT,
+            layout: HMS_LAYOUT_ENDPOINT,
+          },
         }}
         onLeave={handleLeave}
       />

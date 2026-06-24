@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Alert } from '../lib/ui/alert';
 
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';

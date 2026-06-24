@@ -1,9 +1,31 @@
 import { clearTokens, loadTokens, saveTokens } from '../auth/storage';
+import { reportServiceDown, reportServiceUp } from './service-health';
 
 // Override by setting EXPO_PUBLIC_API_BASE_URL in your .env file.
 // Expo substitutes EXPO_PUBLIC_* vars at bundle time.
 declare const process: { env: Record<string, string | undefined> };
 const API_BASE_URL = (process.env['EXPO_PUBLIC_API_BASE_URL'] ?? 'https://api.kyrosclinic.com').replace(/\/$/, '');
+
+/**
+ * fetch wrapper that feeds the backend service-health signal. A thrown error
+ * (network failure / timeout) or a 5xx marks the service down; any response the
+ * server actually produced marks it back up. See lib/api/service-health.ts.
+ */
+async function trackedFetch(input: string, init?: RequestInit): Promise<Response> {
+  let resp: Response;
+  try {
+    resp = await fetch(input, init);
+  } catch (err) {
+    reportServiceDown();
+    throw err;
+  }
+  if (resp.status >= 500) {
+    reportServiceDown();
+  } else {
+    reportServiceUp();
+  }
+  return resp;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -25,7 +47,7 @@ async function refreshAccessToken(): Promise<string | null> {
   const { refreshToken } = await loadTokens();
   if (!refreshToken) return null;
 
-  const resp = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
+  const resp = await trackedFetch(`${API_BASE_URL}/v1/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),
@@ -52,7 +74,7 @@ export async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const resp = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const resp = await trackedFetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (resp.status === 401 && _retry) {
     const newToken = await refreshAccessToken();
@@ -81,7 +103,7 @@ export async function publicFetch<T>(path: string, options: RequestInit = {}): P
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
-  const resp = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const resp = await trackedFetch(`${API_BASE_URL}${path}`, { ...options, headers });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     throw new ApiError(resp.status, body);

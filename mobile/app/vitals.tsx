@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../lib/ui/alert';
 
 import { AmbientBackground } from '../components/ui/AmbientBackground';
 import { GlassCard } from '../components/ui/GlassCard';

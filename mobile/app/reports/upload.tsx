@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';

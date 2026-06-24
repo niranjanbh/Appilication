@@ -7,16 +7,13 @@ export interface NetworkStatus {
   isInternetReachable: boolean | null;
 }
 
-if (Platform.OS !== 'web') {
-  const API_BASE_URL = (process.env['EXPO_PUBLIC_API_BASE_URL'] ?? 'https://api.kyrosclinic.com').replace(/\/$/, '');
-  NetInfo.configure({
-    reachabilityUrl: `${API_BASE_URL}/healthz`,
-    reachabilityTest: async (response) => response.status === 200,
-    reachabilityLongTimeout: 60_000,
-    reachabilityShortTimeout: 15_000,
-    reachabilityRequestTimeout: 10_000,
-  });
-}
+// We intentionally do NOT override NetInfo's reachability target. Probing our
+// own backend (`/healthz`) conflated two different things — "the device is
+// offline" and "the Kyros API is down" — so a reachable phone pointed at an
+// unreachable backend (e.g. localhost on a physical device, or an API outage)
+// showed a permanent "No internet connection" banner. NetInfo's default
+// reachability check hits a neutral connectivity endpoint, which is what the
+// offline banner actually wants to know.
 
 function useWebNetworkStatus(): NetworkStatus {
   const [online, setOnline] = useState(
@@ -24,6 +21,12 @@ function useWebNetworkStatus(): NetworkStatus {
   );
 
   useEffect(() => {
+    // Both web and native hooks run unconditionally (rules of hooks), so this
+    // effect executes on native too — where the global `window` exists but has
+    // no DOM event APIs. Guard before touching addEventListener.
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+      return;
+    }
     const goOnline = () => setOnline(true);
     const goOffline = () => setOnline(false);
     window.addEventListener('online', goOnline);

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -11,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../../lib/ui/alert';
 
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { EmptyState } from '../../components/ui/EmptyState';

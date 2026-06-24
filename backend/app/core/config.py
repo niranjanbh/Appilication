@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_endpoint_url: str = ""  # empty → real AWS; set to LocalStack URL for offline dev
+    # Client-reachable S3 endpoint for presigned URLs. When the backend signs against a
+    # docker-network host (e.g. http://localstack:4566) but the patient's device/browser
+    # reaches S3 at a different host (e.g. http://localhost:4566), set this so the host in
+    # returned presigned URLs is rewritten. Empty → return URLs as signed (real AWS).
+    s3_public_endpoint_url: str = ""
     # KMS key for SSE-KMS on PHI objects. Empty → S3 uses the account default
     # aws/s3 KMS key (still SSE-KMS, satisfies security rule 6).
     s3_kms_key_id: str = ""

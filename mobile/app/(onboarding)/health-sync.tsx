@@ -5,7 +5,6 @@ import { useThemePreference } from '../../lib/theme-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { captureConsentApi } from '../../lib/api/consent';
 import { postHealthSync } from '../../lib/api/health-sync';
-import { useAuth } from '../../lib/auth/context';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../lib/design-tokens';
 import { fetchHealthData } from '../../lib/native/health-data';
 import { requestHealthPermissions } from '../../lib/native/health';
@@ -29,7 +28,6 @@ const STEP = 4;
 
 export default function HealthSyncScreen() {
   const router = useRouter();
-  const { markOnboardingComplete } = useAuth();
   const isDark = useThemePreference().colorScheme === 'dark';
   const [loading, setLoading] = useState(false);
 

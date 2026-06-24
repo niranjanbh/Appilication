@@ -38,6 +38,23 @@ def _s3_client() -> Any:
     return boto3.client("s3", **kwargs)
 
 
+def _to_public_url(url: str) -> str:
+    """Rewrite an internal endpoint host to the client-reachable one (dev only).
+
+    The backend signs presigned URLs against the docker-network endpoint
+    (``aws_endpoint_url``), which a patient's device cannot resolve. When
+    ``s3_public_endpoint_url`` is configured (LocalStack/MinIO dev), swap the host
+    prefix so the returned URL is reachable from the host. No-op on real AWS.
+    """
+    if (
+        settings.s3_public_endpoint_url
+        and settings.aws_endpoint_url
+        and url.startswith(settings.aws_endpoint_url)
+    ):
+        return settings.s3_public_endpoint_url + url[len(settings.aws_endpoint_url) :]
+    return url
+
+
 def lab_report_s3_key(
     patient_uuid: uuid.UUID,
     lab_report_uuid: uuid.UUID,
@@ -71,7 +88,11 @@ def generate_upload_url(
         ],
         ExpiresIn=900,  # 15 minutes
     )
-    return {"upload_url": result["url"], "fields": result["fields"], "s3_key": key}
+    return {
+        "upload_url": _to_public_url(result["url"]),
+        "fields": result["fields"],
+        "s3_key": key,
+    }
 
 
 def generate_download_url(*, s3_key: str) -> str:
@@ -82,7 +103,7 @@ def generate_download_url(*, s3_key: str) -> str:
         Params={"Bucket": settings.s3_bucket, "Key": s3_key},
         ExpiresIn=600,  # 10 minutes
     )
-    return url
+    return _to_public_url(url)
 
 
 def data_export_s3_key(user_id: uuid.UUID, request_id: uuid.UUID) -> str:

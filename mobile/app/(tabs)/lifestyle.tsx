@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { borderRadius, colors, fontFamily, fontSize, fontWeight, shadow, spacing, withAlpha } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
+import { Alert } from '../../lib/ui/alert';
+import { requestHealthPermissions } from '../../lib/native/health';
 import { AmbientBackground } from '../../components/ui/AmbientBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { ActivityRings } from '../../components/ui/ActivityRings';
@@ -13,7 +16,31 @@ type ConnectionState = 'not-connected' | 'connected';
 
 export default function LifestyleScreen() {
   const t = useTheme();
-  const [state] = useState<ConnectionState>('not-connected');
+  const router = useRouter();
+  const [state, setState] = useState<ConnectionState>('not-connected');
+  const [connecting, setConnecting] = useState(false);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const result = await requestHealthPermissions();
+      if (result.granted) {
+        setState('connected');
+      } else if (result.reason === 'unsupported_platform') {
+        Alert.alert(
+          'Not available here',
+          'Wearable sync needs the Kyros mobile app. You can still log your activity manually.',
+        );
+      } else {
+        Alert.alert(
+          'Permission needed',
+          'We could not access your health data. You can grant access in your device settings, or log activity manually.',
+        );
+      }
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   if (state === 'not-connected') {
     return (
@@ -28,8 +55,8 @@ export default function LifestyleScreen() {
             <Text style={[styles.body, { color: t.textSub }]}>
               Connect a wearable to automatically sync activity, sleep, and heart rate — or log manually.
             </Text>
-            <Button label="Connect device" variant="forest" onPress={() => {}} />
-            <Button label="Enter manually" variant="ghost" onPress={() => {}} />
+            <Button label="Connect device" variant="forest" isLoading={connecting} onPress={handleConnect} />
+            <Button label="Enter manually" variant="ghost" onPress={() => router.push('/vitals')} />
           </View>
 
           {/* Ghost preview (blurred hint of connected state) */}

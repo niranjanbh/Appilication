@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
