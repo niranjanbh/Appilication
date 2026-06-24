@@ -4,6 +4,7 @@ import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import { Navigation } from '../components/layout/Navigation';
 import { Footer } from '../components/layout/Footer';
 import { JsonLD } from '../components/schema/JsonLD';
+import { organizationSchema } from '../lib/organization';
 import './globals.css';
 
 const cormorant = Cormorant_Garamond({
@@ -56,14 +57,27 @@ export const metadata: Metadata = {
   },
 };
 
-const websiteSchema = {
+const globalSchema = {
   '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  '@id': 'https://kyrosclinic.com/#website',
-  name: 'Kyros Clinic',
-  url: 'https://kyrosclinic.com',
-  inLanguage: 'en-IN',
-  publisher: { '@id': 'https://kyrosclinic.com/#organization' },
+  '@graph': [
+    organizationSchema(),
+    {
+      '@type': 'WebSite',
+      '@id': 'https://kyrosclinic.com/#website',
+      name: 'Kyros Clinic',
+      url: 'https://kyrosclinic.com',
+      inLanguage: 'en-IN',
+      publisher: { '@id': 'https://kyrosclinic.com/#organization' },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: 'https://kyrosclinic.com/learn?q={search_term_string}',
+        },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -82,7 +96,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-ivory font-body text-ink flex flex-col min-h-screen">
-        <JsonLD data={websiteSchema} />
+        <JsonLD data={globalSchema} />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4

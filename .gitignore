@@ -30,6 +30,7 @@ mobile/.env.*
 
 # ── Credentials & keys (never commit) ───────────────────────
 *.pem
+*.pub
 *.p12
 *.p8
 *.keystore
@@ -89,3 +90,7 @@ Thumbs.db
 
 # ── Sentry ───────────────────────────────────────────────────
 .sentryclirc
+
+# ── Agent-skills plugin caches (never commit) ───────────────
+.claude/sdd-cache/
+.simplify-ignore-cache/

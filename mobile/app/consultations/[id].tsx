@@ -74,8 +74,17 @@ function formatDateTime(iso: string): string {
   });
 }
 function formatRupees(p: number): string { return `₹${(p / 100).toFixed(0)}`; }
+const CONDITION_LABEL: Record<string, string> = {
+  weight: 'Weight Management',
+  pcos: 'PCOS',
+  thyroid: 'Thyroid',
+  skin_hair: 'Skin & Hair',
+  mens_intimate: 'Sexual & Intimate Health',
+  hormones_trt: 'Hormones & TRT',
+  longevity: 'Longevity',
+};
 function formatCategory(cat: string): string {
-  return cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return CONDITION_LABEL[cat] ?? cat.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
@@ -261,6 +270,12 @@ export default function ConsultationDetailScreen() {
 
   const openReschedule = useCallback(async () => {
     if (!consultation) return;
+    if (!consultation.doctor_id) {
+      setSlotsError('No doctor assigned yet.');
+      setShowReschedule(true);
+      setSlotsLoading(false);
+      return;
+    }
     setShowReschedule(true);
     setSlotsLoading(true);
     setSlotsError(null);

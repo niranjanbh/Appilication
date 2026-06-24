@@ -68,11 +68,6 @@ class MfaChallenge:
 class SignupResult:
     user_id: uuid.UUID
     phone: str
-    # When signup OTP is admin-disabled the account is auto-verified and a
-    # session is minted immediately; otp_required is False and tokens are set.
-    # When OTP is enabled, otp_required is True and tokens is None (the client
-    # must complete /verify-otp).
-    otp_required: bool = True
     tokens: TokenPair | None = None
 
 
@@ -345,6 +340,7 @@ async def signup(
     user_agent: str,
     request_id: str,
     channel: str | None = None,
+    skip_otp: bool = False,
 ) -> SignupResult:
     from app.core.security import hash_password
 
@@ -389,26 +385,18 @@ async def signup(
     # lab reports, and ABHA work from the first request.
     await patients_repo.get_or_create_for_user(db, user_id=user.id)
 
-    from app.services import platform_settings_service
-
-    if not await platform_settings_service.is_signup_otp_enabled(db):
-        # Admin has turned signup OTP off: skip phone verification entirely and
-        # mint a session immediately so the client can go straight to onboarding.
+    if skip_otp:
         await users_repo.update_phone_verified(db, user.id)
-        await write_audit(
-            db, ctx, action="phone_verified", resource_type="user",
-            resource_id=user.id, allowed=True, reason="signup_otp_disabled",
-        )
         tokens = await _create_token_pair(db, user, ip_address, user_agent)
         await users_repo.update_last_login(db, user.id)
         await write_audit(db, ctx, action="login", resource_type="user", resource_id=user.id, allowed=True)
-        return SignupResult(user_id=user.id, phone=phone, otp_required=False, tokens=tokens)
+        return SignupResult(user_id=user.id, phone=phone, tokens=tokens)
 
     try:
         await _issue_otp(redis, phone, email=user.email, preferred_channel=channel)
     except OtpCooldownError:
-        pass  # OTP already in flight from a prior attempt; user can use the previously sent code
-    return SignupResult(user_id=user.id, phone=phone, otp_required=True)
+        pass
+    return SignupResult(user_id=user.id, phone=phone)
 
 
 async def send_otp(

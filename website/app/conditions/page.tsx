@@ -18,13 +18,24 @@ export const metadata: Metadata = {
 
 const schema = {
   '@context': 'https://schema.org',
-  '@type': 'MedicalWebPage',
-  '@id': 'https://kyrosclinic.com/conditions',
-  name: 'Conditions We Treat — Kyros Clinic',
-  url: 'https://kyrosclinic.com/conditions',
-  description:
-    'Overview of the eight clinical verticals at Kyros Clinic: thyroid, PCOS, weight management, skin & hair, sexual & intimate health, hormones & TRT, diabetes, and longevity.',
-  specialty: 'Endocrinology',
+  '@graph': [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://kyrosclinic.com' },
+        { '@type': 'ListItem', position: 2, name: 'Conditions', item: 'https://kyrosclinic.com/conditions' },
+      ],
+    },
+    {
+      '@type': 'MedicalWebPage',
+      '@id': 'https://kyrosclinic.com/conditions',
+      name: 'Conditions We Treat — Kyros Clinic',
+      url: 'https://kyrosclinic.com/conditions',
+      description:
+        'Overview of the eight clinical verticals at Kyros Clinic: thyroid, PCOS, weight management, skin & hair, sexual & intimate health, hormones & TRT, diabetes, and longevity.',
+      specialty: 'Endocrinology',
+    },
+  ],
 };
 
 export default function ConditionsPage() {

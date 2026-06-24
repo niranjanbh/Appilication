@@ -55,6 +55,8 @@ export interface LabReport {
   low_confidence_fields: string[] | null;
   patient_corrected: boolean;
   parsed_json: ParsedLabReport | null;
+  doctor_commentary: Record<string, unknown> | null;
+  patient_attention_flags: unknown[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +80,7 @@ export interface LabReportListResponse {
   total: number;
   page: number;
   page_size: number;
+  pages: number;
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────

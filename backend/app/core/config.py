@@ -195,10 +195,11 @@ class Settings(BaseSettings):
             problems.append("KYROS_OTP_SECRET is still the placeholder value")
         if self.mfa_encryption_key.startswith("CHANGEME"):
             problems.append("KYROS_MFA_ENCRYPTION_KEY is still the placeholder value")
-        if not self.razorpay_key_secret:
-            problems.append("KYROS_RAZORPAY_KEY_SECRET must be set in production")
-        if not self.razorpay_webhook_secret:
-            problems.append("KYROS_RAZORPAY_WEBHOOK_SECRET must be set in production")
+        # Razorpay keys are optional until payments go live
+        # if not self.razorpay_key_secret:
+        #     problems.append("KYROS_RAZORPAY_KEY_SECRET must be set in production")
+        # if not self.razorpay_webhook_secret:
+        #     problems.append("KYROS_RAZORPAY_WEBHOOK_SECRET must be set in production")
         if self.debug:
             problems.append("KYROS_DEBUG must be false in production")
         origins = self.cors_allowed_origins

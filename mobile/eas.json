@@ -11,7 +11,10 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000"
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8000",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "523700664250-e55h54jfibt7n7oj1kh4tji0h3cg2fc0.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "523700664250-m56sno48ofi5tde5hl7ko50dsdmqmpdc.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "523700664250-qfd1ptelum4vmmao7euhr9ma460879pi.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -20,14 +23,20 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://staging-api.kyrosclinic.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://staging-api.kyrosclinic.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "523700664250-e55h54jfibt7n7oj1kh4tji0h3cg2fc0.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "523700664250-m56sno48ofi5tde5hl7ko50dsdmqmpdc.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "523700664250-qfd1ptelum4vmmao7euhr9ma460879pi.apps.googleusercontent.com"
       },
       "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.kyrosclinic.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.kyrosclinic.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "523700664250-e55h54jfibt7n7oj1kh4tji0h3cg2fc0.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "523700664250-m56sno48ofi5tde5hl7ko50dsdmqmpdc.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "523700664250-qfd1ptelum4vmmao7euhr9ma460879pi.apps.googleusercontent.com"
       },
       "channel": "production"
     }

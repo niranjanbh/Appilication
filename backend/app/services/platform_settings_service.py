@@ -68,26 +68,6 @@ async def set_default_reset_channel(
     )
 
 
-async def set_google_oauth_enabled(
-    db: AsyncSession,
-    ctx: AuditContext,
-    *,
-    enabled: bool,
-    updated_by: uuid.UUID,
-) -> None:
-    await settings_repo.upsert(
-        db, key=GOOGLE_OAUTH_ENABLED, value=enabled, updated_by=updated_by
-    )
-    await write_audit(
-        db,
-        ctx,
-        action="platform_setting_update",
-        resource_type="platform_setting",
-        allowed=True,
-        log_metadata={"key": GOOGLE_OAUTH_ENABLED, "value": enabled},
-    )
-
-
 async def set_signup_otp_enabled(
     db: AsyncSession,
     ctx: AuditContext,
@@ -105,4 +85,24 @@ async def set_signup_otp_enabled(
         resource_type="platform_setting",
         allowed=True,
         log_metadata={"key": SIGNUP_OTP_ENABLED, "value": enabled},
+    )
+
+
+async def set_google_oauth_enabled(
+    db: AsyncSession,
+    ctx: AuditContext,
+    *,
+    enabled: bool,
+    updated_by: uuid.UUID,
+) -> None:
+    await settings_repo.upsert(
+        db, key=GOOGLE_OAUTH_ENABLED, value=enabled, updated_by=updated_by
+    )
+    await write_audit(
+        db,
+        ctx,
+        action="platform_setting_update",
+        resource_type="platform_setting",
+        allowed=True,
+        log_metadata={"key": GOOGLE_OAUTH_ENABLED, "value": enabled},
     )

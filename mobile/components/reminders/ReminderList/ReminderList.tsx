@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import { HapticPressable } from '../../ui/HapticPressable';
+import ReanimatedSwipeable, { type SwipeableMethods, SwipeDirection } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Animated, { interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import { HapticPressable, triggerHaptic } from '../../ui/HapticPressable';
 import { IconChip } from '../../ui/IconChip';
 import {
   borderRadius,
@@ -20,8 +22,11 @@ import {
   withAlpha,
 } from '../../../lib/design-tokens';
 import { useTheme } from '../../../lib/theme';
-import type { ReminderType } from '../../../types/wellness';
+import { TAB_DOCK_CLEARANCE } from '../../ui/GlassTabBar';
+import type { Reminder, ReminderType, WeekDaySummary } from '../../../types/wellness';
 import type { ReminderListProps } from './ReminderList.types';
+import { NextUpCard } from '../NextUpCard';
+import { TodayProgressCard } from '../TodayProgressCard';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -33,12 +38,15 @@ const TYPE_META: Record<ReminderType, { icon: IoniconName; tint: TintName; label
   custom:     { icon: 'notifications-outline', tint: 'blue',   label: 'Custom' },
 };
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+const CAL_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const STRIP_DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatScheduleTime(cron: string | null): string {
   if (!cron) return '';
@@ -57,7 +65,271 @@ function formatFrequency(intervalMinutes: number | null, cron: string | null): s
   return 'As needed';
 }
 
-// ── Month calendar ─────────────────────────────────────────────────────────────
+function getCronHour(cron: string | null): number | null {
+  if (!cron) return null;
+  const h = parseInt(cron.split(' ')[1] ?? '', 10);
+  return isNaN(h) ? null : h;
+}
+
+function matchesCronDate(cron: string | null, date: Date): boolean {
+  if (!cron) return true;
+  const parts = cron.split(' ');
+  const cronDom = parts[2];
+  const cronMonth = parts[3];
+  const cronDow = parts[4];
+  if (cronDom !== '*' && parseInt(cronDom, 10) !== date.getDate()) return false;
+  if (cronMonth !== '*' && parseInt(cronMonth, 10) !== date.getMonth() + 1) return false;
+  if (cronDow !== '*' && parseInt(cronDow, 10) !== date.getDay()) return false;
+  return true;
+}
+
+// ── Time-of-day grouping ──────────────────────────────────────────────────────
+
+type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'anytime';
+
+const SECTION_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'anytime'];
+
+const SECTION_META: Record<TimeOfDay, { label: string; emoji: string }> = {
+  morning:   { label: 'Morning',   emoji: '☀️' },   // ☀️
+  afternoon: { label: 'Afternoon', emoji: '🌤️' }, // 🌤️
+  evening:   { label: 'Evening',   emoji: '🌙' },   // 🌙
+  anytime:   { label: 'As Needed', emoji: '⏱️' },   // ⏱️
+};
+
+interface TimeSection {
+  key: TimeOfDay;
+  label: string;
+  emoji: string;
+  reminders: Reminder[];
+}
+
+function getTimeOfDay(cron: string | null): TimeOfDay {
+  const hour = getCronHour(cron);
+  if (hour === null) return 'anytime';
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}
+
+function groupByTimeOfDay(reminders: Reminder[]): TimeSection[] {
+  const groups: Record<TimeOfDay, Reminder[]> = {
+    morning: [], afternoon: [], evening: [], anytime: [],
+  };
+  for (const r of reminders) {
+    groups[getTimeOfDay(r.schedule_cron)].push(r);
+  }
+  for (const key of SECTION_ORDER) {
+    groups[key].sort((a, b) => (getCronHour(a.schedule_cron) ?? 99) - (getCronHour(b.schedule_cron) ?? 99));
+  }
+  return SECTION_ORDER
+    .filter(key => groups[key].length > 0)
+    .map(key => ({ key, ...SECTION_META[key], reminders: groups[key] }));
+}
+
+// ── Temporal state (today awareness) ──────────────────────────────────────────
+
+type TemporalState = 'past' | 'overdue' | 'upcoming' | 'future';
+
+function getCronMinutes(cron: string | null): number | null {
+  if (!cron) return null;
+  const parts = cron.split(' ');
+  const h = parseInt(parts[1] ?? '', 10);
+  const m = parseInt(parts[0] ?? '', 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function getTemporalState(cron: string | null, selectedDate: Date, now: Date): TemporalState {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const selStart   = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  if (selStart < todayStart) return 'past';
+  if (selStart > todayStart) return 'future';
+  const cronMin = getCronMinutes(cron);
+  if (cronMin === null) return 'future';
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (cronMin < nowMin) return 'overdue';
+  if (cronMin - nowMin <= 60) return 'upcoming';
+  return 'future';
+}
+
+// ── Week strip ────────────────────────────────────────────────────────────────
+
+function getWeekDays(anchor: Date): Date[] {
+  const dow = anchor.getDay();
+  const sun = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - dow);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sun);
+    d.setDate(sun.getDate() + i);
+    return d;
+  });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+}
+
+function formatDayIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getDotColor(daySummary: WeekDaySummary | undefined, isFuture: boolean): string | null {
+  if (!daySummary || daySummary.total === 0 || isFuture) return null;
+  if (daySummary.completed >= daySummary.total) return colors.jade;
+  if (daySummary.completed > 0) return colors.saffron;
+  return colors.terracotta;
+}
+
+interface WeekStripProps {
+  selectedDate: Date;
+  onSelectDate: (date: Date) => void;
+  onToggleCalendar: () => void;
+  calendarExpanded: boolean;
+  weekSummary?: WeekDaySummary[] | null;
+}
+
+function WeekStrip({ selectedDate, onSelectDate, onToggleCalendar, calendarExpanded, weekSummary }: WeekStripProps) {
+  const t = useTheme();
+  const today = useMemo(() => new Date(), []);
+  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+
+  const summaryMap = useMemo(() => {
+    if (!weekSummary) return new Map<string, WeekDaySummary>();
+    return new Map(weekSummary.map(d => [d.date, d]));
+  }, [weekSummary]);
+
+  function shiftWeek(delta: number) {
+    const next = new Date(selectedDate);
+    next.setDate(next.getDate() + delta * 7);
+    onSelectDate(next);
+  }
+
+  return (
+    <View style={[ws.container, { backgroundColor: t.surface }]}>
+      <View style={ws.header}>
+        <Pressable onPress={() => shiftWeek(-1)} hitSlop={8} accessibilityLabel="Previous week">
+          <Ionicons name="chevron-back" size={18} color={t.textSub} />
+        </Pressable>
+        <Text style={[ws.monthLabel, { color: t.text }]}>
+          {MONTH_NAMES[selectedDate.getMonth()]} {selectedDate.getFullYear()}
+        </Text>
+        <View style={ws.headerRight}>
+          <Pressable onPress={() => shiftWeek(1)} hitSlop={8} accessibilityLabel="Next week">
+            <Ionicons name="chevron-forward" size={18} color={t.textSub} />
+          </Pressable>
+          <Pressable onPress={onToggleCalendar} hitSlop={8} accessibilityLabel={calendarExpanded ? 'Collapse calendar' : 'Expand calendar'}>
+            <Ionicons name={calendarExpanded ? 'chevron-up' : 'calendar-outline'} size={18} color={t.textSub} />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={ws.row}>
+        {weekDays.map((day, i) => {
+          const selected = isSameDay(day, selectedDate);
+          const todayMark = isSameDay(day, today);
+          const isFuture = day > today;
+          const dotColor = getDotColor(summaryMap.get(formatDayIso(day)), isFuture);
+          return (
+            <Pressable
+              key={i}
+              style={ws.dayCol}
+              onPress={() => onSelectDate(day)}
+              accessibilityLabel={`${STRIP_DAY_LABELS[day.getDay()]} ${day.getDate()}`}
+            >
+              <Text style={[ws.dayLabel, { color: t.textSub }]}>
+                {STRIP_DAY_LABELS[day.getDay()]}
+              </Text>
+              <View
+                style={[
+                  ws.dayCircle,
+                  selected && { backgroundColor: colors.saffron },
+                  !selected && todayMark && { borderWidth: 1.5, borderColor: colors.saffron },
+                ]}
+              >
+                <Text
+                  style={[
+                    ws.dayNum,
+                    { color: selected ? colors.white : todayMark ? colors.saffron : t.text },
+                    selected && { fontWeight: '700' },
+                  ]}
+                >
+                  {day.getDate()}
+                </Text>
+              </View>
+              {dotColor ? (
+                <View style={[ws.dot, { backgroundColor: dotColor }]} />
+              ) : (
+                <View style={ws.dotSpacer} />
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const ws = StyleSheet.create({
+  container: {
+    borderRadius: borderRadius.xl,
+    padding: spacing[4],
+    paddingBottom: spacing[3],
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[3],
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+  },
+  monthLabel: {
+    fontFamily: fontFamily.display,
+    fontSize: fontSize.body,
+    fontWeight: '600',
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  dayLabel: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dayCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayNum: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.sm,
+    fontWeight: '500',
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  dotSpacer: {
+    width: 5,
+    height: 5,
+  },
+});
+
+// ── Month calendar (expandable) ───────────────────────────────────────────────
 
 interface MonthCalendarProps {
   selectedDate: Date;
@@ -70,7 +342,6 @@ function MonthCalendar({ selectedDate, onSelectDate }: MonthCalendarProps) {
 
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
-
   const daysInMonth  = new Date(year, month + 1, 0).getDate();
   const firstWeekday = new Date(year, month, 1).getDay();
   const today        = new Date();
@@ -79,55 +350,36 @@ function MonthCalendar({ selectedDate, onSelectDate }: MonthCalendarProps) {
     ...Array<null>(firstWeekday).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
-
   while (cells.length % 7 !== 0) cells.push(null);
 
-  function prevMonth() {
-    setViewDate(new Date(year, month - 1, 1));
-  }
-  function nextMonth() {
-    setViewDate(new Date(year, month + 1, 1));
-  }
-  function selectDay(day: number) {
-    onSelectDate(new Date(year, month, day));
-  }
-
   const isSelectedDay = (day: number) =>
-    day === selectedDate.getDate() &&
-    month === selectedDate.getMonth() &&
-    year === selectedDate.getFullYear();
-
+    day === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear();
   const isToday = (day: number) =>
-    day === today.getDate() &&
-    month === today.getMonth() &&
-    year === today.getFullYear();
+    day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
   return (
     <View style={[cal.container, { backgroundColor: t.surface }]}>
-      {/* Month nav */}
       <View style={cal.header}>
-        <Pressable onPress={prevMonth} accessibilityLabel="Previous month" hitSlop={8}>
+        <Pressable onPress={() => setViewDate(new Date(year, month - 1, 1))} accessibilityLabel="Previous month" hitSlop={8}>
           <Ionicons name="chevron-back" size={20} color={t.textSub} />
         </Pressable>
         <Text style={[cal.monthLabel, { color: t.text }]}>
           {MONTH_NAMES[month]} {year}
         </Text>
-        <Pressable onPress={nextMonth} accessibilityLabel="Next month" hitSlop={8}>
+        <Pressable onPress={() => setViewDate(new Date(year, month + 1, 1))} accessibilityLabel="Next month" hitSlop={8}>
           <Ionicons name="chevron-forward" size={20} color={t.textSub} />
         </Pressable>
       </View>
 
-      {/* Day name row */}
       <View style={cal.dayNames}>
-        {DAY_LABELS.map(d => (
+        {CAL_DAY_LABELS.map(d => (
           <Text key={d} style={[cal.dayName, { color: t.textSub }]}>{d}</Text>
         ))}
       </View>
 
-      {/* Date grid */}
-      {Array.from({ length: cells.length / 7 }, (_, row) => (
-        <View key={row} style={cal.week}>
-          {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
+      {Array.from({ length: cells.length / 7 }, (_, r) => (
+        <View key={r} style={cal.week}>
+          {cells.slice(r * 7, r * 7 + 7).map((day, col) => {
             if (!day) return <View key={col} style={cal.cell} />;
             const selected = isSelectedDay(day);
             const todayMark = isToday(day);
@@ -137,13 +389,9 @@ function MonthCalendar({ selectedDate, onSelectDate }: MonthCalendarProps) {
                 style={[
                   cal.cell,
                   selected && { backgroundColor: colors.saffron, borderRadius: borderRadius.full },
-                  !selected && todayMark && {
-                    borderWidth: 1,
-                    borderColor: colors.saffron,
-                    borderRadius: borderRadius.full,
-                  },
+                  !selected && todayMark && { borderWidth: 1, borderColor: colors.saffron, borderRadius: borderRadius.full },
                 ]}
-                onPress={() => selectDay(day)}
+                onPress={() => onSelectDate(new Date(year, month, day))}
                 accessibilityLabel={`${MONTH_NAMES[month]} ${day}`}
               >
                 <Text
@@ -168,7 +416,6 @@ const cal = StyleSheet.create({
   container: {
     borderRadius: borderRadius.xl,
     padding: spacing[4],
-    marginBottom: spacing[4],
   },
   header: {
     flexDirection: 'row',
@@ -194,7 +441,7 @@ const cal = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  week:  { flexDirection: 'row' },
+  week: { flexDirection: 'row' },
   cell: {
     flex: 1,
     aspectRatio: 1,
@@ -208,68 +455,189 @@ const cal = StyleSheet.create({
   },
 });
 
-// ── Reminder row ───────────────────────────────────────────────────────────────
+// ── Section header ────────────────────────────────────────────────────────────
 
-interface ReminderRowProps {
-  reminder: import('../../../types/wellness').Reminder;
-  onEdit: (r: import('../../../types/wellness').Reminder) => void;
-  onDelete: (r: import('../../../types/wellness').Reminder) => void;
+function SectionHeader({ label, emoji, isDark }: { label: string; emoji: string; isDark: boolean }) {
+  return (
+    <View style={sec.container}>
+      <Text style={sec.emoji}>{emoji}</Text>
+      <Text style={[sec.label, { color: isDark ? colors.stoneDim : colors.stone }]}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
-function ReminderRow({ reminder, onEdit, onDelete }: ReminderRowProps) {
-  const t      = useTheme();
-  const meta   = TYPE_META[reminder.type] ?? TYPE_META.custom;
-  const time   = formatScheduleTime(reminder.schedule_cron);
-  const freq   = formatFrequency(reminder.schedule_interval_minutes ?? null, reminder.schedule_cron);
-  const notifOn = reminder.notification_channels?.includes('push') ?? false;
+const sec = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[1],
+    paddingTop: spacing[2],
+  },
+  emoji: { fontSize: 14 },
+  label: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+});
+
+// ── Reminder row ──────────────────────────────────────────────────────────────
+
+interface ReminderRowProps {
+  reminder: Reminder;
+  temporalState: TemporalState;
+  onEdit: (r: Reminder) => void;
+  onDelete: (r: Reminder) => void;
+  onToggle: (r: Reminder) => void;
+  onTakeNow: (r: Reminder) => void;
+}
+
+function getAdherenceColor(rate: number): string {
+  if (rate >= 0.90) return colors.jade;
+  if (rate >= 0.70) return colors.saffron;
+  return colors.terracotta;
+}
+
+function isRxReminder(metadata: Record<string, unknown> | null): boolean {
+  if (!metadata) return false;
+  return !!(metadata.care_plan_id || metadata.prescription_id);
+}
+
+const SWIPE_ACTION_WIDTH = 80;
+
+function SwipeLeftAction({ progress }: { progress: SharedValue<number> }) {
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(progress.value, [0, 1], [-SWIPE_ACTION_WIDTH, 0]) }],
+    opacity: interpolate(progress.value, [0, 0.5, 1], [0, 0.8, 1]),
+  }));
 
   return (
-    <HapticPressable
-      haptic="selection"
-      scaleTo={0.98}
-      onLongPress={() => onEdit(reminder)}
-      accessibilityLabel={`Reminder: ${reminder.label}`}
-    >
-      <View style={[row.container, { backgroundColor: t.surface }]}>
-        <IconChip icon={meta.icon} tint={meta.tint} size={44} />
+    <Animated.View style={[swipe.actionContainer, animStyle]}>
+      <View style={swipe.actionContent}>
+        <Ionicons name="checkmark" size={22} color={colors.white} />
+        <Text style={swipe.actionText}>Taken</Text>
+      </View>
+    </Animated.View>
+  );
+}
 
-        <View style={row.body}>
-          <Text style={[row.label, { color: t.text }]} numberOfLines={1}>
-            {reminder.label}
-          </Text>
-          <View style={row.tags}>
-            <View style={[row.freqTag, { backgroundColor: withAlpha(colors.sageDim, t.isDark ? 0.30 : 0.15) }]}>
-              <Text style={[row.freqText, { color: t.isDark ? colors.ivoryText : colors.sage }]}>
-                {freq}
+function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTakeNow }: ReminderRowProps) {
+  const t    = useTheme();
+  const meta = TYPE_META[reminder.type] ?? TYPE_META.custom;
+  const time = formatScheduleTime(reminder.schedule_cron);
+  const freq = formatFrequency(reminder.schedule_interval_minutes ?? null, reminder.schedule_cron);
+  const swipeRef = useRef<SwipeableMethods>(null);
+
+  const isPast     = temporalState === 'past';
+  const isOverdue  = temporalState === 'overdue';
+  const isUpcoming = temporalState === 'upcoming';
+
+  const hasAdherence = reminder.adherence_rate > 0;
+  const adherencePct = Math.round(reminder.adherence_rate * 100);
+  const rx = isRxReminder(reminder.metadata);
+
+  const handleSwipeOpen = useCallback((direction: SwipeDirection) => {
+    if (direction === SwipeDirection.LEFT) {
+      triggerHaptic('medium');
+      onTakeNow(reminder);
+      setTimeout(() => swipeRef.current?.close(), 300);
+    }
+  }, [reminder, onTakeNow]);
+
+  const renderLeftActions = useCallback(
+    (progress: SharedValue<number>) => <SwipeLeftAction progress={progress} />,
+    [],
+  );
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      friction={2}
+      leftThreshold={40}
+      overshootLeft={false}
+      renderLeftActions={renderLeftActions}
+      onSwipeableOpen={handleSwipeOpen}
+      containerStyle={swipe.swipeContainer}
+    >
+      <HapticPressable
+        haptic="selection"
+        scaleTo={0.98}
+        onPress={() => onEdit(reminder)}
+        onLongPress={() => onEdit(reminder)}
+        accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}`}
+      >
+        <View
+          style={[
+            row.container,
+            { backgroundColor: t.surface },
+            isPast && { opacity: 0.55 },
+            isOverdue && { opacity: 0.75, borderLeftWidth: 3, borderLeftColor: t.isDark ? colors.terracottaSoft : colors.terracotta },
+            isUpcoming && { borderLeftWidth: 3, borderLeftColor: colors.saffron },
+          ]}
+        >
+          {time ? (
+            <View style={row.timeBlock}>
+              <Text
+                style={[
+                  row.timeText,
+                  { color: isUpcoming ? colors.saffron : isOverdue ? (t.isDark ? colors.terracottaSoft : colors.terracotta) : t.text },
+                ]}
+              >
+                {time}
               </Text>
             </View>
-            {time ? (
-              <Text style={[row.time, { color: t.textSub }]}>{time}</Text>
-            ) : null}
+          ) : null}
+
+          <IconChip icon={meta.icon} tint={meta.tint} size={38} />
+
+          <View style={row.body}>
+            <View style={row.topLine}>
+              <Text style={[row.label, { color: t.text }]} numberOfLines={1}>
+                {reminder.label}
+              </Text>
+              {hasAdherence && (
+                <Text style={[row.adherenceText, { color: getAdherenceColor(reminder.adherence_rate) }]}>
+                  {adherencePct}%
+                </Text>
+              )}
+            </View>
+            <View style={row.bottomLine}>
+              <Text style={[row.freq, { color: t.textSub }]}>{freq}</Text>
+              {rx && (
+                <View style={[row.rxBadge, { backgroundColor: withAlpha(colors.jade, t.isDark ? 0.20 : 0.10) }]}>
+                  <Text style={[row.rxText, { color: t.isDark ? colors.jadeGlow : colors.jade }]}>Rx</Text>
+                </View>
+              )}
+            </View>
           </View>
+
+          <Switch
+            value={reminder.active}
+            trackColor={{
+              false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
+              true:  withAlpha(colors.jadeGlow, 0.50),
+            }}
+            thumbColor={reminder.active ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
+            ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
+            accessibilityLabel={`${reminder.active ? 'Disable' : 'Enable'} ${reminder.label}`}
+            onValueChange={() => onToggle(reminder)}
+          />
+
+          <Pressable
+            onPress={() => onDelete(reminder)}
+            hitSlop={8}
+            accessibilityLabel={`Delete ${reminder.label}`}
+          >
+            <Ionicons name="trash-outline" size={16} color={t.textSub} />
+          </Pressable>
         </View>
-
-        <Switch
-          value={notifOn}
-          trackColor={{
-            false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
-            true:  withAlpha(colors.jadeGlow, 0.50),
-          }}
-          thumbColor={notifOn ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
-          ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
-          accessibilityLabel={`Remind me for ${reminder.label}`}
-          onValueChange={() => onEdit(reminder)}
-        />
-
-        <Pressable
-          onPress={() => onDelete(reminder)}
-          hitSlop={8}
-          accessibilityLabel={`Delete ${reminder.label}`}
-        >
-          <Ionicons name="trash-outline" size={16} color={t.textSub} />
-        </Pressable>
-      </View>
-    </HapticPressable>
+      </HapticPressable>
+    </ReanimatedSwipeable>
   );
 }
 
@@ -282,58 +650,155 @@ const row = StyleSheet.create({
     paddingVertical: spacing[3],
     borderRadius: borderRadius.xl,
   },
-  body: { flex: 1, gap: spacing[1] },
+  timeBlock: {
+    minWidth: 64,
+  },
+  timeText: {
+    fontFamily: fontFamily.data,
+    fontSize: fontSize.body,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  body: { flex: 1, gap: 2 },
+  topLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
   label: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,
     fontWeight: '600',
+    flexShrink: 1,
   },
-  tags: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  freqTag: {
-    borderRadius: borderRadius.full,
+  adherenceText: {
+    fontFamily: fontFamily.data,
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+  },
+  bottomLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  freq: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.caption,
+  },
+  rxBadge: {
     paddingHorizontal: spacing[2],
-    paddingVertical: 2,
+    paddingVertical: 1,
+    borderRadius: borderRadius.full,
   },
-  freqText: {
+  rxText: {
     fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
-    fontWeight: '500',
-  },
-  time: {
-    fontFamily: fontFamily.body,
-    fontSize: fontSize.caption,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
 
-// ── ReminderList ───────────────────────────────────────────────────────────────
+const swipe = StyleSheet.create({
+  swipeContainer: {
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+  },
+  actionContainer: {
+    width: SWIPE_ACTION_WIDTH,
+    backgroundColor: colors.jade,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: borderRadius.xl,
+    borderBottomLeftRadius: borderRadius.xl,
+  },
+  actionContent: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.white,
+  },
+});
 
-export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onDelete }: ReminderListProps) {
+// ── ReminderList ──────────────────────────────────────────────────────────────
+
+export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onDelete, onToggle, onTakeNow, dailySummary, weekSummary }: ReminderListProps) {
   const t = useTheme();
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
+  const now = useMemo(() => new Date(), []);
 
   const displayDate = useMemo(() => {
     const opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
     return selectedDate.toLocaleDateString('en-IN', opts);
   }, [selectedDate]);
 
+  const filtered = useMemo(
+    () => reminders.filter(r => matchesCronDate(r.schedule_cron, selectedDate)),
+    [reminders, selectedDate],
+  );
+
+  const sections = useMemo(() => groupByTimeOfDay(filtered), [filtered]);
+
+  function handleCalendarSelect(date: Date) {
+    onDateChange(date);
+    setCalendarExpanded(false);
+  }
+
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={[list.scroll, { gap: spacing[3] }]}
+      contentContainerStyle={list.scroll}
     >
-      <MonthCalendar selectedDate={selectedDate} onSelectDate={onDateChange} />
+      {dailySummary && <TodayProgressCard summary={dailySummary} />}
+
+      <NextUpCard
+        reminders={filtered}
+        selectedDate={selectedDate}
+        onTakeNow={onTakeNow}
+      />
+
+      <WeekStrip
+        selectedDate={selectedDate}
+        onSelectDate={onDateChange}
+        onToggleCalendar={() => setCalendarExpanded(v => !v)}
+        calendarExpanded={calendarExpanded}
+        weekSummary={weekSummary}
+      />
+
+      {calendarExpanded && (
+        <MonthCalendar selectedDate={selectedDate} onSelectDate={handleCalendarSelect} />
+      )}
 
       <Text style={[list.dateHeading, { color: t.isDark ? colors.jadeGlow : colors.forest }]}>
         {displayDate}
       </Text>
 
-      {reminders.length === 0 ? (
+      {sections.length === 0 ? (
         <View style={list.empty}>
           <Ionicons name="alarm-outline" size={32} color={t.textSub} />
-          <Text style={[list.emptyText, { color: t.textSub }]}>No reminders scheduled</Text>
+          <Text style={[list.emptyText, { color: t.textSub }]}>No reminders for this day</Text>
         </View>
       ) : (
-        reminders.map(r => (
-          <ReminderRow key={r.id} reminder={r} onEdit={onEdit} onDelete={onDelete} />
+        sections.map(section => (
+          <View key={section.key} style={list.section}>
+            <SectionHeader label={section.label} emoji={section.emoji} isDark={t.isDark} />
+            <View style={list.sectionRows}>
+              {section.reminders.map(r => (
+                <ReminderRow
+                  key={r.id}
+                  reminder={r}
+                  temporalState={getTemporalState(r.schedule_cron, selectedDate, now)}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onToggle={onToggle}
+                  onTakeNow={onTakeNow}
+                />
+              ))}
+            </View>
+          </View>
         ))
       )}
     </ScrollView>
@@ -341,14 +806,28 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
 }
 
 const list = StyleSheet.create({
-  scroll: { paddingHorizontal: spacing[4] },
+  scroll: {
+    paddingHorizontal: spacing[4],
+    paddingBottom: TAB_DOCK_CLEARANCE + 72,
+    gap: spacing[3],
+  },
   dateHeading: {
     fontFamily: fontFamily.display,
     fontSize: fontSize.h3,
     fontWeight: '600',
     paddingHorizontal: spacing[1],
   },
-  empty: { alignItems: 'center', gap: spacing[3], paddingVertical: spacing[10] },
+  section: {
+    gap: spacing[2],
+  },
+  sectionRows: {
+    gap: spacing[2],
+  },
+  empty: {
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[10],
+  },
   emptyText: {
     fontFamily: fontFamily.body,
     fontSize: fontSize.body,

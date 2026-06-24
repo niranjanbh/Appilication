@@ -18,6 +18,7 @@ _SLUG_TO_DB: dict[str, str] = {
     "skin-and-hair": "skin_hair",
     "sexual-health": "mens_intimate",
     "diabetes": "weight",
+    "hormones-trt": "hormones_trt",
 }
 
 

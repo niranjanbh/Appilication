@@ -1,4 +1,4 @@
-import type { Reminder } from '../../../types/wellness';
+import type { DailySummary, Reminder, WeekDaySummary } from '../../../types/wellness';
 
 export interface ReminderListProps {
   reminders: Reminder[];
@@ -6,4 +6,8 @@ export interface ReminderListProps {
   onDateChange: (date: Date) => void;
   onEdit: (reminder: Reminder) => void;
   onDelete: (reminder: Reminder) => void;
+  onToggle: (reminder: Reminder) => void;
+  onTakeNow: (reminder: Reminder) => void;
+  dailySummary?: DailySummary | null;
+  weekSummary?: WeekDaySummary[] | null;
 }

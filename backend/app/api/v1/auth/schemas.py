@@ -42,11 +42,9 @@ class SignupResponse(BaseModel):
     message: str
     phone: str
     otp_hint: str | None = None
-    # When signup OTP is admin-disabled, otp_required is False and the token
-    # fields are populated so the client can sign in immediately. When OTP is
-    # enabled, otp_required is True and the token fields are null.
     otp_required: bool = True
     access_token: str | None = None
+    token_type: str = "bearer"
     refresh_token: str | None = None
     expires_in: int | None = None
 

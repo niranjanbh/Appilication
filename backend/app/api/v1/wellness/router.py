@@ -9,6 +9,7 @@ from app.api.deps import DbSession
 from app.api.v1.wellness.schemas import (
     AdherenceLogRead,
     AdherenceLogRequest,
+    DailySummaryResponse,
     HealthSyncRequest,
     HealthSyncResponse,
     ReminderCreate,
@@ -19,6 +20,8 @@ from app.api.v1.wellness.schemas import (
     VitalsListResponse,
     VitalsLogRequest,
     VitalsLogResponse,
+    WeekDaySummary,
+    WeekSummaryResponse,
 )
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import cross_user_404, get_patient_user
@@ -54,7 +57,7 @@ async def list_reminders(
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
-    reminders = await reminders_repo.list_reminders_for_user(db, user_id=user.id)
+    reminders = await reminders_repo.list_reminders_for_user(db, user_id=user.id, include_inactive=True)
     await write_audit(
         db, ctx, action="list_reminders", resource_type="reminder", allowed=True
     )
@@ -65,6 +68,93 @@ async def list_reminders(
         read.adherence_rate = rate
         items.append(read)
     return ReminderListResponse(reminders=items, total=len(items))
+
+
+@router.get("/reminders/daily-summary", response_model=DailySummaryResponse)
+async def daily_summary(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+    date: str | None = Query(default=None, description="ISO date (YYYY-MM-DD), defaults to today IST"),
+) -> DailySummaryResponse:
+    from datetime import date as date_cls
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    if date:
+        try:
+            target = date_cls.fromisoformat(date)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format, expected YYYY-MM-DD") from None
+    else:
+        target = dt.now(ZoneInfo("Asia/Kolkata")).date()
+
+    total, completed = await reminders_repo.get_daily_adherence_summary(
+        db, user_id=user.id, target_date=target
+    )
+    streak = await reminders_repo.get_adherence_streak(db, user_id=user.id)
+
+    await write_audit(
+        db, ctx, action="daily_summary", resource_type="reminder", allowed=True
+    )
+
+    return DailySummaryResponse(
+        date=target.isoformat(),
+        total=total,
+        completed=completed,
+        streak=streak,
+    )
+
+
+@router.get("/reminders/week-summary", response_model=WeekSummaryResponse)
+async def week_summary(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+    start: str = Query(..., description="ISO date (YYYY-MM-DD) for week start (Sunday)"),
+) -> WeekSummaryResponse:
+    from datetime import date as date_cls
+    from datetime import timedelta
+
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    try:
+        week_start = date_cls.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format") from None
+
+    completed_by_day = await reminders_repo.get_week_adherence(
+        db, user_id=user.id, week_start=week_start
+    )
+    completed_map = {d: cnt for d, cnt in completed_by_day}
+
+    all_reminders = await reminders_repo.list_reminders_for_user(
+        db, user_id=user.id, include_inactive=False
+    )
+    total = len(all_reminders)
+
+    days = []
+    for i in range(7):
+        d = week_start + timedelta(days=i)
+        days.append(WeekDaySummary(
+            date=d.isoformat(),
+            total=total,
+            completed=completed_map.get(d, 0),
+        ))
+
+    await write_audit(
+        db, ctx, action="week_summary", resource_type="reminder", allowed=True
+    )
+
+    return WeekSummaryResponse(days=days)
 
 
 @router.post("/reminders", response_model=ReminderRead, status_code=status.HTTP_201_CREATED)

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date as date_type, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import ReminderAction, ReminderType
 from app.models.wellness import Reminder, ReminderLog
+
+IST = ZoneInfo("Asia/Kolkata")
 
 
 async def create_reminder(
@@ -80,8 +83,7 @@ async def update_reminder(
     if reminder is None:
         return None
     for key, value in kwargs.items():
-        if value is not None or key == "active":
-            setattr(reminder, key, value)
+        setattr(reminder, key, value)
     reminder.updated_at = datetime.now(UTC)
     await db.flush()
     return reminder
@@ -136,8 +138,6 @@ async def get_adherence_rate(
     days: int = 30,
 ) -> float:
     """Return fraction of taken/(taken+skipped+missed) logs in the last `days` days."""
-    from datetime import timedelta
-
     since = datetime.now(UTC) - timedelta(days=days)
     result = await db.execute(
         select(ReminderLog.action, func.count().label("cnt"))
@@ -156,6 +156,119 @@ async def get_adherence_rate(
         for a in (ReminderAction.TAKEN, ReminderAction.SKIPPED, ReminderAction.MISSED)
     )
     return round(taken / total, 2) if total > 0 else 0.0
+
+
+async def get_daily_adherence_summary(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    target_date: date_type,
+) -> tuple[int, int]:
+    """Return (total_active_reminders, completed_count) for a given IST date."""
+    day_start_ist = datetime(target_date.year, target_date.month, target_date.day, tzinfo=IST)
+    day_start = day_start_ist.astimezone(UTC)
+    day_end = day_start + timedelta(days=1)
+
+    total_result = await db.execute(
+        select(func.count())
+        .select_from(Reminder)
+        .where(
+            Reminder.user_id == user_id,
+            Reminder.active.is_(True),
+            Reminder.deleted_at.is_(None),
+        )
+    )
+    total = total_result.scalar() or 0
+
+    completed_result = await db.execute(
+        select(func.count(func.distinct(ReminderLog.reminder_id)))
+        .where(
+            ReminderLog.user_id == user_id,
+            ReminderLog.action == ReminderAction.TAKEN,
+            ReminderLog.scheduled_at >= day_start,
+            ReminderLog.scheduled_at < day_end,
+        )
+    )
+    completed = completed_result.scalar() or 0
+
+    return total, completed
+
+
+async def get_adherence_streak(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    max_lookback_days: int = 90,
+) -> int:
+    """Count consecutive IST days ending at today (or yesterday) with at least one 'taken' log."""
+    since = datetime.now(IST) - timedelta(days=max_lookback_days)
+
+    result = await db.execute(
+        select(
+            func.date(func.timezone("Asia/Kolkata", ReminderLog.scheduled_at)).label("d")
+        )
+        .where(
+            ReminderLog.user_id == user_id,
+            ReminderLog.action == ReminderAction.TAKEN,
+            ReminderLog.scheduled_at >= since.astimezone(UTC),
+        )
+        .group_by(text("d"))
+        .order_by(text("d DESC"))
+    )
+    log_dates: set[date_type] = set()
+    for row in result.all():
+        d = row[0]
+        if isinstance(d, datetime):
+            d = d.date()
+        log_dates.add(d)
+
+    if not log_dates:
+        return 0
+
+    today = datetime.now(IST).date()
+    check = today if today in log_dates else today - timedelta(days=1)
+    if check not in log_dates:
+        return 0
+
+    streak = 0
+    while check in log_dates and streak < max_lookback_days:
+        streak += 1
+        check -= timedelta(days=1)
+
+    return streak
+
+
+async def get_week_adherence(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    week_start: date_type,
+) -> list[tuple[date_type, int]]:
+    """Return (ist_date, completed_count) pairs for 7 days starting from week_start."""
+    start_ist = datetime(week_start.year, week_start.month, week_start.day, tzinfo=IST)
+    start_utc = start_ist.astimezone(UTC)
+    end_utc = start_utc + timedelta(days=7)
+
+    result = await db.execute(
+        select(
+            func.date(func.timezone("Asia/Kolkata", ReminderLog.scheduled_at)).label("d"),
+            func.count(func.distinct(ReminderLog.reminder_id)).label("cnt"),
+        )
+        .where(
+            ReminderLog.user_id == user_id,
+            ReminderLog.action == ReminderAction.TAKEN,
+            ReminderLog.scheduled_at >= start_utc,
+            ReminderLog.scheduled_at < end_utc,
+        )
+        .group_by(text("d"))
+    )
+    rows = []
+    for row in result.all():
+        d = row.d
+        if isinstance(d, datetime):
+            d = d.date()
+        rows.append((d, row.cnt))
+    return rows
 
 
 async def get_due_reminders(

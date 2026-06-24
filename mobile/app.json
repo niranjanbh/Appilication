@@ -47,10 +47,7 @@
               "pathPrefix": "/app"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
@@ -81,9 +78,8 @@
     },
     "extra": {
       "eas": {
-        "projectId": "b1a2763c-c321-4506-9f57-6b82ae2666ae"
+        "projectId": "00000000-0000-0000-0000-000000000000"
       }
-    },
-    "owner": "kyrosclinics-team"
+    }
   }
 }

@@ -37,8 +37,14 @@ fi
 
 # Write backend.env with restricted permissions
 install -m 0600 -o root -g root /dev/null "${ENV_FILE}"
-# Convert JSON object { "KEY": "value", ... } → KEY=value lines
-echo "${SECRET_JSON}" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "${ENV_FILE}"
+# Support both JSON object and plain KEY=VALUE formats from SSM
+if echo "${SECRET_JSON}" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    log "Detected JSON format — converting to KEY=VALUE"
+    echo "${SECRET_JSON}" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > "${ENV_FILE}"
+else
+    log "Detected plain text format — writing directly"
+    echo "${SECRET_JSON}" > "${ENV_FILE}"
+fi
 chmod 0600 "${ENV_FILE}"
 
 # Postgres runs in-container on this host. The compose postgres service and the

@@ -12,10 +12,9 @@ export interface SignupResult {
   message: string;
   phone: string;
   otp_hint?: string | null;
-  // When signup OTP is admin-disabled, otp_required is false and the token
-  // fields are populated so the client can sign in immediately.
   otp_required: boolean;
   access_token?: string | null;
+  token_type?: string;
   refresh_token?: string | null;
   expires_in?: number | null;
 }

@@ -249,6 +249,7 @@ async def get_biomarker_trend(
             data_points=[],
             ref_low=None,
             ref_high=None,
+            trend="steady",
         )
 
     latest = data_points[-1]

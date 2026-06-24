@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
@@ -31,6 +32,7 @@ function formatBytes(b: number) {
 
 export default function UploadReportScreen() {
   const router       = useRouter();
+  const queryClient  = useQueryClient();
   const isDark       = useThemePreference().colorScheme === 'dark';
   const { isDesktop } = useBreakpoint();
   const [picked, setPicked]   = useState<PickedFile | null>(null);
@@ -83,12 +85,13 @@ export default function UploadReportScreen() {
       setStep('finalizing');
       await finalizeUpload(initiated.lab_report_id);
       setStep('done');
+      void queryClient.invalidateQueries({ queryKey: ['lab-reports'] });
       router.replace(`/reports/${initiated.lab_report_id}`);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Upload failed. Please try again.');
       setStep('error');
     }
-  }, [picked, router]);
+  }, [picked, router, queryClient]);
 
   const isWorking = step === 'uploading' || step === 'finalizing';
 
@@ -227,7 +230,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[5],
     alignItems: 'center',
     gap: spacing[2],
-    boxShadow: shadow.sm,
+    ...Platform.select({
+      web: { boxShadow: shadow.sm },
+      default: {
+        shadowColor: colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
   pickIcon:  { fontSize: 26 },
   pickLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', textAlign: 'center' },
@@ -239,7 +251,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    boxShadow: shadow.sm,
+    ...Platform.select({
+      web: { boxShadow: shadow.sm },
+      default: {
+        shadowColor: colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
   previewIconWrap: {
     width: 48,
@@ -278,7 +299,16 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
+    ...Platform.select({
+      web: { boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}` },
+      default: {
+        shadowColor: colors.forest,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.30,
+        shadowRadius: 16,
+        elevation: 6,
+      },
+    }),
   },
   disabled:       { opacity: 0.45 },
   uploadBtnText:  { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },

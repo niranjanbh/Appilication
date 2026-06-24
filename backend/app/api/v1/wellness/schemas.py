@@ -56,6 +56,23 @@ class ReminderListResponse(BaseModel):
     total: int
 
 
+class DailySummaryResponse(BaseModel):
+    date: str
+    total: int
+    completed: int
+    streak: int
+
+
+class WeekDaySummary(BaseModel):
+    date: str
+    total: int
+    completed: int
+
+
+class WeekSummaryResponse(BaseModel):
+    days: list[WeekDaySummary]
+
+
 class AdherenceLogRequest(BaseModel):
     scheduled_at: datetime
     action: ReminderAction

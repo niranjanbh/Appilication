@@ -22,6 +22,8 @@ import { SkeletonCards } from '../../components/ui/Skeleton';
 import {
   createReminderApi,
   deleteReminderApi,
+  getDailySummaryApi,
+  getWeekSummaryApi,
   listRemindersApi,
   logAdherenceApi,
   updateReminderApi,
@@ -46,6 +48,21 @@ const TYPE_ICON: Record<ReminderType, { icon: IoniconName; tint: TintName }> = {
   gym:        { icon: 'barbell-outline',       tint: 'saffron' },
   custom:     { icon: 'notifications-outline', tint: 'sage' },
 };
+
+function formatCronTime(cron: string): string {
+  const parts = cron.split(' ');
+  const h24 = parseInt(parts[1] ?? '8', 10);
+  const min = (parts[0] ?? '0').padStart(2, '0');
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${min} ${ampm}`;
+}
+
+function formatCronFreq(intervalMinutes: number | null, cron: string | null): string {
+  if (intervalMinutes) return `Every ${intervalMinutes} min`;
+  if (cron) return 'Every day';
+  return 'As needed';
+}
 
 const REMINDER_TYPES: { value: ReminderType; label: string }[] = [
   { value: 'water',      label: 'Water' },
@@ -104,11 +121,12 @@ function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark
     const minute  = parseInt(form.scheduleMinute, 10);
     const validH  = !isNaN(hour)   && hour   >= 0 && hour   <= 23;
     const validM  = !isNaN(minute) && minute >= 0 && minute <= 59;
+    const intervalMin = form.intervalMinutes ? parseInt(form.intervalMinutes, 10) || null : null;
     const payload: ReminderCreate = {
       type: form.type,
       label: form.label.trim(),
-      schedule_cron: validH && validM ? `${minute} ${hour} * * *` : null,
-      schedule_interval_minutes: form.intervalMinutes ? parseInt(form.intervalMinutes, 10) || null : null,
+      schedule_cron: intervalMin ? null : (validH && validM ? `${minute} ${hour} * * *` : null),
+      schedule_interval_minutes: intervalMin,
       notification_channels: ['push'],
     };
     onSave(payload, editing);
@@ -352,6 +370,13 @@ export default function RemindersScreen() {
       (reminderId, scheduledAt, action) => {
         if (action === 'taken' || action === 'skipped') {
           logMutation.mutate({ reminderId, scheduledAt, action });
+        } else if (action === 'snoozed') {
+          logMutation.mutate({ reminderId, scheduledAt, action });
+          const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+          if (reminder) {
+            const snoozeAt = new Date(Date.now() + 15 * 60_000);
+            void scheduleReminderNotification(reminderId, reminder.label, snoozeAt);
+          }
         } else {
           const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
           setAdherenceState({ visible: true, reminderId, scheduledAt, label: reminder?.label ?? 'Reminder' });
@@ -363,11 +388,23 @@ export default function RemindersScreen() {
   }, []);
 
   const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: listRemindersApi, staleTime: 60_000 });
+  const selectedIso = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+  const summaryQuery = useQuery({ queryKey: ['daily-summary', selectedIso], queryFn: () => getDailySummaryApi(selectedIso), staleTime: 60_000 });
+  const weekSunday = new Date(selectedDate);
+  weekSunday.setDate(weekSunday.getDate() - weekSunday.getDay());
+  const weekStartIso = `${weekSunday.getFullYear()}-${String(weekSunday.getMonth() + 1).padStart(2, '0')}-${String(weekSunday.getDate()).padStart(2, '0')}`;
+  const weekQuery = useQuery({ queryKey: ['week-summary', weekStartIso], queryFn: () => getWeekSummaryApi(weekStartIso), staleTime: 60_000 });
+
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ['reminders'] });
+    qc.invalidateQueries({ queryKey: ['daily-summary'] });
+    qc.invalidateQueries({ queryKey: ['week-summary'] });
+  }
 
   const createMutation = useMutation({
     mutationFn: createReminderApi,
     onSuccess: async (reminder) => {
-      await qc.invalidateQueries({ queryKey: ['reminders'] });
+      invalidateAll();
       const cron = reminder.schedule_cron;
       if (cron) {
         const parts = cron.split(' ');
@@ -385,20 +422,27 @@ export default function RemindersScreen() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: ReminderCreate }) => updateReminderApi(id, payload),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); setModalVisible(false); setEditingReminder(null); },
+    onSuccess: () => { invalidateAll(); setModalVisible(false); setEditingReminder(null); },
+    onError: () => Alert.alert('Error', 'Could not update reminder.'),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      updateReminderApi(id, { active }),
+    onSuccess: invalidateAll,
     onError: () => Alert.alert('Error', 'Could not update reminder.'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteReminderApi,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
+    onSuccess: invalidateAll,
     onError: () => Alert.alert('Error', 'Could not delete reminder.'),
   });
 
   const logMutation = useMutation({
     mutationFn: ({ reminderId, scheduledAt, action }: { reminderId: string; scheduledAt: string; action: ReminderAction }) =>
       logAdherenceApi(reminderId, { scheduled_at: scheduledAt, action }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); setAdherenceState(s => ({ ...s, visible: false })); },
+    onSuccess: () => { invalidateAll(); setAdherenceState(s => ({ ...s, visible: false })); },
     onError: () => Alert.alert('Error', 'Could not log adherence.'),
   });
 
@@ -409,8 +453,33 @@ export default function RemindersScreen() {
 
   function openEdit(r: Reminder)   { setEditingReminder(r); setModalVisible(true); }
   function openCreate()             { setEditingReminder(null); setModalVisible(true); }
-  function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
+  function handleToggle(r: Reminder) {
+    toggleMutation.mutate({ id: r.id, active: !r.active });
+  }
+  function confirmDelete(r: Reminder) {
+    const time = r.schedule_cron ? formatCronTime(r.schedule_cron) : null;
+    const subtitle = [
+      r.label,
+      [formatCronFreq(r.schedule_interval_minutes ?? null, r.schedule_cron), time].filter(Boolean).join(' at '),
+    ].filter(Boolean).join('\n');
+    Alert.alert('Delete Reminder?', subtitle, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(r.id) },
+    ]);
+  }
+  function handleTakeNow(r: Reminder) {
+    const scheduledAt = new Date().toISOString();
+    logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'taken' as ReminderAction });
+  }
+  async function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
+    if (action === 'snoozed') {
+      const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+      if (reminder) {
+        const snoozeAt = new Date(Date.now() + 15 * 60_000);
+        await scheduleReminderNotification(reminderId, reminder.label, snoozeAt);
+      }
+    }
   }
 
   const bg = isDark ? colors.forestInk : colors.ivory;
@@ -449,7 +518,11 @@ export default function RemindersScreen() {
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             onEdit={openEdit}
-            onDelete={r => deleteMutation.mutate(r.id)}
+            onDelete={confirmDelete}
+            onToggle={handleToggle}
+            onTakeNow={handleTakeNow}
+            dailySummary={summaryQuery.data ?? null}
+            weekSummary={weekQuery.data?.days ?? null}
           />
           <HapticPressable
             haptic="medium"

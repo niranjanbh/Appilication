@@ -115,6 +115,8 @@ async def set_ocr_result(
     ocr_confidence_avg: float,
     low_confidence_fields: list[str],
     status: LabReportStatus,
+    lab_name: str | None = None,
+    report_date: date | None = None,
 ) -> None:
     await db.execute(
         update(LabReport)
@@ -124,6 +126,8 @@ async def set_ocr_result(
             ocr_confidence_avg=ocr_confidence_avg,
             low_confidence_fields=low_confidence_fields,
             status=status,
+            lab_name=lab_name,
+            report_date=report_date,
             updated_at=datetime.now(UTC),
         )
     )
@@ -169,6 +173,8 @@ async def apply_patient_correction(
     """Apply patient-corrected OCR data.  Returns None if the report is not owned by the patient."""
     report = await get_for_patient(db, lab_report_id=lab_report_id, patient_user_id=patient_user_id)
     if report is None:
+        return None
+    if report.status not in (LabReportStatus.OCR_COMPLETE, LabReportStatus.PATIENT_REVIEW_NEEDED):
         return None
     report.parsed_json = parsed_json
     report.patient_corrected = True

@@ -4,37 +4,36 @@ import { getAllArticles } from '../lib/mdx';
 
 const BASE_URL = 'https://kyrosclinic.com';
 
-// Static pages have real dates; article routes use lastReviewed from frontmatter.
-const SITE_BUILT = '2026-06-01';
+const BUILD_TIME = new Date().toISOString();
 
 function safeIso(value: string | undefined): string {
-  if (!value) return SITE_BUILT;
+  if (!value) return BUILD_TIME;
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? SITE_BUILT : d.toISOString();
+  return Number.isNaN(d.getTime()) ? BUILD_TIME : d.toISOString();
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: MetadataRoute.Sitemap = [
-    { url: BASE_URL, lastModified: SITE_BUILT, changeFrequency: 'weekly', priority: 1.0 },
-    { url: `${BASE_URL}/conditions`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.9 },
-    { url: `${BASE_URL}/learn`, lastModified: SITE_BUILT, changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${BASE_URL}/how-it-works`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${BASE_URL}/pricing`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${BASE_URL}/faq`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${BASE_URL}/about`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.7 },
-    { url: `${BASE_URL}/our-doctors`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.7 },
-    { url: `${BASE_URL}/for-doctors`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE_URL}/contact`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE_URL}/advisory-board`, lastModified: SITE_BUILT, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE_URL}/legal/privacy`, lastModified: SITE_BUILT, changeFrequency: 'yearly', priority: 0.4 },
-    { url: `${BASE_URL}/legal/terms`, lastModified: SITE_BUILT, changeFrequency: 'yearly', priority: 0.4 },
-    { url: `${BASE_URL}/legal/telemedicine-consent`, lastModified: SITE_BUILT, changeFrequency: 'yearly', priority: 0.4 },
-    { url: `${BASE_URL}/legal/data-deletion`, lastModified: SITE_BUILT, changeFrequency: 'yearly', priority: 0.4 },
+    { url: BASE_URL, lastModified: BUILD_TIME, changeFrequency: 'weekly', priority: 1.0 },
+    { url: `${BASE_URL}/conditions`, lastModified: BUILD_TIME, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${BASE_URL}/learn`, lastModified: BUILD_TIME, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${BASE_URL}/how-it-works`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE_URL}/pricing`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE_URL}/faq`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE_URL}/about`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE_URL}/our-doctors`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE_URL}/for-doctors`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE_URL}/contact`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE_URL}/advisory-board`, lastModified: BUILD_TIME, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE_URL}/legal/privacy`, lastModified: BUILD_TIME, changeFrequency: 'yearly', priority: 0.4 },
+    { url: `${BASE_URL}/legal/terms`, lastModified: BUILD_TIME, changeFrequency: 'yearly', priority: 0.4 },
+    { url: `${BASE_URL}/legal/telemedicine-consent`, lastModified: BUILD_TIME, changeFrequency: 'yearly', priority: 0.4 },
+    { url: `${BASE_URL}/legal/data-deletion`, lastModified: BUILD_TIME, changeFrequency: 'yearly', priority: 0.4 },
   ];
 
   const conditionRoutes: MetadataRoute.Sitemap = CONDITION_SLUGS.map((slug) => ({
     url: `${BASE_URL}/conditions/${slug}`,
-    lastModified: SITE_BUILT,
+    lastModified: BUILD_TIME,
     changeFrequency: 'monthly' as const,
     priority: 0.9,
   }));

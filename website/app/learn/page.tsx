@@ -23,11 +23,23 @@ export const metadata: Metadata = {
 
 const schema = {
   "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  name: "Kyros Clinic — Learn",
-  url: "https://kyrosclinic.com/learn",
-  description:
-    "Doctor-reviewed clinical articles on hormonal health conditions for Indian patients.",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://kyrosclinic.com" },
+        { "@type": "ListItem", position: 2, name: "Learn", item: "https://kyrosclinic.com/learn" },
+      ],
+    },
+    {
+      "@type": "CollectionPage",
+      "@id": "https://kyrosclinic.com/learn",
+      name: "Kyros Clinic — Learn",
+      url: "https://kyrosclinic.com/learn",
+      description:
+        "Doctor-reviewed clinical articles on hormonal health conditions for Indian patients.",
+    },
+  ],
 };
 
 function ArticleCard({

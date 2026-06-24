@@ -192,7 +192,7 @@ export default function CarePlanDetailScreen() {
       {plan.condition_category && (
         <View style={[styles.condBadge, { backgroundColor: isDark ? colors.jade + '15' : colors.forest + '10' }]}>
           <Text style={[styles.condText, { color: isDark ? colors.jade : colors.ink }]}>
-            {plan.condition_category.replace(/_/g, ' ')}
+            {plan.condition_category.replace(/_/g, ' ').replace(/-/g, ' ')}
           </Text>
         </View>
       )}
@@ -218,7 +218,7 @@ export default function CarePlanDetailScreen() {
       {groups.map(group => (
         <View key={group.category} style={styles.categorySection}>
           <Text style={[styles.categoryHeader, { color: isDark ? colors.jade : colors.ink }]}>
-            {CATEGORY_LABELS[group.category] ?? group.category}
+            {CATEGORY_LABELS[group.category] ?? group.category.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
           </Text>
           {group.items.map(item => (
             <ItemCard key={item.id} item={item} isDark={isDark} textPri={textPri} textSub={textSub} cardBg={cardBg} cardBdr={cardBdr} />

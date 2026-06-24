@@ -1,14 +1,5 @@
 {
   "name": "kyros-platform",
-  "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.12.1",
-  "engines": {
-    "node": ">=20"
-  },
-  "scripts": {
-    "mobile": "pnpm --filter @kyros/mobile",
-    "mobile:start": "pnpm --filter @kyros/mobile start",
-    "mobile:web": "pnpm --filter @kyros/mobile web"
-  }
+  "workspaces": ["mobile", "doctor-portal", "website"]
 }

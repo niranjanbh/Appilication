@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,11 +10,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../lib/ui/alert';
 import { useThemePreference } from '../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { CaptureGuard } from '../../components/ui/CaptureGuard';
+import { ApiError } from '../../lib/api/client';
 import {
   correctLabReport,
   getDownloadUrl,
@@ -25,7 +28,7 @@ import {
 import { borderRadius, colors, fontFamily, fontSize, shadow, spacing, withAlpha } from '../../lib/design-tokens';
 
 const POLL_INTERVAL_MS = 4000;
-const PROCESSING_STATUSES = new Set(['ocr_pending', 'ocr_processing']);
+const PROCESSING_STATUSES = new Set(['upload_pending', 'ocr_pending', 'ocr_processing']);
 
 function confidenceColor(c: number): string {
   if (c >= 0.85) return colors.jade;
@@ -166,40 +169,25 @@ export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const isDark = useThemePreference().colorScheme === 'dark';
+  const queryClient = useQueryClient();
 
-  const [report,      setReport]      = useState<LabReport | null>(null);
-  const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
   const [corrections, setCorrections] = useState<Record<number, string>>({});
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchReport = useCallback(async () => {
-    if (!id) return;
-    try {
-      const data = await getLabReport(id);
-      setReport(data);
-      if (data.parsed_json) {
-        setCorrections(prev => Object.keys(prev).length === 0 ? buildInitialCorrections(data.parsed_json!) : prev);
-      }
-      setError(null);
-    } catch {
-      setError('Could not load this report.');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['lab-report', id],
+    queryFn: () => getLabReport(id),
+    enabled: !!id,
+    refetchInterval: query =>
+      query.state.data && PROCESSING_STATUSES.has(query.state.data.status) ? POLL_INTERVAL_MS : false,
+  });
+  const report = data;
 
-  useEffect(() => { void fetchReport(); }, [fetchReport]);
   useEffect(() => {
-    if (!report) return;
-    if (PROCESSING_STATUSES.has(report.status)) {
-      pollRef.current = setInterval(() => { void fetchReport(); }, POLL_INTERVAL_MS);
-    } else {
-      if (pollRef.current) clearInterval(pollRef.current);
+    if (data?.parsed_json) {
+      setCorrections(prev => Object.keys(prev).length === 0 ? buildInitialCorrections(data.parsed_json!) : prev);
     }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [report?.status, fetchReport]);
+  }, [data?.parsed_json]);
 
   const handleSaveCorrections = useCallback(async () => {
     if (!report?.parsed_json) return;
@@ -215,14 +203,18 @@ export default function ReportDetailScreen() {
     setSaving(true);
     try {
       const saved = await correctLabReport(report.id, updated);
-      setReport(saved);
+      queryClient.setQueryData(['lab-report', id], saved);
+      void queryClient.invalidateQueries({ queryKey: ['lab-reports'] });
       Alert.alert('Saved', 'Your corrections have been saved.');
-    } catch {
-      Alert.alert('Error', 'Could not save corrections. Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError && err.status === 404
+        ? 'This report is not ready for corrections yet.'
+        : 'Could not save corrections. Please try again.';
+      Alert.alert('Error', msg);
     } finally {
       setSaving(false);
     }
-  }, [report, corrections]);
+  }, [report, corrections, queryClient, id]);
 
   const handleDownload = useCallback(async () => {
     if (!report) return;
@@ -243,13 +235,13 @@ export default function ReportDetailScreen() {
   const cardBg  = isDark ? colors.forestSurface   : colors.white;
   const cardBdr = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,61,46,0.06)';
 
-  if (loading) {
+  if (isLoading) {
     return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
   if (error || !report) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Report not found.'}</Text>
+        <Text style={[styles.errorText, { color: colors.alert }]}>{error ? 'Could not load this report.' : 'Report not found.'}</Text>
         <Pressable onPress={() => router.back()}><Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text></Pressable>
       </View>
     );
@@ -258,9 +250,13 @@ export default function ReportDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
         <ActivityIndicator size="large" color={colors.jade} />
-        <Text style={[styles.processingTitle, { color: textPri }]}>Analysing your report…</Text>
+        <Text style={[styles.processingTitle, { color: textPri }]}>
+          {report.status === 'upload_pending' ? 'Upload in progress…' : 'Analysing your report…'}
+        </Text>
         <Text style={[styles.processingSub, { color: textSub }]}>
-          Our system is extracting your lab values. This usually takes under 60 seconds.
+          {report.status === 'upload_pending'
+            ? 'Finishing your upload. This screen will update automatically.'
+            : 'Our system is extracting your lab values. This usually takes under 60 seconds.'}
         </Text>
       </View>
     );
@@ -365,7 +361,16 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     overflow: 'hidden',
     borderWidth: 1,
-    boxShadow: shadow.md,
+    ...Platform.select({
+      web: { boxShadow: shadow.md },
+      default: {
+        shadowColor: colors.ink,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 4,
+      },
+    }),
   },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
   metaLabel: { fontFamily: fontFamily.body, fontSize: fontSize.caption, flex: 1 },
@@ -388,7 +393,16 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 56, backgroundColor: colors.forest, borderRadius: borderRadius.xxl,
     alignItems: 'center', justifyContent: 'center',
-    boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}`,
+    ...Platform.select({
+      web: { boxShadow: `0 8px 16px ${withAlpha(colors.forest, 0.30)}` },
+      default: {
+        shadowColor: colors.forest,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.30,
+        shadowRadius: 16,
+        elevation: 6,
+      },
+    }),
   },
   disabled:    { opacity: 0.45 },
   saveBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.ivoryText },

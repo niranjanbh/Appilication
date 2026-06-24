@@ -99,18 +99,16 @@ export default function SignupScreen() {
     const phone = `${countryCode}${values.phoneNumber}`;
     try {
       const result = await signupApi({ name: values.name, phone, email: values.email, password: values.password });
-      // When the admin has signup OTP disabled, the backend auto-verifies the
-      // account and returns tokens — sign in and go straight to onboarding.
-      if (!result.otp_required && result.access_token && result.refresh_token && result.expires_in != null) {
+      if (!result.otp_required && result.access_token && result.refresh_token && result.expires_in) {
         await signIn({
           access_token: result.access_token,
           refresh_token: result.refresh_token,
           expires_in: result.expires_in,
         });
         router.replace('/');
-        return;
+      } else {
+        router.push({ pathname: '/(auth)/verify-otp', params: { phone } });
       }
-      router.push({ pathname: '/(auth)/verify-otp', params: { phone } });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setApiError('An account with this phone or email already exists.');

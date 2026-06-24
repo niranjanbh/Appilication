@@ -47,7 +47,7 @@ function CarePlanCard({
   const textPri = isDark ? colors.ivoryText : colors.ink;
   const textSub = isDark ? colors.stoneDim : colors.stone;
 
-  const categories = [...new Set(plan.items.map(i => CATEGORY_LABELS[i.category] ?? i.category))];
+  const categories = [...new Set(plan.items.map(i => CATEGORY_LABELS[i.category] ?? i.category.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())))];
   const categoryText = categories.slice(0, 3).join(', ') + (categories.length > 3 ? '...' : '');
 
   return (
