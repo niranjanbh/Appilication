@@ -12,7 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import create_doctor_user, create_super_admin_user
+from tests.conftest import cookie_header, create_doctor_user, create_super_admin_user
 
 
 def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
@@ -83,7 +83,7 @@ async def test_revoke_sessions_kills_jwt_and_portal_sessions(
     resp = await client.post(
         f"/admin/users/{doctor.id}/revoke-sessions",
         data={"_csrf": admin_csrf},
-        cookies={"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf},
+        headers=cookie_header({"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 302, resp.text
@@ -134,7 +134,7 @@ async def test_revoke_sessions_on_patient_returns_not_a_staff_role(
     resp = await client.post(
         f"/admin/users/{patient.id}/revoke-sessions",
         data={"_csrf": admin_csrf},
-        cookies={"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf},
+        headers=cookie_header({"kyros_admin_session": admin_cookie, "kyros_admin_csrf": admin_csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 302

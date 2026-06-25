@@ -95,6 +95,8 @@ async def _create_consultation(
 async def test_complete_consultation_in_progress_returns_200(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    from app.db.enums import NoteType
+    from app.models.clinic import DoctorNote
     from app.models.identity import User as UserModel
 
     patient_user = await create_patient_user(db_session)
@@ -111,6 +113,17 @@ async def test_complete_consultation_in_progress_returns_200(
         status=ConsultationStatus.IN_PROGRESS,
         actual_start_at=datetime.now(UTC),
     )
+    # Completion requires at least one doctor note on record.
+    db_session.add(
+        DoctorNote(
+            consultation_id=consultation.id,
+            doctor_id=doctor.id,
+            patient_id=patient.id,
+            note_type=NoteType.CLINICAL,
+            content="Reviewed; plan documented.",
+        )
+    )
+    await db_session.flush()
 
     resp = await client.post(
         f"/v1/doctor/consultations/{consultation.id}/complete",

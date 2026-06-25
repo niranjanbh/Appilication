@@ -442,6 +442,10 @@ async def admin_mark_no_show(
     if consultation.status not in (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED):
         raise ConsultationError("consultation_not_markable")
 
+    # SCHEDULED/CONFIRMED always carry a scheduled time; the guard keeps the
+    # comparison total and satisfies the nullable column type.
+    if consultation.scheduled_start_at is None:
+        raise ConsultationError("consultation_not_markable")
     if consultation.scheduled_start_at > datetime.now(UTC):
         raise ConsultationError("consultation_not_started_yet")
 

@@ -57,7 +57,7 @@ def _verify_sync(token: str) -> dict[str, object]:
     # verify_oauth2_token checks signature, expiry, and issuer. We verify the
     # audience ourselves below to support multiple client IDs (web/iOS/Android).
     # google-auth ships no type stubs, hence the ignore.
-    claims: dict[str, object] = google_id_token.verify_oauth2_token(  # type: ignore[no-untyped-call]
+    claims: dict[str, object] = google_id_token.verify_oauth2_token(
         token, request
     )
     return claims

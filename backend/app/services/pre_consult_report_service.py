@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from html import escape as _esc
 from typing import Any
 
 import structlog
-from html import escape as _esc
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

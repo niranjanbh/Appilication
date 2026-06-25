@@ -21,7 +21,6 @@ from tests.conftest import (
     make_auth_headers,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -100,7 +99,7 @@ async def _create_doctor_with_consultation(
     """Create a doctor with full profile and a consultation linked to the patient."""
     from datetime import UTC, datetime, timedelta
 
-    from app.db.enums import ConsultationStatus, ConsultationType, DoctorStatus
+    from app.db.enums import ConsultationStatus, ConsultationType
     from app.models.clinic import Consultation, Patient
     from app.models.doctor import Doctor
     from app.models.identity import User as UserModel

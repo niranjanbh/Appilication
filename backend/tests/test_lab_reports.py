@@ -314,7 +314,7 @@ async def test_patient_correction_cross_user_returns_404(
 
     resp = await client.patch(
         f"/v1/clinic/patient/lab-reports/{report_id}",
-        json={"parsed_json": {"biomarkers": []}},
+        json={"parsed_json": {"biomarkers": [], "overall_confidence": 0.99}},
         headers=make_auth_headers(attacker),
     )
     assert resp.status_code == 404

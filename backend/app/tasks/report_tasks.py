@@ -128,6 +128,8 @@ async def _generate_report_async(consultation_id: str) -> dict[str, Any]:
         consultation = consult_result.scalar_one_or_none()
         if consultation is None:
             return {"status": "skipped", "reason": "consultation_gone"}
+        if consultation.scheduled_start_at is None:
+            return {"status": "skipped", "reason": "not_scheduled"}
 
         patient_result = await db.execute(
             select(User)

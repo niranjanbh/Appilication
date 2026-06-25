@@ -5,7 +5,6 @@ Tests: CRUD on ad_pricing_config, booking uses DB price, fallback to settings.
 
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 

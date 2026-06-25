@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import (
@@ -568,10 +568,13 @@ async def list_all_consultations(
     """Return (Consultation, patient_user, doctor_user) triples."""
     from sqlalchemy.orm import aliased
 
-    PatientUser = aliased(User, name="patient_user")
-    DoctorUser = aliased(User, name="doctor_user")
+    PatientUser = aliased(User, name="patient_user")  # noqa: N806 (aliased ORM entity, used class-like)
+    DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
 
-    base_filter = [Consultation.deleted_at.is_(None), Patient.deleted_at.is_(None)]
+    base_filter: list[ColumnElement[bool]] = [
+        Consultation.deleted_at.is_(None),
+        Patient.deleted_at.is_(None),
+    ]
     if doctor_id:
         base_filter.append(Consultation.doctor_id == doctor_id)
     if status_filter:
@@ -747,8 +750,8 @@ async def get_consultations_by_ids(
         return []
     from sqlalchemy.orm import aliased
 
-    PatientUser = aliased(User, name="patient_user")
-    DoctorUser = aliased(User, name="doctor_user")
+    PatientUser = aliased(User, name="patient_user")  # noqa: N806 (aliased ORM entity, used class-like)
+    DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
     rows = await db.execute(
         select(Consultation, PatientUser, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)

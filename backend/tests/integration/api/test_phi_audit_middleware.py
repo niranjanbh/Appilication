@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.enums import ActorRole
 from app.models.audit import AuditLog
 from app.models.identity import User as UserModel
-from tests.conftest import create_admin_user, create_patient_user
+from tests.conftest import cookie_header, create_admin_user, create_patient_user
 
 
 def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
@@ -65,7 +65,7 @@ async def test_admin_tier_hitting_super_admin_view_writes_denial_audit_row(
     resp = await client.post(
         f"/admin/content/{content_id}/publish",
         data={"_csrf": csrf},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -149,7 +149,7 @@ async def test_disabling_phi_audit_middleware_skips_denial_write(
         resp = await client.post(
             f"/admin/content/{content_id}/publish",
             data={"_csrf": csrf},
-            cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+            headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
             follow_redirects=False,
         )
     finally:

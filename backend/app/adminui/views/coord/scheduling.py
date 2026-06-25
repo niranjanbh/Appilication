@@ -8,7 +8,7 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -146,6 +146,7 @@ async def book_consultation(
         )
 
     # Notify patient (best-effort — a notification failure must not fail the booking).
+    assert consultation is not None  # guaranteed by the `allowed` guard above
     await _notify_patient_booked(db, consultation_id=consultation.id)
 
     return RedirectResponse(url="/coord/scheduling?success=booked", status_code=status.HTTP_302_FOUND)
@@ -237,7 +238,7 @@ async def join_room(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     coord: Annotated[object, Depends(require_coord_session)],
-) -> HTMLResponse | RedirectResponse:
+) -> Response:
     """Join the video room of an assigned patient's consultation as a support seat.
 
     Scoped to the coordinator's assigned patients (a miss is audited and 404s, no

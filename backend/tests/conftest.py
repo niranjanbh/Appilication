@@ -271,3 +271,14 @@ def make_auth_headers(user: object) -> dict[str, str]:
     assert isinstance(user, UserModel)
     token = create_access_token(user.id, user.role, uuid.uuid4())
     return {"Authorization": f"Bearer {token}"}
+
+
+def cookie_header(cookies: dict[str, str]) -> dict[str, str]:
+    """Build a ``Cookie`` request header from a cookie dict.
+
+    httpx deprecated passing per-request ``cookies=`` because client-level
+    cookie persistence makes the behaviour ambiguous. Sending the ``Cookie``
+    header directly is the supported equivalent and keeps each request's cookies
+    explicit and isolated.
+    """
+    return {"Cookie": "; ".join(f"{name}={value}" for name, value in cookies.items())}

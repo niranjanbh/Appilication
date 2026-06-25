@@ -86,7 +86,7 @@ def _build_token(*, room_name: str, identity: str, user_id: str, is_doctor: bool
         .with_ttl(_seconds_as_timedelta(_TOKEN_TTL_SECONDS))
         .with_grants(grants)
     )
-    return token.to_jwt()
+    return str(token.to_jwt())
 
 
 def _seconds_as_timedelta(seconds: int):  # type: ignore[no-untyped-def]

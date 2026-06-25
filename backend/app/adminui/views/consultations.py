@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -172,7 +172,7 @@ async def join_room(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[object, Depends(require_super_admin_session)],
-) -> HTMLResponse | RedirectResponse:
+) -> Response:
     """Join a consultation's video room as a visible-identity support participant."""
     from app.core.config import settings
     from app.integrations import livekit_video

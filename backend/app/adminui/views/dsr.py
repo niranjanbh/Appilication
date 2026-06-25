@@ -142,7 +142,7 @@ async def dsr_set_status(
     try:
         target = DataSubjectRequestStatus(new_status)
     except ValueError:
-        target = None  # type: ignore[assignment]
+        target = None
 
     updated = (
         await dsr_repo.update_dsr_status(db, request_id, target, note=note)
@@ -159,6 +159,9 @@ async def dsr_set_status(
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
+    # A non-None `updated` implies the transition ran, which only happens when
+    # `target` parsed successfully above.
+    assert target is not None
     await write_audit(
         db, ctx, action="admin_dsr_status_change",
         resource_type="data_subject_request", resource_id=request_id, allowed=True,

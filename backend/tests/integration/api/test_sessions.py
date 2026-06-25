@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
-from app.models.identity import RefreshToken, User as UserModel
+from app.models.identity import RefreshToken
+from app.models.identity import User as UserModel
 from app.repositories import auth as auth_repo
 from tests.conftest import create_doctor_user, create_patient_user, make_auth_headers
 

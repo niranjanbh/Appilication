@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import (
+    cookie_header,
     create_admin_user,
     create_patient_user,
     create_super_admin_user,
@@ -67,7 +68,7 @@ async def test_bulk_suspend_users_audits_each_item(
     resp = await client.post(
         "/admin/bulk/users",
         data={"_csrf": csrf, "action": "suspend", "ids": [str(p1.id), str(p2.id)]},
-        cookies=cookies,
+        headers=cookie_header(cookies),
         follow_redirects=False,
     )
     assert resp.status_code == 302, resp.text
@@ -111,7 +112,7 @@ async def test_bulk_reactivate_users(
     resp = await client.post(
         "/admin/bulk/users",
         data={"_csrf": csrf, "action": "reactivate", "ids": [str(patient.id)]},
-        cookies=cookies,
+        headers=cookie_header(cookies),
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -135,7 +136,7 @@ async def test_bulk_action_requires_super_admin(
     resp = await client.post(
         "/admin/bulk/users",
         data={"_csrf": csrf, "action": "suspend", "ids": [str(patient.id)]},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -155,7 +156,7 @@ async def test_export_users_csv_columns_and_no_phi(
         return
     cookies = {"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}
 
-    resp = await client.get("/admin/export/users.csv", cookies=cookies)
+    resp = await client.get("/admin/export/users.csv", headers=cookie_header(cookies))
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/csv")
     assert "attachment" in resp.headers.get("content-disposition", "")
@@ -180,7 +181,7 @@ async def test_export_csv_allowed_for_read_only_admin(
         return
     resp = await client.get(
         "/admin/export/users.csv",
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
     )
     assert resp.status_code == 200
 
@@ -190,7 +191,7 @@ async def test_export_users_csv_selected_ids(
 ) -> None:
     super_admin = await create_super_admin_user(db_session)
     keep = await create_patient_user(db_session, name="Keep Me")
-    skip = await create_patient_user(db_session, name="Skip Me")
+    await create_patient_user(db_session, name="Skip Me")
     await db_session.commit()
     try:
         cookie, csrf = _admin_session_cookie(super_admin.id)
@@ -201,7 +202,7 @@ async def test_export_users_csv_selected_ids(
     cookies = {"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}
 
     resp = await client.get(
-        f"/admin/export/users.csv?ids={keep.id}", cookies=cookies
+        f"/admin/export/users.csv?ids={keep.id}", headers=cookie_header(cookies)
     )
     assert resp.status_code == 200
     body = resp.text

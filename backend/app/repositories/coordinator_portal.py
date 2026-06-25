@@ -141,7 +141,7 @@ async def list_today_consultations(
 
     from sqlalchemy.orm import aliased
 
-    DoctorUser = aliased(User, name="doctor_user")
+    DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
     result = await db.execute(
         select(Consultation, User, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)
@@ -231,7 +231,7 @@ async def list_patient_consultations_restricted(
 
     from sqlalchemy.orm import aliased
 
-    DoctorUser = aliased(User, name="doctor_user")
+    DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
     result = await db.execute(
         select(Consultation, DoctorUser)
         .join(Doctor, Doctor.id == Consultation.doctor_id)
@@ -439,7 +439,7 @@ async def list_upcoming_consultations(
 
     from sqlalchemy.orm import aliased
 
-    DoctorUser = aliased(User, name="doctor_user")
+    DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
     result = await db.execute(
         select(Consultation, User, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)

@@ -17,6 +17,7 @@ Design notes:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -168,7 +169,7 @@ def content_list(rows: list[Any]) -> list[AdminContentView]:
 
 
 def doctor_pairs(
-    rows: list[tuple[object, object]],
+    rows: Sequence[tuple[object, object]],
 ) -> list[tuple[AdminDoctorView, AdminUserView]]:
     """(Doctor, User) -> (AdminDoctorView, AdminUserView)."""
     return [
@@ -178,7 +179,7 @@ def doctor_pairs(
 
 
 def payment_pairs(
-    rows: list[tuple[object, object]],
+    rows: Sequence[tuple[object, object]],
 ) -> list[tuple[AdminPaymentView, AdminUserView]]:
     """(Payment, payer User) -> (AdminPaymentView, AdminUserView)."""
     return [
@@ -188,7 +189,7 @@ def payment_pairs(
 
 
 def consultation_triples(
-    rows: list[tuple[object, object, object]],
+    rows: Sequence[tuple[object, object, object]],
 ) -> list[tuple[AdminConsultationView, AdminUserView, AdminUserView | None]]:
     """(Consultation, patient_user, doctor_user|None) -> all three serialized."""
     return [
@@ -204,7 +205,7 @@ def consultation_triples(
 
 
 def dsr_pairs(
-    rows: list[tuple[object, str]],
+    rows: Sequence[tuple[object, str]],
 ) -> list[tuple[AdminDsrView, str]]:
     """(DataSubjectRequest, user_name) -> (AdminDsrView, user_name)."""
     return [(AdminDsrView.model_validate(dsr), name) for dsr, name in rows]

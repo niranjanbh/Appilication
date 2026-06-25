@@ -440,12 +440,12 @@ async def list_sessions(
     return SessionListResponse(
         items=[
             SessionRead(
-                session_id=r["session_id"],  # type: ignore[arg-type]
-                ip_address=r["ip_address"],  # type: ignore[arg-type]
-                user_agent=r["user_agent"],  # type: ignore[arg-type]
-                created_at=r["created_at"],  # type: ignore[arg-type]
-                last_used_at=r["last_used_at"],  # type: ignore[arg-type]
-                expires_at=r["expires_at"],  # type: ignore[arg-type]
+                session_id=r["session_id"],
+                ip_address=r["ip_address"],
+                user_agent=r["user_agent"],
+                created_at=r["created_at"],
+                last_used_at=r["last_used_at"],
+                expires_at=r["expires_at"],
                 is_current=str(r["session_id"]) == str(current_session),
             )
             for r in rows

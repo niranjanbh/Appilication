@@ -137,7 +137,7 @@ async def week_summary(
     completed_by_day = await reminders_repo.get_week_adherence(
         db, user_id=user.id, week_start=week_start
     )
-    completed_map = {d: cnt for d, cnt in completed_by_day}
+    completed_map = dict(completed_by_day)
 
     all_reminders = await reminders_repo.list_reminders_for_user(
         db, user_id=user.id, include_inactive=False

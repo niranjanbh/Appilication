@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tests.conftest import (
     _synth_email,
     _synth_phone,
+    cookie_header,
     create_admin_user,
     create_coordinator_user,
     create_doctor_user,
@@ -2979,7 +2980,7 @@ async def test_admin_tier_can_view_users(
         return
 
     for path in ("/admin/users", "/admin/doctors", "/admin/content"):
-        resp = await client.get(path, cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf})
+        resp = await client.get(path, headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}))
         assert resp.status_code == 200, path
 
 
@@ -3003,7 +3004,7 @@ async def test_admin_tier_cannot_suspend_user(
     resp = await client.post(
         f"/admin/users/{patient.id}/suspend",
         data={"_csrf": csrf},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -3029,7 +3030,7 @@ async def test_super_admin_tier_can_suspend_user(
     resp = await client.post(
         f"/admin/users/{patient.id}/suspend",
         data={"_csrf": csrf},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -3062,7 +3063,7 @@ async def test_admin_tier_cannot_open_staff_form(
 
     for path in ("/admin/staff/new", "/admin/dsr"):
         resp = await client.get(
-            path, cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}, follow_redirects=False
+            path, headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}), follow_redirects=False
         )
         assert resp.status_code == 403, path
 
@@ -3096,7 +3097,7 @@ async def test_super_admin_creates_coordinator_via_portal(
             "password": "PortalPass123!",
             "_csrf": csrf,
         },
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -3137,7 +3138,7 @@ async def test_stale_super_admin_session_redirects_to_reauth(
             "password": "PortalPass123!",
             "_csrf": csrf,
         },
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -3161,7 +3162,7 @@ async def test_admin_cancel_unknown_consultation_returns_404(
     resp = await client.post(
         f"/admin/consultations/{uuid.uuid4()}/cancel",
         data={"reason": "test", "_csrf": csrf},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 404
@@ -3185,7 +3186,7 @@ async def test_analytics_export_works_with_session_cookie(
 
     resp = await client.get(
         "/admin/analytics/export?report=funnel",
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
     )
     assert resp.status_code == 200
     assert "text/csv" in resp.headers.get("content-type", "")
@@ -3314,7 +3315,7 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
 
     # Queue lists the inquiry as not contacted
     queue = await client.get(
-        "/coord/inquiries", cookies={"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one}
+        "/coord/inquiries", headers=cookie_header({"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one})
     )
     assert queue.status_code == 200
     assert b"Test Inquiry Patient" in queue.content
@@ -3324,7 +3325,7 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
     first = await client.post(
         f"/coord/inquiries/{inquiry_id}/contacted",
         data={"_csrf": csrf_one},
-        cookies={"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one},
+        headers=cookie_header({"kyros_coord_session": cookie_one, "kyros_coord_csrf": csrf_one}),
         follow_redirects=False,
     )
     assert first.status_code == 302
@@ -3333,7 +3334,7 @@ async def test_coord_inquiry_contacted_first_coordinator_wins(
     second = await client.post(
         f"/coord/inquiries/{inquiry_id}/contacted",
         data={"_csrf": csrf_two},
-        cookies={"kyros_coord_session": cookie_two, "kyros_coord_csrf": csrf_two},
+        headers=cookie_header({"kyros_coord_session": cookie_two, "kyros_coord_csrf": csrf_two}),
         follow_redirects=False,
     )
     assert second.status_code == 404
@@ -3453,7 +3454,7 @@ async def test_coord_patient_not_assigned_returns_404(
 
     resp = await client.get(
         f"/coord/patients/{patient.id}",
-        cookies={"kyros_coord_session": session_id},
+        headers=cookie_header({"kyros_coord_session": session_id}),
         follow_redirects=False,
     )
     # Either 404 (not assigned) or 302 (session invalid) — both are acceptable

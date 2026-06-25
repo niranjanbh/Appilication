@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +24,6 @@ from tests.conftest import (
     create_super_admin_user,
     make_auth_headers,
 )
-
 
 # ── Fixture helpers ────────────────────────────────────────────────────────────
 
@@ -229,8 +227,6 @@ async def test_doctor_review_creates_sign_off_record_for_rejection(
 async def test_doctor_review_wrong_state_returns_409(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    from app.db.enums import DoctorStatus
-    from app.models.doctor import Doctor
 
     doctor_user = await create_doctor_with_profile(db_session)
 
@@ -275,6 +271,7 @@ async def test_admin_publish_transitions_to_published(
     from app.models.identity import User as UserModel
     assert isinstance(doctor, UserModel)
     from sqlalchemy import select as sa_select
+
     from app.models.doctor import Doctor
     result = await db_session.execute(sa_select(Doctor).where(Doctor.user_id == doctor.id))
     doctor_row = result.scalar_one()

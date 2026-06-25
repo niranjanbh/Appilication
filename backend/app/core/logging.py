@@ -20,8 +20,8 @@ _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
 def _scrub_phi(
-    _logger: Any, _method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+    _logger: Any, _method: str, event_dict: structlog.types.EventDict
+) -> structlog.types.EventDict:
     """Strip known PHI fields and redact phone/email patterns in values."""
     for key in list(event_dict):
         if key in _PHI_KEYS:

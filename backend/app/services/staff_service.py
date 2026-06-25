@@ -182,7 +182,7 @@ async def create_staff_user(
         raise StaffServiceError("email_in_use", f"{email} belongs to another account")
 
     created = user is None
-    if created:
+    if user is None:
         user = User(
             name=name,
             role=role,

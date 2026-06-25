@@ -146,7 +146,7 @@ async def get_consultation(
     consultation = await consultations_repo.get_consultation_for_patient(
         db, consultation_id=consultation_id, patient_user_id=user.id
     )
-    await cross_user_404(
+    consultation = await cross_user_404(
         db,
         consultation,
         ctx,

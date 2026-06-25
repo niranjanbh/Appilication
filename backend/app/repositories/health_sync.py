@@ -8,7 +8,12 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import HealthDatapointSource, HealthDatapointType, HealthSyncSource, HealthSyncStatus
+from app.db.enums import (
+    HealthDatapointSource,
+    HealthDatapointType,
+    HealthSyncSource,
+    HealthSyncStatus,
+)
 from app.models.wellness import HealthDatapoint, HealthSyncSession
 
 

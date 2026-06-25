@@ -144,7 +144,7 @@ class VitalsLogRequest(BaseModel):
     blood_glucose_mg_dl: float | None = Field(None, gt=0, le=2000)
 
     @model_validator(mode="after")
-    def _validate(self) -> "VitalsLogRequest":
+    def _validate(self) -> VitalsLogRequest:
         provided = (
             self.weight_kg,
             self.blood_pressure_systolic,

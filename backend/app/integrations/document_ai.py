@@ -187,7 +187,7 @@ def parse_healthcare_document(file_bytes: bytes, *, mime_type: str = "applicatio
     from google.oauth2 import service_account
 
     sa_json = _get_service_account_json()
-    creds = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
+    creds = service_account.Credentials.from_service_account_info(
         sa_json,
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )

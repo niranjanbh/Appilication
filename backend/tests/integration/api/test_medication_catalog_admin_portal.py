@@ -12,7 +12,7 @@ from unittest.mock import patch
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.conftest import create_admin_user, create_super_admin_user
+from tests.conftest import cookie_header, create_admin_user, create_super_admin_user
 
 
 def _admin_session_cookie(user_id: uuid.UUID) -> tuple[str, str]:
@@ -62,7 +62,7 @@ async def test_catalog_create_and_list(
         "/admin/medication-catalog",
         data={"_csrf": csrf, "name": "Thyronorm 50mcg", "generic_name": "Levothyroxine",
               "form": "tablet", "strength": "50 mcg"},
-        cookies=cookies,
+        headers=cookie_header(cookies),
         follow_redirects=False,
     )
     assert resp.status_code == 302, resp.text
@@ -72,7 +72,7 @@ async def test_catalog_create_and_list(
     assert entry is not None
     assert entry.form is not None and entry.form.value == "tablet"
 
-    page = await client.get("/admin/medication-catalog", cookies=cookies)
+    page = await client.get("/admin/medication-catalog", headers=cookie_header(cookies))
     assert page.status_code == 200
     assert "Thyronorm 50mcg" in page.text
 
@@ -102,7 +102,7 @@ async def test_catalog_image_upload(
             f"/admin/medication-catalog/{entry.id}/image",
             data={"_csrf": csrf},
             files={"image": ("pill.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
-            cookies=cookies,
+            headers=cookie_header(cookies),
             follow_redirects=False,
         )
     assert resp.status_code == 302, resp.text
@@ -136,7 +136,7 @@ async def test_catalog_image_rejects_pdf(
         f"/admin/medication-catalog/{entry.id}/image",
         data={"_csrf": csrf},
         files={"image": ("x.pdf", b"%PDF-1.4", "application/pdf")},
-        cookies=cookies,
+        headers=cookie_header(cookies),
         follow_redirects=False,
     )
     assert resp.status_code == 302
@@ -156,7 +156,7 @@ async def test_read_only_admin_cannot_create(
     resp = await client.post(
         "/admin/medication-catalog",
         data={"_csrf": csrf, "name": "Metformin", "form": "tablet"},
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
         follow_redirects=False,
     )
     assert resp.status_code == 403
@@ -174,6 +174,6 @@ async def test_read_only_admin_can_view_list(
         return
     resp = await client.get(
         "/admin/medication-catalog",
-        cookies={"kyros_admin_session": cookie, "kyros_admin_csrf": csrf},
+        headers=cookie_header({"kyros_admin_session": cookie, "kyros_admin_csrf": csrf}),
     )
     assert resp.status_code == 200

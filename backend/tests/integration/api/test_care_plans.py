@@ -21,7 +21,6 @@ from tests.conftest import (
     make_auth_headers,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 _next_kid_counter = 0

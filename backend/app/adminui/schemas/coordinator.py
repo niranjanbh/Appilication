@@ -18,6 +18,7 @@ What is intentionally OMITTED from every schema here:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -90,7 +91,7 @@ class CoordinatorConsultationView(BaseModel):
 
 
 def patient_pairs(
-    rows: list[tuple[object, object]],
+    rows: Sequence[tuple[object, object]],
 ) -> list[tuple[CoordinatorPatientView, CoordinatorUserView]]:
     """(Patient, User) -> (CoordinatorPatientView, CoordinatorUserView)."""
     return [
@@ -103,7 +104,7 @@ def patient_pairs(
 
 
 def consultation_user_pairs(
-    rows: list[tuple[object, object]],
+    rows: Sequence[tuple[object, object]],
 ) -> list[tuple[CoordinatorConsultationView, CoordinatorUserView | None]]:
     """(Consultation, user_or_none) -> (CoordinatorConsultationView, CoordinatorUserView | None)."""
     return [
@@ -116,7 +117,7 @@ def consultation_user_pairs(
 
 
 def consultation_user_user_triples(
-    rows: list[tuple[object, object, object]],
+    rows: Sequence[tuple[object, object, object]],
 ) -> list[
     tuple[CoordinatorConsultationView, CoordinatorUserView, CoordinatorUserView | None]
 ]:

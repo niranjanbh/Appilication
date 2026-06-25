@@ -951,14 +951,29 @@ async def test_list_available_slots_returns_open_slots(
     assert isinstance(patient_user, UserModel)
     assert isinstance(doctor_user, UserModel)
 
+    patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     slot1 = await _create_slot(db_session, doctor, hours_from_now=24)
     slot2 = await _create_slot(db_session, doctor, hours_from_now=25)
     # slot2 is marked booked — should not appear
     slot2.status = AvailabilityStatus.BOOKED
+    # Slot listing is gated on the patient having a non-terminal consultation with
+    # this doctor (no open doctor-shopping). Link them via a scheduled consult.
+    now = datetime.now(UTC)
+    db_session.add(
+        Consultation(
+            patient_id=patient.id,
+            doctor_id=doctor.id,
+            condition_category="thyroid",
+            consultation_type="initial",
+            scheduled_start_at=now + timedelta(days=2),
+            scheduled_end_at=now + timedelta(days=2, minutes=20),
+            consultation_fee_paise=_FEE_PAISE,
+            status=ConsultationStatus.SCHEDULED,
+        )
+    )
     await db_session.flush()
 
-    now = datetime.now(UTC)
     resp = await client.get(
         "/v1/clinic/patient/consultations/slots",
         params={
