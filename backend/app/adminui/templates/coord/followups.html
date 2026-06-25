@@ -18,6 +18,13 @@
   {% elif success == 'invalid_date' %}
   <div class="alert-bar alert-bar-error">Invalid due date.</div>
   {% endif %}
+  {% if request.query_params.get('bulk_success') is not none %}
+  <div class="alert-bar alert-bar-success">
+    Completed {{ request.query_params.get('bulk_success') }} follow-up(s).{% if request.query_params.get('bulk_failed') and request.query_params.get('bulk_failed') != '0' %} {{ request.query_params.get('bulk_failed') }} failed.{% endif %}
+  </div>
+  {% elif request.query_params.get('bulk_error') %}
+  <div class="alert-bar alert-bar-error">Bulk action failed: {{ request.query_params.get('bulk_error').replace('_', ' ') }}.</div>
+  {% endif %}
 
   <!-- Create follow-up -->
   <div class="card" style="margin-bottom:20px;">
@@ -54,16 +61,38 @@
   </div>
 
   <!-- Follow-up list -->
+  <div x-data="bulkSelect()">
+    <div class="export-bar">
+      <a href="/coord/export/followups.csv?show={{ show }}" class="btn btn-secondary btn-sm">Export all CSV</a>
+    </div>
+
+    {% if show != 'done' %}
+    <div x-show="selected.length > 0" x-cloak class="bulk-bar">
+      <span x-text="selected.length + ' selected'"></span>
+      <form method="POST" action="/coord/bulk/followups" style="display:inline-flex;gap:6px;align-items:center;">
+        {{ csrf_field(request) }}
+        <input type="hidden" name="action" value="mark_complete">
+        <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
+        <button type="submit" class="btn btn-primary btn-sm"
+                @click="return confirm('Mark ' + selected.length + ' follow-up(s) complete?')">Mark complete</button>
+      </form>
+      <a :href="'/coord/export/followups.csv?show={{ show }}&ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
+      <button @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>
+    </div>
+    {% endif %}
+
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
+          {% if show != 'done' %}<th style="width:32px;"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>{% endif %}
           <th>Due</th><th>Patient</th><th>Note</th><th>Status</th><th></th>
         </tr>
       </thead>
       <tbody>
         {% for followup, user in followups %}
         <tr>
+          {% if show != 'done' %}<td><input type="checkbox" :value="'{{ followup.id }}'" @change="toggle('{{ followup.id }}')" :checked="selected.includes('{{ followup.id }}')"></td>{% endif %}
           <td style="font-size:12px;">
             {{ followup.due_at.strftime('%d %b %Y') }}
             {% if followup.status == 'pending' and followup.due_at < now %}
@@ -85,12 +114,13 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align:center;color:var(--stone);padding:20px;">
+        <tr><td colspan="{{ 6 if show != 'done' else 5 }}" style="text-align:center;color:var(--stone);padding:20px;">
           {{ 'No pending follow-ups. All caught up.' if show != 'done' else 'No completed follow-ups yet.' }}
         </td></tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
   </div>
 </div>
 {% endblock %}

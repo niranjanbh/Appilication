@@ -61,6 +61,17 @@ function formatFrequency(intervalMinutes: number | null, cron: string | null): s
   return 'As needed';
 }
 
+function todayScheduledAt(cron: string | null): string {
+  if (!cron) return new Date().toISOString();
+  const parts = cron.split(' ');
+  const hour = parseInt(parts[1] ?? '0', 10);
+  const minute = parseInt(parts[0] ?? '0', 10);
+  if (isNaN(hour) || isNaN(minute)) return new Date().toISOString();
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 function metaStr(meta: Record<string, unknown> | null, key: string): string {
   const v = meta?.[key];
   return v === null || v === undefined ? '' : String(v);
@@ -191,12 +202,14 @@ export default function ReminderDetailScreen() {
 
   function handleTaken() {
     if (!reminder) return;
-    logMutation.mutate({ rid: reminder.id, scheduledAt: new Date().toISOString(), action: 'taken' });
+    const scheduledAt = todayScheduledAt(reminder.schedule_cron);
+    logMutation.mutate({ rid: reminder.id, scheduledAt, action: 'taken' });
   }
 
   async function handleSnooze() {
     if (!reminder) return;
-    logMutation.mutate({ rid: reminder.id, scheduledAt: new Date().toISOString(), action: 'snoozed' });
+    const scheduledAt = todayScheduledAt(reminder.schedule_cron);
+    logMutation.mutate({ rid: reminder.id, scheduledAt, action: 'snoozed' });
     const snoozeAt = new Date(Date.now() + 15 * 60_000);
     await scheduleReminderNotification(reminder.id, reminder.label, snoozeAt);
   }

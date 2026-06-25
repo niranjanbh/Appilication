@@ -9,7 +9,8 @@ Security properties verified:
   - Cross-user 404 (patient cannot get another patient's join token)
   - Cross-doctor 404 (doctor cannot get another doctor's join token)
   - Audit log written for allowed and denied authorization decisions
-  - 503 returned when room is not yet provisioned (not 404)
+  - Room is provisioned on demand at join time when not pre-warmed (200 + token)
+  - 503 only when the video provider genuinely fails to create the room
   - Token is returned in stub mode when room is provisioned
 """
 
@@ -18,6 +19,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -168,10 +170,49 @@ async def test_patient_join_nonexistent_returns_404(
     assert resp.status_code == 404
 
 
-async def test_patient_join_room_not_provisioned_returns_503(
+async def test_patient_join_provisions_room_on_demand(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """A confirmed consult with no pre-warmed room is provisioned on join, not 503'd."""
     from app.models.identity import User as UserModel
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    consultation = await _create_consultation(
+        db_session, patient=patient, doctor=doctor, video_room_id=None
+    )
+
+    resp = await client.get(
+        f"/v1/clinic/patient/consultations/{consultation.id}/join",
+        headers=make_auth_headers(patient_user),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Stub mode returns a deterministic room id derived from the consultation id.
+    assert data["room_id"] == f"stub-room-{consultation.id}"
+    assert "token" in data
+
+    # The provisioned room id is now persisted on the consultation.
+    await db_session.refresh(consultation)
+    assert consultation.video_room_id == f"stub-room-{consultation.id}"
+
+
+async def test_patient_join_room_provisioning_failure_returns_503(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A genuine provider failure during on-demand provisioning still yields 503."""
+    import app.integrations.livekit_video as livekit_video
+    from app.models.identity import User as UserModel
+
+    async def _boom(*, consultation_id: str) -> str:
+        raise RuntimeError("video provider unavailable")
+
+    monkeypatch.setattr(livekit_video, "create_room", _boom)
 
     patient_user = await create_patient_user(db_session)
     doctor_user = await create_doctor_user(db_session)
@@ -573,9 +614,10 @@ async def test_doctor_join_cross_doctor_returns_404_and_audit_logs_denial(
     assert audit.reason == "not_own_or_not_found"
 
 
-async def test_doctor_join_room_not_provisioned_returns_503(
+async def test_doctor_join_provisions_room_on_demand(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """A confirmed consult with no pre-warmed room is provisioned on the doctor join."""
     from app.models.identity import User as UserModel
 
     patient_user = await create_patient_user(db_session)
@@ -586,20 +628,50 @@ async def test_doctor_join_room_not_provisioned_returns_503(
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
     await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
-    await _create_consultation(
+    consultation = await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=None
     )
 
-    # Hit a different (non-existent) consultation so we get 404 not 503
-    # We need to test the 503 path — use the real consultation with no room
-    consultations = await db_session.execute(
-        select(Consultation).where(Consultation.video_room_id.is_(None))
+    resp = await client.get(
+        f"/v1/doctor/consultations/{consultation.id}/join",
+        headers=make_auth_headers(doctor_user),
     )
-    unprovisioned = consultations.scalars().first()
-    assert unprovisioned is not None
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["room_id"] == f"stub-room-{consultation.id}"
+    assert "token" in data
+
+    await db_session.refresh(consultation)
+    assert consultation.video_room_id == f"stub-room-{consultation.id}"
+    assert consultation.status == ConsultationStatus.IN_PROGRESS
+
+
+async def test_doctor_join_room_provisioning_failure_returns_503(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A genuine provider failure during on-demand provisioning still yields 503."""
+    import app.integrations.livekit_video as livekit_video
+    from app.models.identity import User as UserModel
+
+    async def _boom(*, consultation_id: str) -> str:
+        raise RuntimeError("video provider unavailable")
+
+    monkeypatch.setattr(livekit_video, "create_room", _boom)
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
+    consultation = await _create_consultation(
+        db_session, patient=patient, doctor=doctor, video_room_id=None
+    )
 
     resp = await client.get(
-        f"/v1/doctor/consultations/{unprovisioned.id}/join",
+        f"/v1/doctor/consultations/{consultation.id}/join",
         headers=make_auth_headers(doctor_user),
     )
     assert resp.status_code == 503

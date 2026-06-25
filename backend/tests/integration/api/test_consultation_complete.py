@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -152,6 +153,66 @@ async def test_complete_consultation_confirmed_returns_409_not_in_progress(
 
     await db_session.refresh(consultation)
     assert consultation.status == ConsultationStatus.CONFIRMED
+
+
+async def test_complete_consultation_stops_active_recording(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Completing a consult with a live egress stops the recording and clears the id.
+
+    Security rule #20: a consented recording must be stoppable on demand, not left
+    to LiveKit's empty-timeout. Persisting the egress id is what makes that possible.
+    """
+    import app.integrations.livekit_video as livekit_video
+    from app.db.enums import NoteType
+    from app.models.clinic import DoctorNote
+    from app.models.identity import User as UserModel
+
+    captured: dict[str, str] = {}
+
+    async def _fake_stop(*, egress_id: str) -> None:
+        captured["egress_id"] = egress_id
+
+    monkeypatch.setattr(livekit_video, "stop_recording", _fake_stop)
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    consultation = await _create_consultation(
+        db_session,
+        patient=patient,
+        doctor=doctor,
+        status=ConsultationStatus.IN_PROGRESS,
+        actual_start_at=datetime.now(UTC),
+    )
+    # An in-flight recording, plus the doctor note completion requires.
+    consultation.recording_egress_id = "EG_test_egress_123"
+    db_session.add(
+        DoctorNote(
+            consultation_id=consultation.id,
+            doctor_id=doctor.id,
+            patient_id=patient.id,
+            note_type=NoteType.CLINICAL,
+            content="Reviewed; plan documented.",
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/complete",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 200, resp.text
+
+    # stop_recording was called with the persisted egress id, and it was cleared.
+    assert captured.get("egress_id") == "EG_test_egress_123"
+    await db_session.refresh(consultation)
+    assert consultation.status == ConsultationStatus.COMPLETED
+    assert consultation.recording_egress_id is None
 
 
 async def test_complete_consultation_cross_doctor_returns_404(

@@ -288,3 +288,40 @@ Still pending:
 - Running tests (make test)
 
 Want me to continue with Care Plans?
+
+
+
+Both follow-ups are complete and consistent. Summary:
+
+1) Admin patient typeahead search (replaced the 200-row dropdown)
+
+- admin_repo.search_patients(query, ...) — matches patient name or Kyros ID substring (capped at 20).
+- GET /admin/consultations/patient-search t (admin/_patient_options.html).
+- The on-demand form's patient field is now an HTMX typeahead (hx-trigger="input changed delay:300ms") that
+populates the select. The old list_patient
+
+2) Staff "Join" support seats
+
+- livekit_video.generate_staff_token(room_th a visible role identity("coordinator"/"admin"), publish+subscribe but no moderation/recording rights (only doctors get those).
+- Coordinator GET /coord/scheduling/{id}/j patients (miss → audited 404, noenumeration), ensures the room is provisioned, mints the token.
+- Admin GET /admin/consultations/{id}/join ensures the room.
+- Join pages coord/video_room.html + admin/video_room.html (separate per the no-shared-template rule) load the LiveKit web SDK and connect.
+- "Join" buttons added to both upcoming-consultations lists, shown only for CONFIRMED/IN_PROGRESS; not_joinable
+alert bars added.
+- Test for the staff-token identity; dev-to-prod row added for the SDK.
+
+Two things you should weigh
+
+- Compliance (flagged, not assumed): a coordinator/admin in a live clinical call is the "support seat" the room
+cap was designed for, and I made it visiblhe doctor as room admin sees everyparticipant). Before production use, confirm the patient/doctor are aware of/consent to a support participant, per
+telemedicine norms. I deliberately did not
+- SDK vendoring: the Jinja portals have no WebRTC client, so the join page needs livekit-client.umd.min.js
+vendored to {admin,coord}/static/vendor/ (in-ui rule). Added to the dev-to-prodchecklist. Until it's dropped in, the join page shows "video client unavailable" — the backend (token, scoping,
+audit, room provisioning) is fully wired a
+
+Verification
+
+Python syntax + Jinja template parsing pasn't run pytest/ruff/mypy or a browser here(no Docker) — please run make test && make ruff && make mypy, and note the JS join page itself is unverified
+end-to-end (it's standard LiveKit client cit). Migrations 0010 + 0011 still needapplying before boot.
+
+Added the LiveKit web SDK vendoring to the dev-to-prod checklist — you'll need a production value (the bundled SDK file) before go-live.

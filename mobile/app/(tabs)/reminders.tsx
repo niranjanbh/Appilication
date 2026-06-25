@@ -57,6 +57,17 @@ function formatCronFreq(intervalMinutes: number | null, cron: string | null): st
   return 'As needed';
 }
 
+function todayScheduledAt(cron: string | null): string {
+  if (!cron) return new Date().toISOString();
+  const parts = cron.split(' ');
+  const hour = parseInt(parts[1] ?? '0', 10);
+  const minute = parseInt(parts[0] ?? '0', 10);
+  if (isNaN(hour) || isNaN(minute)) return new Date().toISOString();
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 
 // ── Adherence dialog ──────────────────────────────────────────────────────────
 
@@ -138,8 +149,8 @@ export default function RemindersScreen() {
   }>({ visible: false, reminderId: '', scheduledAt: '', label: '' });
 
   const notifListenerRef = useRef<{ remove: () => void } | null>(null);
+  const remindersRef = useRef<Reminder[]>([]);
 
-  // Preserve 100% of existing notification and adherence logic
   useEffect(() => {
     registerNotificationCategories();
     requestNotificationPermissions();
@@ -149,13 +160,13 @@ export default function RemindersScreen() {
           logMutation.mutate({ reminderId, scheduledAt, action });
         } else if (action === 'snoozed') {
           logMutation.mutate({ reminderId, scheduledAt, action });
-          const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+          const reminder = remindersRef.current.find(r => r.id === reminderId);
           if (reminder) {
             const snoozeAt = new Date(Date.now() + 15 * 60_000);
             void scheduleReminderNotification(reminderId, reminder.label, snoozeAt);
           }
         } else {
-          const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+          const reminder = remindersRef.current.find(r => r.id === reminderId);
           setAdherenceState({ visible: true, reminderId, scheduledAt, label: reminder?.label ?? 'Reminder' });
         }
       },
@@ -165,6 +176,9 @@ export default function RemindersScreen() {
   }, []);
 
   const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: listRemindersApi, staleTime: 60_000 });
+  useEffect(() => {
+    remindersRef.current = remindersQuery.data?.reminders ?? [];
+  }, [remindersQuery.data]);
   const selectedIso = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
   const summaryQuery = useQuery({ queryKey: ['daily-summary', selectedIso], queryFn: () => getDailySummaryApi(selectedIso), staleTime: 60_000 });
   const weekSunday = new Date(selectedDate);
@@ -243,13 +257,13 @@ export default function RemindersScreen() {
     ]);
   }
   function handleTakeNow(r: Reminder) {
-    const scheduledAt = new Date().toISOString();
+    const scheduledAt = todayScheduledAt(r.schedule_cron);
     logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'taken' as ReminderAction });
   }
   async function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
     if (action === 'snoozed') {
-      const reminder = remindersQuery.data?.reminders.find(r => r.id === reminderId);
+      const reminder = remindersRef.current.find(r => r.id === reminderId);
       if (reminder) {
         const snoozeAt = new Date(Date.now() + 15 * 60_000);
         await scheduleReminderNotification(reminderId, reminder.label, snoozeAt);

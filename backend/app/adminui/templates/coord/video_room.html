@@ -1,0 +1,80 @@
+{% extends "coord/base.html" %}
+{% block title %}Consultation room — Kyros Coordinator{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Consultation room</h2>
+  <a href="{{ back_url }}" class="btn btn-secondary btn-sm">← Back to scheduling</a>
+</div>
+<div class="page-body">
+  <div class="alert-bar" style="background:#fff7e6;border:1px solid #e8d6a8;color:#6b5a2a;">
+    You are joining as a visible <strong>support participant</strong> ({{ role }}). The doctor
+    and patient can see that you are present. Do not record; only the doctor may.
+  </div>
+
+  <div id="lk-status" style="font-size:13px;color:var(--stone);margin:12px 0;">Connecting…</div>
+
+  <div id="lk-tiles" style="display:flex;flex-wrap:wrap;gap:12px;">
+    <div class="tile" style="position:relative;">
+      <div id="lk-local" style="width:320px;height:240px;background:#11150f;border-radius:8px;overflow:hidden;"></div>
+      <div style="position:absolute;bottom:6px;left:8px;color:#fff;font-size:12px;">You ({{ role }})</div>
+    </div>
+    <div id="lk-remotes" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
+  </div>
+
+  <div style="margin-top:16px;">
+    <button id="lk-leave" class="btn btn-danger btn-sm">Leave room</button>
+  </div>
+
+  <p style="font-size:11px;color:var(--stone);margin-top:12px;">
+    Room: {{ room_id }}
+  </p>
+</div>
+
+<!-- LiveKit web SDK must be vendored to this path (see dev-to-prod checklist). -->
+<script src="/coord/static/vendor/livekit-client.umd.min.js"></script>
+<script>
+  {% set cfg = {"wsUrl": ws_url, "token": token, "room": room_id} %}
+  const LK_CFG = {{ cfg | tojson }};
+  (async function () {
+    const status = document.getElementById("lk-status");
+    if (typeof LivekitClient === "undefined") {
+      status.textContent = "Video client unavailable — the LiveKit SDK is not loaded.";
+      return;
+    }
+    const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, function (track, _pub, participant) {
+      const wrap = document.createElement("div");
+      wrap.style.position = "relative";
+      const el = track.attach();
+      el.style.width = "320px"; el.style.height = "240px";
+      el.style.background = "#11150f"; el.style.borderRadius = "8px"; el.style.objectFit = "cover";
+      const label = document.createElement("div");
+      label.style.cssText = "position:absolute;bottom:6px;left:8px;color:#fff;font-size:12px;";
+      label.textContent = participant.identity;
+      wrap.appendChild(el); wrap.appendChild(label);
+      wrap.dataset.sid = participant.sid;
+      document.getElementById("lk-remotes").appendChild(wrap);
+    });
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, function (track) {
+      track.detach().forEach(function (e) { const p = e.closest("[data-sid]"); if (p) p.remove(); });
+    });
+    room.on(LivekitClient.RoomEvent.Disconnected, function () { status.textContent = "Disconnected."; });
+
+    try {
+      await room.connect(LK_CFG.wsUrl, LK_CFG.token);
+      status.textContent = "Connected to the consultation room.";
+      await room.localParticipant.enableCameraAndMicrophone();
+      const cam = room.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera);
+      if (cam && cam.track) { document.getElementById("lk-local").appendChild(cam.track.attach()); }
+    } catch (err) {
+      status.textContent = "Could not join the room. Please try again.";
+    }
+
+    document.getElementById("lk-leave").addEventListener("click", function () {
+      room.disconnect();
+      window.location.href = "{{ back_url }}";
+    });
+  })();
+</script>
+{% endblock %}

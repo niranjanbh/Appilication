@@ -330,3 +330,93 @@ export function addNotificationResponseListener(
     return { remove: () => {} };
   }
 }
+
+// ── Remote push deep-linking ────────────────────────────────────────────────
+
+/** Data payload attached to remote (server-sent) push notifications. */
+export interface PushNotificationData {
+  template_name?: string;
+  resource_id?: string;
+  // Legacy keys also sent by the backend; resource_id is preferred.
+  id?: string;
+  screen?: string;
+}
+
+/**
+ * Map a remote push payload to an in-app route. Local medication-reminder
+ * notifications (which carry `reminderId` and adherence action buttons) are
+ * intentionally ignored here — they are handled by addNotificationResponseListener.
+ * Returns null when the response is a local reminder or has no usable payload.
+ */
+export function routeForPushData(data: PushNotificationData | undefined): string | null {
+  if (!data) return null;
+  const template = data.template_name;
+  const resourceId = data.resource_id ?? data.id;
+
+  switch (template) {
+    case 'appointment_confirmation':
+    case 'appointment_reminder':
+    case 'doctor_assigned':
+      return resourceId ? `/consultations/${resourceId}` : '/consultations';
+    case 'lab_result_ready':
+    case 'pre_consult_report_ready':
+      return '/(tabs)/reports';
+    case 'medication_reminder':
+      return '/(tabs)/reminders';
+    default:
+      return '/(tabs)/notifications';
+  }
+}
+
+/**
+ * Listen for taps on remote push notifications and navigate via the supplied
+ * router. Local medication-reminder taps (identified by a `reminderId` in the
+ * payload) are skipped so they don't double-handle with the adherence listener.
+ * No-op on web / Expo Go. Returns a subscription with remove().
+ */
+export function addPushDeepLinkListener(
+  navigate: (route: string) => void,
+): NotificationResponseListener {
+  if (!isAvailable()) return { remove: () => {} };
+  try {
+    const Notifications = require('expo-notifications');
+    const sub = Notifications.addNotificationResponseReceivedListener(
+      (response: {
+        notification: { request: { content: { data: Record<string, unknown> } } };
+      }) => {
+        const data = response.notification.request.content.data;
+        // Skip local reminder notifications — handled elsewhere.
+        if (data && typeof data.reminderId === 'string') return;
+        const route = routeForPushData(data as PushNotificationData);
+        if (route) navigate(route);
+      },
+    );
+    return { remove: () => sub.remove() };
+  } catch {
+    return { remove: () => {} };
+  }
+}
+
+/**
+ * Handle a notification tap that cold-started the app (app was killed, opened
+ * via a push). Reads the last notification response on mount and navigates.
+ * Local reminder taps are skipped. No-op on web / Expo Go.
+ */
+export async function handleInitialPushNotification(
+  navigate: (route: string) => void,
+): Promise<void> {
+  if (!isAvailable()) return;
+  try {
+    const Notifications = require('expo-notifications');
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (!response) return;
+    const data = response.notification?.request?.content?.data as
+      | Record<string, unknown>
+      | undefined;
+    if (data && typeof data.reminderId === 'string') return;
+    const route = routeForPushData(data as PushNotificationData);
+    if (route) navigate(route);
+  } catch {
+    // ignore — best-effort deep link on cold start.
+  }
+}

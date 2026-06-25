@@ -1,4 +1,5 @@
 {% extends "coord/base.html" %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Patients — Kyros Coordinator{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -20,17 +21,68 @@
 {% if error %}
 <div class="alert-bar alert-bar-error" style="margin:16px 32px 0;">{{ error }}</div>
 {% endif %}
+{% if request.query_params.get('bulk_success') is not none %}
+<div class="alert-bar alert-bar-success" style="margin:16px 32px 0;">
+  Applied to {{ request.query_params.get('bulk_success') }} patient(s).{% if request.query_params.get('bulk_failed') and request.query_params.get('bulk_failed') != '0' %} {{ request.query_params.get('bulk_failed') }} failed.{% endif %}
+</div>
+{% elif request.query_params.get('bulk_error') %}
+<div class="alert-bar alert-bar-error" style="margin:16px 32px 0;">Bulk action failed: {{ request.query_params.get('bulk_error').replace('_', ' ') }}.</div>
+{% endif %}
 
-<div class="table-wrap" style="margin:16px 32px;">
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Phone</th><th>Conditions</th><th>Intake</th><th></th>
-      </tr>
-    </thead>
-    <tbody id="patients-tbody">
-      {% include "coord/_patient_rows.html" %}
-    </tbody>
-  </table>
+<!-- x-data on the page wrapper so selection survives HTMX row swaps in #patients-tbody. -->
+<div x-data="bulkSelect()" style="margin:16px 32px;">
+  <div class="export-bar">
+    <a href="/coord/export/patients.csv" class="btn btn-secondary btn-sm">Export all CSV</a>
+  </div>
+
+  <div x-show="selected.length > 0" x-cloak class="bulk-bar">
+    <span x-text="selected.length + ' selected'"></span>
+    <!-- Bulk send pre-approved message -->
+    <form method="POST" action="/coord/bulk/patients" style="display:inline-flex;gap:6px;align-items:center;">
+      {{ csrf_field(request) }}
+      <input type="hidden" name="action" value="send_message">
+      <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
+      <select name="channel" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;">
+        <option value="whatsapp">WhatsApp</option>
+        <option value="email">Email</option>
+      </select>
+      <select name="template_key" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;">
+        <option value="">Message…</option>
+        <option value="booking_confirmation">Booking confirmation</option>
+        <option value="reminder_24h">Reminder (24h)</option>
+        <option value="reminder_1h">Reminder (1h)</option>
+        <option value="post_consult_followup">Post-consult follow-up</option>
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm"
+              @click="return confirm('Send message to ' + selected.length + ' patient(s)?')">Send</button>
+    </form>
+    <!-- Bulk create follow-up -->
+    <form method="POST" action="/coord/bulk/patients" style="display:inline-flex;gap:6px;align-items:center;">
+      {{ csrf_field(request) }}
+      <input type="hidden" name="action" value="create_followup">
+      <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
+      <input type="date" name="due_date" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;">
+      <input type="text" name="note" required maxlength="500" placeholder="Follow-up note (operational only)…"
+             style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:220px;">
+      <button type="submit" class="btn btn-primary btn-sm"
+              @click="return confirm('Create follow-up for ' + selected.length + ' patient(s)?')">Add</button>
+    </form>
+    <a :href="'/coord/export/patients.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
+    <button @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32px;"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
+          <th>Name</th><th>Phone</th><th>Conditions</th><th>Intake</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="patients-tbody">
+        {% include "coord/_patient_rows.html" %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

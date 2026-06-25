@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from app.adminui.deps import verify_csrf
 from app.adminui.views.coord.auth import router as auth_router
+from app.adminui.views.coord.bulk_actions import router as bulk_actions_router
 from app.adminui.views.coord.communication import router as communication_router
 from app.adminui.views.coord.dashboard import router as dashboard_router
 from app.adminui.views.coord.followups import router as followups_router
@@ -29,3 +30,4 @@ coord_router.include_router(inquiries_router, dependencies=_csrf)
 coord_router.include_router(scheduling_router, dependencies=_csrf)
 coord_router.include_router(followups_router, dependencies=_csrf)
 coord_router.include_router(communication_router, dependencies=_csrf)
+coord_router.include_router(bulk_actions_router, dependencies=_csrf)

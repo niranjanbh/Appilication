@@ -22,7 +22,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { name: 'home',          title: 'Home',       headerTitle: 'Your plan',      active: 'home',                inactive: 'home-outline' },
+  { name: 'home',          title: 'Home',       headerTitle: 'Your kyros journey',      active: 'home',                inactive: 'home-outline' },
   { name: 'consultations', title: 'Care',       headerTitle: 'Care',           active: 'heart',               inactive: 'heart-outline' },
   { name: 'reports',       title: 'Records',    headerTitle: 'Records',        active: 'folder-open',         inactive: 'folder-open-outline' },
   { name: 'reminders',     title: 'Reminders',  headerTitle: 'Reminders',      active: 'alarm',               inactive: 'alarm-outline' },

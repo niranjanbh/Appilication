@@ -1,0 +1,56 @@
+{# Reusable macros for admin multi-select bulk actions + CSV export.
+
+   bulk_flash(request)            — renders the bulk_success/bulk_failed banner.
+   bulk_bar(request, entity, actions, label, export_qs)
+                                  — the selection action bar + "export selected".
+   export_all(entity, qs)         — the always-visible "Export all as CSV" bar.
+
+   `actions` is a list of (value, label) tuples; empty list => no action form
+   (read-only tables that still support CSV export, e.g. consultations/payments).
+   `entity` is the URL segment (users, doctors, ...). `export_qs` carries the
+   current filter onto the export-all link. The id list is injected by Alpine
+   from the retained `selected` array. #}
+
+{% from "_csrf.html" import csrf_field %}
+
+{% macro bulk_flash(request) -%}
+{% set bs = request.query_params.get('bulk_success') %}
+{% set bf = request.query_params.get('bulk_failed') %}
+{% if bs is not none or bf is not none %}
+<div class="alert-bar {{ 'alert-bar-error' if (bf and bf != '0') else 'alert-bar-success' }}" style="margin-bottom:14px;">
+  Bulk action complete: {{ bs or 0 }} succeeded{% if bf and bf != '0' %}, {{ bf }} failed{% endif %}.
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro bulk_bar(request, entity, actions, label, export_qs) -%}
+<div x-show="selected.length > 0" x-cloak class="bulk-bar">
+  <span class="bulk-count" x-text="selected.length + ' selected'"></span>
+  {% if actions %}
+  <form method="post" action="/admin/bulk/{{ entity }}"
+        @submit="return confirm('Apply this action to ' + selected.length + ' {{ label }}?')">
+    {{ csrf_field(request) }}
+    <template x-for="id in selected" :key="id">
+      <input type="hidden" name="ids" :value="id">
+    </template>
+    <select name="action" required>
+      <option value="">Choose action…</option>
+      {% for value, text in actions %}
+      <option value="{{ value }}">{{ text }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-danger btn-sm">Apply</button>
+  </form>
+  {% endif %}
+  <a class="btn btn-secondary btn-sm"
+     :href="'/admin/export/{{ entity }}.csv?ids=' + selected.join(',')">Export selected CSV</a>
+  <button type="button" class="btn btn-ghost btn-sm" @click="clearAll()">Clear</button>
+</div>
+{%- endmacro %}
+
+{% macro export_all(entity, qs) -%}
+<div class="export-bar">
+  <a href="/admin/export/{{ entity }}.csv{% if qs %}?{{ qs }}{% endif %}"
+     class="btn btn-secondary btn-sm">Export all as CSV</a>
+</div>
+{%- endmacro %}

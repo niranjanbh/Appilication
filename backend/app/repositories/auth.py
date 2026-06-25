@@ -67,6 +67,43 @@ async def revoke_all_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
     return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
 
+async def revoke_same_device_sessions(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    user_agent: str | None,
+) -> int:
+    """Revoke active sessions from the same device (matched by user_agent).
+
+    Called before minting a new session on login so the same device doesn't
+    accumulate duplicate session entries in the linked-devices list.
+    """
+    if not user_agent:
+        return 0
+    now = datetime.now(UTC)
+    # Find distinct session_ids with matching user_agent that are still live.
+    sub = (
+        select(RefreshToken.session_id)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.user_agent == user_agent,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .distinct()
+        .subquery()
+    )
+    result = await db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.session_id.in_(select(sub.c.session_id)),
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    return result.rowcount  # type: ignore[attr-defined, no-any-return]
+
+
 async def list_active_sessions_for_user(
     db: AsyncSession, *, user_id: uuid.UUID
 ) -> list[dict[str, object]]:

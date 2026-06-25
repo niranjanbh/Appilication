@@ -148,6 +148,20 @@ async def update_content_status(
     return result.scalar_one_or_none()
 
 
+async def delete_content(db: AsyncSession, content_id: uuid.UUID) -> bool:
+    """Hard-delete a content row (kc_education_content has no soft-delete column).
+
+    kc_education_assignments FKs CASCADE, so any patient assignments of this
+    piece are removed too. Used by the admin bulk-delete action.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    result = await db.execute(
+        sa_delete(EducationContent).where(EducationContent.id == content_id)
+    )
+    return bool(result.rowcount > 0)  # type: ignore[attr-defined]
+
+
 # ── State-machine transitions (P37) ──────────────────────────────────────────
 # All functions filter on both id AND current status. Returning None means either
 # "not found" or "wrong state" — caller raises the same 409/404 in both cases.

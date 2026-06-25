@@ -156,7 +156,15 @@ def verify_payment_signature(
     Razorpay signs "{order_id}|{payment_id}" with the key secret using HMAC-SHA256.
     """
     if not settings.razorpay_key_secret:
+        # Dev/test bypass: no key secret configured, so we cannot verify the
+        # signature. Production refuses to boot without this secret (see
+        # Settings._refuse_unsafe_production_config), so reaching here means dev mode.
+        logger.warning(
+            "razorpay_key_secret_not_configured_skipping_signature_check",
+            razorpay_order_id=razorpay_order_id,
+        )
         return True  # dev stub — always pass when unconfigured
+
     message = f"{razorpay_order_id}|{razorpay_payment_id}".encode()
     expected = hmac.new(
         settings.razorpay_key_secret.encode(), message, hashlib.sha256

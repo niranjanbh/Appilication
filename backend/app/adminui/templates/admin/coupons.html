@@ -1,11 +1,14 @@
 {% extends "admin/base.html" %}
 {% from "_csrf.html" import csrf_field %}
+{% from "admin/_bulk.html" import bulk_flash, bulk_bar, export_all %}
 {% block title %}Coupons — Kyros Clinic Admin{% endblock %}
 {% block content %}
 {% set is_super = admin and admin.role.value == 'super_admin' %}
 <div class="page-header">
   <h2>Coupons <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
 </div>
+
+{{ bulk_flash(request) }}
 
 {% if success == 'created' %}
 <div class="alert-bar alert-bar-success" style="margin-bottom:14px;">Coupon created.</div>
@@ -32,10 +35,15 @@
   </div>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {% if is_super %}
+  {{ bulk_bar(request, 'coupons', [('activate', 'Activate selected'), ('deactivate', 'Deactivate selected'), ('delete', 'Delete selected')], 'coupons', 'active_only=' ~ active_only) }}
+  {% endif %}
+  {{ export_all('coupons', 'active_only=' ~ active_only) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Code</th><th>Discount</th><th>Min order</th><th>Redemptions</th>
         <th>Valid from</th><th>Valid until</th><th>Status</th>{% if is_super %}<th></th>{% endif %}
       </tr>
@@ -43,6 +51,7 @@
     <tbody>
       {% for c in items %}
       <tr>
+        <td><input type="checkbox" data-bulk-id="{{ c.id }}" :checked="isChecked('{{ c.id }}')" @change="toggle('{{ c.id }}')"></td>
         <td>
           <strong style="font-size:13px;">{{ c.code }}</strong>
           {% if c.description %}<div style="font-size:11px;color:var(--stone);">{{ c.description }}</div>{% endif %}
@@ -71,7 +80,7 @@
         {% endif %}
       </tr>
       {% else %}
-      <tr><td colspan="{{ 8 if is_super else 7 }}" style="text-align:center;color:var(--stone);padding:20px;">No coupons found.</td></tr>
+      <tr><td colspan="{{ 9 if is_super else 8 }}" style="text-align:center;color:var(--stone);padding:20px;">No coupons found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

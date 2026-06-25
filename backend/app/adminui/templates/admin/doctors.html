@@ -1,9 +1,12 @@
 {% extends "admin/base.html" %}
+{% from "admin/_bulk.html" import bulk_flash, bulk_bar, export_all %}
 {% block title %}Doctors — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
   <h2>Doctors <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
 </div>
+
+{{ bulk_flash(request) }}
 
 <form class="filter-bar"
       hx-get="/admin/doctors"
@@ -28,10 +31,15 @@
   <a href="/admin/doctors/pipeline" class="btn btn-secondary">View pipeline</a>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {% if admin and admin.role.value == 'super_admin' %}
+  {{ bulk_bar(request, 'doctors', [('suspend', 'Suspend selected'), ('reactivate', 'Reactivate selected')], 'doctors', 'search=' ~ search ~ '&status_filter=' ~ status_filter) }}
+  {% endif %}
+  {{ export_all('doctors', 'search=' ~ search ~ '&status_filter=' ~ status_filter) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Name</th><th>NMC reg</th><th>Specialty</th><th>Status</th><th>Revenue share</th><th></th>
       </tr>
     </thead>

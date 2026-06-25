@@ -17,6 +17,7 @@ from app.adminui.schemas import coordinator as coord_schemas
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, PaymentStatus
 from app.db.session import get_db
+from app.repositories import admin_portal as admin_repo
 from app.repositories import coordinator_portal as coord_repo
 
 router = APIRouter()
@@ -55,8 +56,8 @@ async def scheduling_view(
     if coordinator is None:
         return templates.TemplateResponse(
             request, "coord/scheduling.html",
-            {"coord": coord, "slots": [], "patients": [], "conditions": _CONDITIONS,
-             "error": "No coordinator profile."},
+            {"coord": coord, "slots": [], "patients": [], "doctors": [],
+             "conditions": _CONDITIONS, "error": "No coordinator profile."},
         )
 
     now = datetime.now(UTC)
@@ -69,6 +70,7 @@ async def scheduling_view(
     requests = await coord_repo.list_requested_consultations(
         db, coordinator_id=coordinator.id
     )
+    doctors = await admin_repo.list_active_doctors(db)
 
     return templates.TemplateResponse(
         request,
@@ -79,6 +81,7 @@ async def scheduling_view(
             # Slots carry doctor scheduling data only — no patient clinical content.
             "slots": slots,
             "patients": coord_schemas.patient_pairs(patients),
+            "doctors": doctors,
             "upcoming": coord_schemas.consultation_user_user_triples(upcoming),
             "requests": coord_schemas.consultation_user_pairs(requests),
             "conditions": _CONDITIONS,
@@ -146,6 +149,161 @@ async def book_consultation(
     await _notify_patient_booked(db, consultation_id=consultation.id)
 
     return RedirectResponse(url="/coord/scheduling?success=booked", status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/scheduling/on-demand")
+async def create_on_demand_consultation(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+    patient_id: uuid.UUID = Form(...),
+    doctor_id: uuid.UUID = Form(...),
+    condition_category: str = Form(...),
+    max_participants: int = Form(6),
+) -> RedirectResponse:
+    """Start an instant video consultation between an assigned patient and a doctor.
+
+    Scoped to the coordinator's assigned patients: an unassigned patient yields the
+    same redirect as 'not found' (no enumeration). Free and CONFIRMED on creation;
+    the room is provisioned immediately and both parties are notified to join.
+    """
+    from app.models.identity import User as UserModel
+    from app.services import consultation_service
+
+    assert isinstance(coord, UserModel)
+    ctx = _ctx(request, coord)
+
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    if condition_category not in _CONDITIONS:
+        return RedirectResponse(
+            url="/coord/scheduling?error=invalid_condition",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    # Resource scope: the patient must be assigned to this coordinator. A miss is
+    # audited as a denial and redirected identically to a real 'not assigned'.
+    assignment = await coord_repo.get_assigned_patient(
+        db, coordinator_id=coordinator.id, patient_id=patient_id
+    )
+    if assignment is None:
+        await write_audit(
+            db, ctx, action="coord_create_on_demand_consultation",
+            resource_type="consultation", resource_id=None,
+            allowed=False, reason="patient_not_assigned",
+        )
+        await db.commit()
+        return RedirectResponse(
+            url="/coord/scheduling?error=patient_not_assigned",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    try:
+        consultation = await consultation_service.create_on_demand_consultation(
+            db,
+            patient_id=patient_id,
+            doctor_id=doctor_id,
+            condition_category=condition_category,
+            coordinator_id=coordinator.id,
+            max_participants=max_participants,
+        )
+    except consultation_service.ConsultationError as exc:
+        await write_audit(
+            db, ctx, action="coord_create_on_demand_consultation",
+            resource_type="consultation", resource_id=None,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/coord/scheduling?error={exc.code}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await write_audit(
+        db, ctx, action="coord_create_on_demand_consultation",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+    )
+    return RedirectResponse(
+        url="/coord/scheduling?success=on_demand_started",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/scheduling/{consultation_id}/join-room", response_class=HTMLResponse)
+async def join_room(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+) -> HTMLResponse | RedirectResponse:
+    """Join the video room of an assigned patient's consultation as a support seat.
+
+    Scoped to the coordinator's assigned patients (a miss is audited and 404s, no
+    enumeration). The room is provisioned if needed, then a visible-identity staff
+    token is minted — the coordinator's presence is never covert.
+    """
+    from app.core.config import settings
+    from app.db.enums import ConsultationStatus
+    from app.integrations import livekit_video
+    from app.models.clinic import Consultation
+    from app.models.identity import User as UserModel
+    from app.services import consultation_service
+
+    assert isinstance(coord, UserModel)
+    ctx = _ctx(request, coord)
+
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    consultation = await db.get(Consultation, consultation_id)
+    assignment = None
+    if consultation is not None and consultation.deleted_at is None:
+        assignment = await coord_repo.get_assigned_patient(
+            db, coordinator_id=coordinator.id, patient_id=consultation.patient_id
+        )
+    if consultation is None or assignment is None:
+        await write_audit(
+            db, ctx, action="coord_join_consultation_room",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason="not_assigned_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    if consultation.status not in (
+        ConsultationStatus.CONFIRMED,
+        ConsultationStatus.IN_PROGRESS,
+    ):
+        return RedirectResponse(
+            url="/coord/scheduling?error=not_joinable",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    room_id = await consultation_service.ensure_video_room(
+        db, consultation_id=consultation.id
+    )
+    token = livekit_video.generate_staff_token(
+        room_id=room_id, user_id=str(coord.id), role="coordinator"
+    )
+    await write_audit(
+        db, ctx, action="coord_join_consultation_room",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+    )
+    return templates.TemplateResponse(
+        request,
+        "coord/video_room.html",
+        {
+            "coord": coord,
+            "room_id": room_id,
+            "token": token,
+            "ws_url": settings.livekit_host,
+            "role": "coordinator",
+            "back_url": "/coord/scheduling",
+        },
+    )
 
 
 @router.post("/scheduling/{consultation_id}/assign")

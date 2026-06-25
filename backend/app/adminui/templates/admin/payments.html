@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_bulk.html" import bulk_bar, export_all %}
 {% block title %}Payments — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -34,10 +35,13 @@
   <button type="submit" class="btn btn-primary">Filter</button>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {{ bulk_bar(request, 'payments', [], 'payments', 'status_filter=' ~ status_filter ~ '&search=' ~ search) }}
+  {{ export_all('payments', 'status_filter=' ~ status_filter ~ '&search=' ~ search) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Date</th><th>Payer</th><th>Amount</th><th>Status</th><th>Razorpay order</th><th>Invoice</th><th></th>
       </tr>
     </thead>

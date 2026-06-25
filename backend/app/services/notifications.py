@@ -151,7 +151,12 @@ async def notify_appointment_confirmed(
     channels_sent: list[str] = []
     title = "Appointment confirmed"
     body = "Your Kyros appointment is confirmed. See you soon!"
-    data = {"screen": "consultation", "id": str(consultation_id)}
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "appointment_confirmation",
+        "resource_id": str(consultation_id),
+    }
 
     if _pref(prefs, "push"):
         _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
@@ -251,7 +256,12 @@ async def notify_doctor_assigned(
     time_str = _ist_str(row.scheduled_start_at)
     title = "A specialist has been assigned"
     body = f"Your consultation is scheduled for {time_str}. Pay now to confirm your appointment."
-    data = {"screen": "consultation", "id": str(consultation_id)}
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "doctor_assigned",
+        "resource_id": str(consultation_id),
+    }
 
     channels_sent: list[str] = []
     if _pref(prefs, "push"):
@@ -268,6 +278,93 @@ async def notify_doctor_assigned(
         channels=channels_sent or ["inbox"],
         data=data,
     )
+
+
+# ── On-demand consultation (staff-initiated, join now) ─────────────────────────
+
+
+async def notify_on_demand_consultation(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Tell the patient (push + inbox) and doctor (email) an on-demand consult is ready.
+
+    Staff started this consultation directly; both parties should join now. No
+    clinical content travels on any channel.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.doctor import Doctor
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                Consultation.scheduled_start_at,
+                User.name,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning(
+            "notify_on_demand_consultation.consultation_not_found",
+            consultation_id=str(consultation_id),
+        )
+        return
+
+    prefs = row.notification_preferences or {}
+    title = "Your consultation is ready"
+    body = "Your doctor is ready for a video consultation now. Tap to join."
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "on_demand_consultation",
+        "resource_id": str(consultation_id),
+    }
+
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="on_demand_consultation",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
+
+    # Tell the doctor by email — generic, no patient details (external channel).
+    doctor_row = (
+        await db.execute(
+            select(User.name, User.email)
+            .join(Doctor, Doctor.user_id == User.id)
+            .join(Consultation, Consultation.doctor_id == Doctor.id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if doctor_row is not None and doctor_row.email:
+        _dispatch_email(
+            to_email=doctor_row.email,
+            subject="An on-demand consultation is ready to join",
+            html_body=render_email(
+                "doctor_new_booking",
+                first_name=_first_name(doctor_row.name),
+                time_str=_ist_str(row.scheduled_start_at),
+            ),
+        )
 
 
 # ── Staff alerts (ops inbox) ──────────────────────────────────────────────────
@@ -338,7 +435,12 @@ async def notify_appointment_reminder(
     channels_sent: list[str] = []
     title = "Appointment tomorrow"
     body = "Your Kyros appointment is tomorrow. Tap to view details."
-    data = {"screen": "consultation", "id": str(consultation_id)}
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "appointment_reminder",
+        "resource_id": str(consultation_id),
+    }
 
     if _pref(prefs, "push"):
         _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
@@ -414,7 +516,12 @@ async def notify_lab_result_ready(
     channels_sent: list[str] = []
     title = "Lab results ready"
     body = "Your lab report has been processed and is ready to view."
-    data = {"screen": "report", "id": str(lab_report_id)}
+    data = {
+        "screen": "report",
+        "id": str(lab_report_id),
+        "template_name": "lab_result_ready",
+        "resource_id": str(lab_report_id),
+    }
 
     if _pref(prefs, "push"):
         _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
@@ -480,7 +587,12 @@ async def notify_pre_consult_report_ready(
     channels_sent: list[str] = []
     title = "Your pre-appointment report is ready"
     body = "Your doctor will review your health summary before the consultation."
-    data = {"screen": "pre_consult_report", "id": str(consultation_id)}
+    data = {
+        "screen": "pre_consult_report",
+        "id": str(consultation_id),
+        "template_name": "pre_consult_report_ready",
+        "resource_id": str(consultation_id),
+    }
 
     if _pref(prefs, "push"):
         _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
@@ -538,7 +650,7 @@ async def notify_medication_reminder(
     channels_sent: list[str] = []
     title = "Medication reminder"
     body = f"Hi {first}, time for your scheduled medication. Tap to log it."
-    data = {"screen": "reminders"}
+    data = {"screen": "reminders", "template_name": "medication_reminder"}
 
     if _pref(prefs, "push"):
         _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)

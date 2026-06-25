@@ -1,5 +1,6 @@
 {% for user in users %}
 <tr>
+  <td><input type="checkbox" data-bulk-id="{{ user.id }}" :checked="isChecked('{{ user.id }}')" @change="toggle('{{ user.id }}')"></td>
   <td><a href="/admin/users/{{ user.id }}">{{ user.name }}</a></td>
   <td style="color:var(--stone)">{{ user.phone or '—' }}</td>
   <td style="color:var(--stone);font-size:12px;">{{ user.email or '—' }}</td>
@@ -15,5 +16,5 @@
   <td><a href="/admin/users/{{ user.id }}" class="btn btn-secondary btn-sm">View</a></td>
 </tr>
 {% else %}
-<tr><td colspan="7" style="text-align:center;color:var(--stone);padding:20px;">No users found.</td></tr>
+<tr><td colspan="8" style="text-align:center;color:var(--stone);padding:20px;">No users found.</td></tr>
 {% endfor %}

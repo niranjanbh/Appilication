@@ -137,6 +137,21 @@ tr:hover td { background: #fdf8f0; }
 .btn-danger { background: var(--alert); color: var(--white); }
 .btn-danger:hover { background: #922f22; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-ghost { background: transparent; color: var(--stone); }
+.btn-ghost:hover { background: #e8e2d8; }
+
+/* Bulk multi-select action bar */
+.bulk-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; background: var(--ivory);
+  border: 1px solid var(--sage); border-radius: 8px; margin-bottom: 12px;
+}
+.bulk-bar form { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.bulk-bar select {
+  border: 1px solid #d4cfc6; border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+.bulk-count { font-size: 13px; font-weight: 600; color: var(--ink); }
+.export-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
 
 /* Status chips */
 .chip {

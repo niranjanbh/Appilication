@@ -39,6 +39,21 @@
   {% if request.query_params.get('error') == 'patient_not_assigned' %}
   <div class="alert-bar alert-bar-error">This request is not for one of your assigned patients.</div>
   {% endif %}
+  {% if request.query_params.get('success') == 'on_demand_started' %}
+  <div class="alert-bar alert-bar-success">On-demand consultation started. The patient and doctor have been notified to join now.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'doctor_not_available' %}
+  <div class="alert-bar alert-bar-error">That doctor is not currently active. Please choose another.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'active_consultation_exists' %}
+  <div class="alert-bar alert-bar-error">This patient already has an active consultation for that condition. Close it first, or choose another condition.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'invalid_condition' %}
+  <div class="alert-bar alert-bar-error">Please choose a valid condition.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'not_joinable' %}
+  <div class="alert-bar alert-bar-error">That consultation isn't open to join right now.</div>
+  {% endif %}
 
   <!-- Patient requests awaiting doctor assignment -->
   <div class="card" style="margin-bottom:20px;">
@@ -145,15 +160,77 @@
     {% endif %}
   </div>
 
-  <!-- Upcoming consultations: reschedule or cancel -->
+  <!-- On-demand (instant) video consultation -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">Upcoming consultations</div>
+    <div class="card-title">Start an on-demand video consultation</div>
+    <p style="font-size:12px;color:var(--stone);margin-top:6px;">
+      Connects an assigned patient with a doctor right now — no payment or slot.
+      The room is created immediately and both are notified to join. The doctor can
+      only start the call once the patient's identity and telemedicine consent are on file.
+    </p>
+    {% if not patients %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No assigned patients.</p>
+    {% elif not doctors %}
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;">No active doctors available.</p>
+    {% else %}
+    <form method="POST" action="/coord/scheduling/on-demand" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px;"
+          onsubmit="return confirm('Start an on-demand video consultation now?')">
+      {{ csrf_field(request) }}
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
+        <select name="patient_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="">Select patient…</option>
+          {% for patient, user in patients %}
+          <option value="{{ patient.id }}">{{ user.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Doctor</label>
+        <select name="doctor_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="">Select doctor…</option>
+          {% for doctor, doctor_user in doctors %}
+          <option value="{{ doctor.id }}">Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Condition</label>
+        <select name="condition_category" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
+          {% for c in conditions %}
+          <option value="{{ c }}">{{ c.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Max participants</label>
+        <input type="number" name="max_participants" min="2" max="12" value="6"
+               style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;width:90px;">
+      </div>
+      <button type="submit" class="btn btn-primary">Start now</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Upcoming consultations: reschedule or cancel. Bulk = CSV export only
+       (no bulk cancel — too risky to sweep). -->
+  <div class="card" style="margin-bottom:20px;" x-data="bulkSelect()">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="card-title">Upcoming consultations</div>
+      <a href="/coord/export/scheduling.csv" class="btn btn-secondary btn-sm">Export all CSV</a>
+    </div>
     {% if not upcoming %}
     <p style="font-size:13px;color:var(--stone);margin-top:8px;">No upcoming consultations for your patients.</p>
     {% else %}
+    <div x-show="selected.length > 0" x-cloak class="bulk-bar" style="margin-top:12px;">
+      <span x-text="selected.length + ' selected'"></span>
+      <a :href="'/coord/export/scheduling.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
+      <button @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>
+    </div>
     <table style="width:100%;font-size:13px;margin-top:12px;">
       <thead>
         <tr>
+          <th style="padding:8px 0;text-align:left;width:32px;"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
           <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">When</th>
           <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Patient</th>
           <th style="padding:8px 0;text-align:left;color:var(--stone);font-size:11px;text-transform:uppercase;">Doctor</th>
@@ -164,12 +241,16 @@
       <tbody>
         {% for consultation, patient_user, doctor_user in upcoming %}
         <tr style="border-top:1px solid #f0ece3;">
+          <td style="padding:8px 0;"><input type="checkbox" :value="'{{ consultation.id }}'" @change="toggle('{{ consultation.id }}')" :checked="selected.includes('{{ consultation.id }}')"></td>
           <td style="padding:8px 0;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') }}</td>
           <td style="padding:8px 0;">{{ patient_user.name }}</td>
           <td style="padding:8px 0;color:var(--stone);">{{ doctor_user.name if doctor_user else '—' }}</td>
           <td style="padding:8px 0;"><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
           <td style="padding:8px 0;">
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              {% if consultation.status.value in ['confirmed', 'in_progress'] %}
+              <a href="/coord/scheduling/{{ consultation.id }}/join-room" class="btn btn-primary btn-sm">Join</a>
+              {% endif %}
               {% if slots %}
               <form method="POST" action="/coord/scheduling/{{ consultation.id }}/reschedule"
                     style="display:flex;gap:6px;align-items:center;"

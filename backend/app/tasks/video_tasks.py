@@ -1,4 +1,4 @@
-"""Video room provisioning tasks (100ms integration).
+"""Video room provisioning tasks (LiveKit integration).
 
 Beat task `provision_upcoming_rooms` runs every minute and dispatches
 `provision_video_room` for each unprovisioned consultation in the next 15 minutes.
@@ -21,7 +21,11 @@ logger = structlog.get_logger(__name__)
 
 
 class HMSTransientError(Exception):
-    """Raised for retryable 100ms API errors (network, 5xx)."""
+    """Raised for retryable video-provider API errors (network, 5xx).
+
+    Name retained for backward compatibility with existing retry wiring; the
+    provider is now LiveKit.
+    """
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
@@ -66,7 +70,7 @@ async def _provision_upcoming_rooms_async() -> dict[str, int]:
     reject_on_worker_lost=True,
 )
 def provision_video_room(self: Any, consultation_id: str) -> dict[str, Any]:
-    """Provision a 100ms room for one consultation and persist the room_id."""
+    """Provision a LiveKit room for one consultation and persist the room_id."""
     bound_logger = logger.bind(
         task_name="provision_video_room",
         task_id=self.request.id,
@@ -91,7 +95,7 @@ async def _provision_video_room_async(
     bound_logger: Any,
 ) -> dict[str, Any]:
     from app.db.session import AsyncSessionLocal
-    from app.integrations import hms
+    from app.integrations import livekit_video
     from app.repositories import consultations as consultations_repo
 
     consult_uuid = uuid.UUID(consultation_id)
@@ -110,7 +114,7 @@ async def _provision_video_room_async(
             return {"skipped": True, "reason": "already_provisioned"}
 
         try:
-            room_id = await hms.create_room(consultation_id=consultation_id)
+            room_id = await livekit_video.create_room(consultation_id=consultation_id)
         except Exception as exc:
             if _is_transient(exc):
                 raise HMSTransientError(str(exc)) from exc

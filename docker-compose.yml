@@ -43,6 +43,23 @@ services:
       - "1025:1025"   # SMTP
       - "8025:8025"   # Web UI
 
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: kyros-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml --dev
+    ports:
+      - "7880:7880"   # HTTP/WS
+      - "7881:7881"   # RTC (TCP)
+      - "7882:7882/udp" # RTC (UDP)
+    volumes:
+      - ./infra/docker/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7880"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend-api:
     build:
       context: ./backend

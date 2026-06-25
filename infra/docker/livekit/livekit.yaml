@@ -1,0 +1,20 @@
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+
+keys:
+  APIkyros877055598d: EE9Jo/r2gMQrza32UsM8ziIhGgqhNP3C6Roke2ygb08uCvQ0
+
+room:
+  max_participants: 4
+  empty_timeout: 300
+
+# High-quality video defaults for telemedicine
+video:
+  dynacast: true
+
+logging:
+  json: true
+  level: info

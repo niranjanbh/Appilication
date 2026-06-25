@@ -15,6 +15,7 @@ import { HapticPressable } from '../../components/ui/HapticPressable';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { SkeletonCards } from '../../components/ui/Skeleton';
 import { Button } from '../../components/Button';
+import { listPatientNotesApi } from '../../lib/api/patient-notes';
 import {
   borderRadius,
   colors,
@@ -42,6 +43,7 @@ interface Consultation {
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
   status: ConsultationStatus;
+  video_room_id: string | null;
   consultation_fee_paise: number | null;
   payment_id: string | null;
   cancellation_reason: string | null;
@@ -89,6 +91,7 @@ function formatCountdown(iso: string): string {
   if (days > 1) return `In ${days} days`;
   if (days === 1) return 'Tomorrow';
   if (hours > 0) return `In ${hours}h ${minutes % 60}m`;
+  if (minutes < 1) return 'Starting soon';
   return `In ${minutes} min`;
 }
 
@@ -112,24 +115,26 @@ const TRACKER_STEPS = ['Requested', 'Assigned', 'Scheduled', 'Consult'] as const
 function activeStepFor(status: ConsultationStatus): number {
   switch (status) {
     case 'requested':   return 1;
-    case 'scheduled':   return 3;
-    case 'confirmed':   return 3;
+    case 'scheduled':   return 2; // doctor assigned, awaiting payment
+    case 'confirmed':   return 3; // paid / confirmed
     case 'in_progress': return 4;
     default:            return 0;
   }
 }
 
 // Condition categories shown in the rich empty state — mirrors the booking flow.
-interface ConditionTile { label: string; emoji: string; tint: TintName }
+// `slug` must match the backend's accepted condition slugs so tapping a tile
+// can skip the condition-picker step and go straight to the requirement step.
+interface ConditionTile { label: string; emoji: string; tint: TintName; slug: string }
 const CONDITION_TILES: ConditionTile[] = [
-  { label: 'Weight Management', emoji: '⚖️', tint: 'forest' },
-  { label: 'Diabetes',          emoji: '🩸', tint: 'peach' },
-  { label: 'Thyroid',           emoji: '🦋', tint: 'violet' },
-  { label: 'PCOS',              emoji: '🌿', tint: 'green' },
-  { label: 'Skin & Hair',       emoji: '✨', tint: 'amber' },
-  { label: 'Sexual Health',     emoji: '🔬', tint: 'blue' },
-  { label: 'Hormones & TRT',    emoji: '⚡', tint: 'saffron' },
-  { label: 'Longevity',         emoji: '🌱', tint: 'sage' },
+  { label: 'Weight Management', emoji: '⚖️', tint: 'forest',  slug: 'weight-management' },
+  { label: 'Diabetes',          emoji: '🩸', tint: 'peach',   slug: 'diabetes' },
+  { label: 'Thyroid',           emoji: '🦋', tint: 'violet',  slug: 'thyroid' },
+  { label: 'PCOS',              emoji: '🌿', tint: 'green',   slug: 'pcos' },
+  { label: 'Skin & Hair',       emoji: '✨', tint: 'amber',   slug: 'skin-and-hair' },
+  { label: 'Sexual Health',     emoji: '🔬', tint: 'blue',    slug: 'sexual-health' },
+  { label: 'Hormones & TRT',    emoji: '⚡', tint: 'saffron', slug: 'hormones-trt' },
+  { label: 'Longevity',         emoji: '🌱', tint: 'sage',    slug: 'longevity' },
 ];
 
 // ── Progress tracker ─────────────────────────────────────────────────────────
@@ -317,15 +322,19 @@ function ConsultationCard({
           {item.status === 'in_progress' && (
             <View style={styles.cardBody}>
               <Text style={[styles.liveLabel, { color: colors.saffron }]}>Call in progress</Text>
-              <HapticPressable
-                haptic="medium"
-                onPress={() => router.push(`/consultations/join/${item.id}`)}
-                accessibilityLabel="Join video call"
-                style={styles.joinBtn}
-              >
-                <Ionicons name="videocam" size={18} color={colors.ivory} />
-                <Text style={styles.joinBtnText}>Join video call</Text>
-              </HapticPressable>
+              {item.video_room_id ? (
+                <HapticPressable
+                  haptic="medium"
+                  onPress={() => router.push(`/consultations/join/${item.id}`)}
+                  accessibilityLabel="Join video call"
+                  style={styles.joinBtn}
+                >
+                  <Ionicons name="videocam" size={18} color={colors.ivory} />
+                  <Text style={styles.joinBtnText}>Join video call</Text>
+                </HapticPressable>
+              ) : (
+                <Text style={[styles.cardNote, { color: t.textSub }]}>Call starting soon…</Text>
+              )}
             </View>
           )}
 
@@ -372,7 +381,7 @@ function ConditionGridCard({
 }: {
   tile: ConditionTile;
   t: AppPalette;
-  onPress: () => void;
+  onPress: (slug: string) => void;
 }) {
   const pair = tintSoft[tile.tint];
   const bg = t.isDark ? pair.bgDark : pair.bgLight;
@@ -381,7 +390,7 @@ function ConditionGridCard({
     <HapticPressable
       haptic="selection"
       scaleTo={0.96}
-      onPress={onPress}
+      onPress={() => onPress(tile.slug)}
       accessibilityLabel={`Consult for ${tile.label}`}
       containerStyle={styles.gridCell}
       style={[styles.conditionCard, { backgroundColor: bg, borderColor: withAlpha(tint, 0.18) }]}
@@ -395,9 +404,11 @@ function ConditionGridCard({
 function RichEmptyState({
   t,
   onBook,
+  onBookCondition,
 }: {
   t: AppPalette;
   onBook: () => void;
+  onBookCondition: (slug: string) => void;
 }) {
   return (
     <View>
@@ -417,7 +428,7 @@ function RichEmptyState({
       </Text>
       <View style={styles.grid}>
         {CONDITION_TILES.map(tile => (
-          <ConditionGridCard key={tile.label} tile={tile} t={t} onPress={onBook} />
+          <ConditionGridCard key={tile.label} tile={tile} t={t} onPress={onBookCondition} />
         ))}
       </View>
 
@@ -430,6 +441,68 @@ function RichEmptyState({
         style={styles.heroCta}
       />
     </View>
+  );
+}
+
+// ── Notes for your next visit ─────────────────────────────────────────────────
+
+function formatRelativeShort(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+}
+
+function NotesForVisit({ t, router }: { t: AppPalette; router: ReturnType<typeof useRouter> }) {
+  const { data: notesData } = useQuery({
+    queryKey: ['patient-notes', 'care-tab'],
+    queryFn: () => listPatientNotesApi(1, 3),
+    staleTime: 60_000,
+  });
+
+  const recentNotes = notesData?.items ?? [];
+
+  return (
+    <GlassCard style={styles.notesCard}>
+      <View style={styles.notesHeader}>
+        <View style={styles.notesHeaderLeft}>
+          <Ionicons name="create-outline" size={16} color={t.primary} />
+          <Text style={[styles.notesTitle, { color: t.text }]}>Notes for your visit</Text>
+        </View>
+        <HapticPressable
+          onPress={() => router.push('/notes' as never)}
+          accessibilityLabel={recentNotes.length === 0 ? 'Add a note' : 'View all notes'}
+        >
+          <Text style={[styles.notesLink, { color: t.primary }]}>
+            {recentNotes.length === 0 ? 'Add note' : 'See all'}
+          </Text>
+        </HapticPressable>
+      </View>
+      {recentNotes.length === 0 ? (
+        <Text style={[styles.notesEmpty, { color: t.textSub }]}>
+          Jot down questions or symptoms to discuss with your doctor.
+        </Text>
+      ) : (
+        <View style={styles.notesList}>
+          {recentNotes.map(note => (
+            <HapticPressable
+              key={note.id}
+              onPress={() => router.push('/notes' as never)}
+              accessibilityLabel={`Note: ${note.body}`}
+              style={[styles.noteRow, { borderColor: withAlpha(t.textSub, 0.12) }]}
+            >
+              <Text style={[styles.noteBody, { color: t.text }]} numberOfLines={1}>
+                {note.body}
+              </Text>
+              <Text style={[styles.noteTime, { color: t.textSub }]}>
+                {formatRelativeShort(note.created_at)}
+              </Text>
+            </HapticPressable>
+          ))}
+        </View>
+      )}
+    </GlassCard>
   );
 }
 
@@ -450,6 +523,7 @@ export default function ConsultationsScreen() {
   const past = consultations.filter(c => !isUpcoming(c));
   const isEmpty = !isLoading && consultations.length === 0;
   const goBook = () => router.push('/consultations/book');
+  const goBookCondition = (slug: string) => router.push(`/consultations/book?condition=${slug}`);
 
   return (
     <View style={[styles.flex, { backgroundColor: t.background }]}>
@@ -475,6 +549,9 @@ export default function ConsultationsScreen() {
           )}
         </View>
 
+        {/* Notes for your next visit */}
+        <NotesForVisit t={t} router={router} />
+
         {error && (
           <Text style={styles.error}>Could not load consultations. Please try again.</Text>
         )}
@@ -482,7 +559,7 @@ export default function ConsultationsScreen() {
         {isLoading ? (
           <SkeletonCards count={3} />
         ) : isEmpty ? (
-          <RichEmptyState t={t} onBook={goBook} />
+          <RichEmptyState t={t} onBook={goBook} onBookCondition={goBookCondition} />
         ) : (
           <>
             {/* Upcoming */}
@@ -739,6 +816,54 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   heroCta: { marginTop: spacing[4] },
+
+  // Notes for visit
+  notesCard: { marginBottom: spacing[4] },
+  notesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[3],
+  },
+  notesHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  notesTitle: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    fontWeight: '600',
+  },
+  notesLink: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.caption,
+    fontWeight: '600',
+  },
+  notesEmpty: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.caption,
+    lineHeight: 18,
+  },
+  notesList: { gap: spacing[2] },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    paddingTop: spacing[2],
+    gap: spacing[3],
+  },
+  noteBody: {
+    flex: 1,
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.caption,
+    lineHeight: 18,
+  },
+  noteTime: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+  },
 
   error: {
     fontFamily: fontFamily.body,

@@ -58,10 +58,12 @@ async def list_activity_for_user(
     patient's account/data activity (consents, uploads, sessions, bookings,
     denied attempts) rather than every page load.
     """
+    _NOISE_ACTIONS = ("token_refresh", "register_push_token", "send_otp")
     base = select(AuditLog).where(
         AuditLog.actor_user_id == user_id,
         ~AuditLog.action.like("view_%"),
         ~AuditLog.action.like("list_%"),
+        AuditLog.action.notin_(_NOISE_ACTIONS),
     )
 
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))

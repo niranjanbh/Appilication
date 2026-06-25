@@ -67,11 +67,25 @@ async def list_available_slots(
     date_from: datetime = Query(...),
     date_to: datetime = Query(...),
 ) -> list[AvailableSlotRead]:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
     if date_to <= date_from:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="date_to must be after date_from")
     if (date_to - date_from) > timedelta(days=31):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="date range must not exceed 31 days")
+
+    has_consultation = await consultations_repo.patient_has_consultation_with_doctor(
+        db, patient_user_id=user.id, doctor_id=doctor_id
+    )
+    if not has_consultation:
+        await write_audit(
+            db, ctx, action="list_available_slots", resource_type="availability",
+            allowed=False, reason="no_consultation_with_doctor",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not_found")
 
     slots = await consultations_repo.get_available_slots(
         db, doctor_id=doctor_id, date_from=date_from, date_to=date_to
@@ -193,6 +207,7 @@ async def request_consultation(
             consultation_type=body.consultation_type.value,
             requirement_notes=body.requirement_notes,
             preferred_time_window=body.preferred_time_window,
+            parent_consultation_id=body.parent_consultation_id,
         )
     except consultation_service.ConsultationError as exc:
         await write_audit(
@@ -363,8 +378,9 @@ async def patient_join_consultation(
     db: DbSession,
     user: Annotated[object, Depends(get_patient_user)],
 ) -> ConsultationJoinResponse:
-    from app.integrations import hms
+    from app.integrations import livekit_video
     from app.models.identity import User as UserModel
+    from app.services import consultation_service
 
     assert isinstance(user, UserModel)
     ctx = _audit_ctx(request, user)
@@ -381,27 +397,56 @@ async def patient_join_consultation(
         await db.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
 
-    if consultation.video_room_id is None:
+    # Gate on status first: a patient may join the waiting room once confirmed
+    # (shortly before the doctor opens) or while in progress. Joining a
+    # requested/scheduled/completed/cancelled/no-show consultation is rejected,
+    # including re-joining after the call has ended (video_room_id is not cleared).
+    # Checking before provisioning avoids creating a room for a non-joinable consult.
+    if consultation.status not in (
+        ConsultationStatus.CONFIRMED,
+        ConsultationStatus.IN_PROGRESS,
+    ):
         await write_audit(
             db, ctx, action="join_consultation",
             resource_type="consultation", resource_id=consultation_id,
-            allowed=False, reason="room_not_provisioned",
+            allowed=False, reason="consultation_not_joinable",
         )
         await db.commit()
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="video_room_not_ready",
+            status.HTTP_409_CONFLICT,
+            detail="consultation_not_joinable",
         )
 
-    token = hms.generate_patient_token(
-        room_id=consultation.video_room_id,
+    room_id = consultation.video_room_id
+    if room_id is None:
+        # Provision on demand so a not-yet-provisioned room doesn't dead-end the
+        # patient with a 503 (mirrors the doctor join path). Only a genuine
+        # provider failure still yields a retryable 503.
+        try:
+            room_id = await consultation_service.ensure_video_room(
+                db, consultation_id=consultation.id
+            )
+        except Exception as exc:
+            await write_audit(
+                db, ctx, action="join_consultation",
+                resource_type="consultation", resource_id=consultation_id,
+                allowed=False, reason="room_provisioning_failed",
+            )
+            await db.commit()
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="video_room_not_ready",
+            ) from exc
+
+    token = livekit_video.generate_patient_token(
+        room_id=room_id,
         user_id=str(user.id),
     )
     await write_audit(
         db, ctx, action="join_consultation",
         resource_type="consultation", resource_id=consultation_id, allowed=True
     )
-    return ConsultationJoinResponse(room_id=consultation.video_room_id, token=token)
+    return ConsultationJoinResponse(room_id=room_id, token=token)
 
 
 @router.post(

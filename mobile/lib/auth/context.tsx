@@ -1,8 +1,11 @@
+import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { getMeApi } from '../api/auth';
 import { registerUnauthenticatedHandler } from '../api/client';
 import {
+  addPushDeepLinkListener,
   addPushTokenChangeListener,
+  handleInitialPushNotification,
   registerForPushNotifications,
 } from '../native/notifications';
 import {
@@ -72,8 +75,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (state.status !== 'authenticated') return;
     void registerForPushNotifications();
-    const sub = addPushTokenChangeListener();
-    return () => sub.remove();
+    const tokenSub = addPushTokenChangeListener();
+
+    // Deep-link remote push taps to the relevant screen. Local medication
+    // reminder taps are skipped inside the listener (handled by the adherence
+    // listener). Also handle a tap that cold-started the app from killed state.
+    const navigate = (route: string) => router.push(route as Parameters<typeof router.push>[0]);
+    const deepLinkSub = addPushDeepLinkListener(navigate);
+    void handleInitialPushNotification(navigate);
+
+    return () => {
+      tokenSub.remove();
+      deepLinkSub.remove();
+    };
   }, [state.status]);
 
   const signIn = useCallback(async (tokens: AuthTokens) => {

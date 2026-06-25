@@ -182,11 +182,13 @@ async def get_daily_adherence_summary(
 
     completed_result = await db.execute(
         select(func.count(func.distinct(ReminderLog.reminder_id)))
+        .join(Reminder, ReminderLog.reminder_id == Reminder.id)
         .where(
             ReminderLog.user_id == user_id,
             ReminderLog.action == ReminderAction.TAKEN,
             ReminderLog.scheduled_at >= day_start,
             ReminderLog.scheduled_at < day_end,
+            Reminder.deleted_at.is_(None),
         )
     )
     completed = completed_result.scalar() or 0
@@ -207,10 +209,12 @@ async def get_adherence_streak(
         select(
             func.date(func.timezone("Asia/Kolkata", ReminderLog.scheduled_at)).label("d")
         )
+        .join(Reminder, ReminderLog.reminder_id == Reminder.id)
         .where(
             ReminderLog.user_id == user_id,
             ReminderLog.action == ReminderAction.TAKEN,
             ReminderLog.scheduled_at >= since.astimezone(UTC),
+            Reminder.deleted_at.is_(None),
         )
         .group_by(text("d"))
         .order_by(text("d DESC"))
@@ -254,11 +258,13 @@ async def get_week_adherence(
             func.date(func.timezone("Asia/Kolkata", ReminderLog.scheduled_at)).label("d"),
             func.count(func.distinct(ReminderLog.reminder_id)).label("cnt"),
         )
+        .join(Reminder, ReminderLog.reminder_id == Reminder.id)
         .where(
             ReminderLog.user_id == user_id,
             ReminderLog.action == ReminderAction.TAKEN,
             ReminderLog.scheduled_at >= start_utc,
             ReminderLog.scheduled_at < end_utc,
+            Reminder.deleted_at.is_(None),
         )
         .group_by(text("d"))
     )

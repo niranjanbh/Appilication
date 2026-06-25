@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
+import { useBulkSelect } from '../../hooks/useBulkSelect';
+import { downloadCSV } from '../../lib/csv-export';
+import { BulkActionBar } from '../../components/BulkActionBar';
 
 interface PatientSummary {
   patient_id: string;
@@ -25,10 +28,22 @@ function formatConditions(conditions: string[]): string {
     .join(', ') || '—';
 }
 
+const PATIENT_CSV_HEADERS = ['Name', 'Phone', 'Kyros ID', 'Conditions'];
+
+function patientToRow(pt: PatientSummary): string[] {
+  return [
+    pt.name,
+    pt.phone ?? '',
+    pt.kyros_patient_id,
+    formatConditions(pt.primary_conditions),
+  ];
+}
+
 export function PatientList() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const debouncedSearch = search.trim();
+  const { selected, toggle, toggleAll, clear, count } = useBulkSelect<string>();
 
   const { data, isLoading } = useQuery({
     queryKey: ['patients', debouncedSearch, page],
@@ -39,9 +54,34 @@ export function PatientList() {
     },
   });
 
+  const items = data?.items ?? [];
+  const ids = items.map(pt => pt.patient_id);
+  const allSelected = items.length > 0 && count === items.length;
+
+  const exportRows = (patients: PatientSummary[], suffix: string) => {
+    downloadCSV(`patients-${suffix}.csv`, PATIENT_CSV_HEADERS, patients.map(patientToRow));
+  };
+
+  const handleExportSelected = () => {
+    exportRows(items.filter(pt => selected.has(pt.patient_id)), 'selected');
+  };
+
+  const handleExportAll = () => {
+    exportRows(items, 'all');
+  };
+
   return (
     <div className="px-8 py-8 max-w-4xl">
-      <h1 className="font-display text-h2 text-forest font-medium mb-6">Patients</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-display text-h2 text-forest font-medium">Patients</h1>
+        <button
+          onClick={handleExportAll}
+          disabled={items.length === 0}
+          className="px-3 py-1.5 rounded border border-forest/30 font-body text-caption text-forest hover:bg-forest/5 disabled:opacity-40 transition-colors"
+        >
+          Export All CSV
+        </button>
+      </div>
 
       {/* Search */}
       <div className="relative mb-6">
@@ -55,10 +95,12 @@ export function PatientList() {
         />
       </div>
 
+      <BulkActionBar count={count} onClear={clear} onExport={handleExportSelected} />
+
       <div className="bg-white rounded-card overflow-hidden">
         {isLoading ? (
           <p className="px-5 py-10 text-center font-body text-body text-stone">Loading…</p>
-        ) : !data || data.items.length === 0 ? (
+        ) : items.length === 0 ? (
           <p className="px-5 py-10 text-center font-body text-body text-stone">
             {debouncedSearch ? 'No patients match your search.' : 'No patients in your panel yet.'}
           </p>
@@ -67,14 +109,35 @@ export function PatientList() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-stone/10 bg-ivory">
+                  <th className="w-10 px-5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => toggleAll(ids)}
+                      aria-label="Select all patients"
+                      className="w-4 h-4 rounded border-stone/30 text-forest focus:ring-forest accent-forest"
+                    />
+                  </th>
                   <th className="text-left px-5 py-3 font-body text-caption text-stone font-semibold">Patient</th>
                   <th className="text-left px-5 py-3 font-body text-caption text-stone font-semibold">Kyros ID</th>
                   <th className="text-left px-5 py-3 font-body text-caption text-stone font-semibold">Conditions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone/10">
-                {data.items.map(pt => (
-                  <tr key={pt.patient_id} className="hover:bg-ivory transition-colors">
+                {items.map(pt => (
+                  <tr
+                    key={pt.patient_id}
+                    className={`transition-colors ${selected.has(pt.patient_id) ? 'bg-sage/5' : 'hover:bg-ivory'}`}
+                  >
+                    <td className="w-10 px-5 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(pt.patient_id)}
+                        onChange={() => toggle(pt.patient_id)}
+                        aria-label={`Select ${pt.name}`}
+                        className="w-4 h-4 rounded border-stone/30 text-forest focus:ring-forest accent-forest"
+                      />
+                    </td>
                     <td className="px-5 py-4">
                       <Link
                         to={`/patients/${pt.patient_id}`}
@@ -94,7 +157,7 @@ export function PatientList() {
             </table>
 
             {/* Pagination */}
-            {data.pages > 1 && (
+            {data && data.pages > 1 && (
               <div className="flex items-center justify-between px-5 py-3 border-t border-stone/10">
                 <p className="font-body text-caption text-stone">
                   {data.total} patient{data.total !== 1 ? 's' : ''}

@@ -98,6 +98,30 @@ async def deactivate_coupon(
     return result.scalar_one_or_none()
 
 
+async def activate_coupon(
+    db: AsyncSession, *, coupon_id: uuid.UUID
+) -> Coupon | None:
+    result = await db.execute(
+        update(Coupon)
+        .where(Coupon.id == coupon_id)
+        .values(active=True, updated_at=datetime.now(UTC))
+        .returning(Coupon)
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_coupon(db: AsyncSession, *, coupon_id: uuid.UUID) -> bool:
+    """Hard-delete a coupon (ad_coupons has no soft-delete column).
+
+    Redemptions are recorded on the order, not via an FK back to the coupon, so
+    deleting a code does not orphan payment history.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    result = await db.execute(sa_delete(Coupon).where(Coupon.id == coupon_id))
+    return bool(result.rowcount > 0)  # type: ignore[attr-defined]
+
+
 async def increment_redemption(db: AsyncSession, *, coupon_id: uuid.UUID) -> None:
     await db.execute(
         update(Coupon)

@@ -1,9 +1,12 @@
 {% extends "admin/base.html" %}
+{% from "admin/_bulk.html" import bulk_flash, bulk_bar, export_all %}
 {% block title %}Users — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
   <h2>Users <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
 </div>
+
+{{ bulk_flash(request) }}
 
 <form class="filter-bar"
       hx-get="/admin/users"
@@ -27,10 +30,15 @@
   <button type="submit" class="btn btn-primary">Filter</button>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {% if admin and admin.role.value == 'super_admin' %}
+  {{ bulk_bar(request, 'users', [('suspend', 'Suspend selected'), ('reactivate', 'Reactivate selected')], 'users', 'search=' ~ search ~ '&role=' ~ role) }}
+  {% endif %}
+  {{ export_all('users', 'search=' ~ search ~ '&role=' ~ role) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Joined</th><th>Status</th><th></th>
       </tr>
     </thead>

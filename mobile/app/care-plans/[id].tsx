@@ -29,6 +29,20 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORY_ORDER = ['medication', 'exercise', 'diet', 'lifestyle', 'follow_up', 'lab_test'];
 
+// Shared condition labels — mirrors the consultations screens for consistent naming.
+const CONDITION_LABEL: Record<string, string> = {
+  weight: 'Weight Management',
+  pcos: 'PCOS',
+  thyroid: 'Thyroid',
+  skin_hair: 'Skin & Hair',
+  mens_intimate: 'Sexual & Intimate Health',
+  hormones_trt: 'Hormones & TRT',
+  longevity: 'Longevity',
+};
+function formatCat(cat: string): string {
+  return CONDITION_LABEL[cat] ?? cat.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function priorityBadge(priority: string, isDark: boolean) {
   if (priority === 'normal') return null;
   const isHigh = priority === 'high';
@@ -153,7 +167,7 @@ export default function CarePlanDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
         <Text style={[styles.errorText, { color: colors.alert }]}>{error ?? 'Care plan not found.'}</Text>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => router.back()} accessibilityLabel="Go back">
           <Text style={[styles.backLink, { color: colors.jade }]}>← Back</Text>
         </Pressable>
       </View>
@@ -192,7 +206,7 @@ export default function CarePlanDetailScreen() {
       {plan.condition_category && (
         <View style={[styles.condBadge, { backgroundColor: isDark ? colors.jade + '15' : colors.forest + '10' }]}>
           <Text style={[styles.condText, { color: isDark ? colors.jade : colors.ink }]}>
-            {plan.condition_category.replace(/_/g, ' ').replace(/-/g, ' ')}
+            {formatCat(plan.condition_category)}
           </Text>
         </View>
       )}
@@ -262,7 +276,7 @@ const styles = StyleSheet.create({
 
   planTitle: { fontFamily: fontFamily.display, fontSize: fontSize.h3, fontWeight: '600' },
   condBadge: { alignSelf: 'flex-start', borderRadius: borderRadius.full, paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
-  condText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600', textTransform: 'capitalize' },
+  condText: { fontFamily: fontFamily.body, fontSize: fontSize.caption, fontWeight: '600' },
   validityText: { fontFamily: fontFamily.body, fontSize: fontSize.caption },
 
   infoBlock: {

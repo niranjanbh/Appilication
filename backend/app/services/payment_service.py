@@ -74,6 +74,13 @@ async def verify_and_capture(
     if payment.status == PaymentStatus.PAID:
         return payment  # idempotent — already captured
 
+    # Bind the client-supplied order id to THIS payment's order. A valid HMAC
+    # signature for a different (cheaper) order would otherwise pass the signature
+    # check below, since (order_id, payment_id, signature) is internally consistent.
+    # This must run before signature verification.
+    if razorpay_order_id != payment.razorpay_order_id:
+        raise PaymentError("order_id_mismatch")
+
     if not razorpay_integration.verify_payment_signature(
         razorpay_order_id=razorpay_order_id,
         razorpay_payment_id=razorpay_payment_id,

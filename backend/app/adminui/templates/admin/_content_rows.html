@@ -1,6 +1,7 @@
 {% from "_csrf.html" import csrf_field %}
 {% for item in items %}
 <tr>
+  <td><input type="checkbox" data-bulk-id="{{ item.id }}" :checked="isChecked('{{ item.id }}')" @change="toggle('{{ item.id }}')"></td>
   <td>
     <strong style="font-size:13px;">{{ item.title }}</strong>
     <div style="font-size:11px;color:var(--stone);">{{ item.slug }}</div>
@@ -33,5 +34,5 @@
   </td>
 </tr>
 {% else %}
-<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No content found.</td></tr>
+<tr><td colspan="7" style="text-align:center;color:var(--stone);padding:20px;">No content found.</td></tr>
 {% endfor %}

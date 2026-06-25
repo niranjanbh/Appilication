@@ -27,7 +27,8 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     const nativeOnly = [
       'victory-native',
       '@shopify/react-native-skia',
-      '@100mslive/react-native-room-kit',
+      '@livekit/react-native',
+      '@livekit/react-native-webrtc',
     ];
     for (const pkg of nativeOnly) {
       if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {

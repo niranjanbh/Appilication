@@ -20,6 +20,13 @@
   {% if success == 'lead_created' %}
   <div class="alert-bar alert-bar-success">Lead logged.</div>
   {% endif %}
+  {% if request.query_params.get('bulk_success') is not none %}
+  <div class="alert-bar alert-bar-success">
+    Marked {{ request.query_params.get('bulk_success') }} inquiry(ies) contacted.{% if request.query_params.get('bulk_failed') and request.query_params.get('bulk_failed') != '0' %} {{ request.query_params.get('bulk_failed') }} were already contacted or not found.{% endif %}
+  </div>
+  {% elif request.query_params.get('bulk_error') %}
+  <div class="alert-bar alert-bar-error">Bulk action failed: {{ request.query_params.get('bulk_error').replace('_', ' ') }}.</div>
+  {% endif %}
 
   <!-- Manual lead entry: phone call / referral -->
   <div class="card" style="margin-bottom:24px;">
@@ -61,6 +68,9 @@
   </div>
 
   <h3 style="margin:0 0 12px;">Consultation requests</h3>
+  <div class="export-bar">
+    <a href="/coord/export/inquiries.csv" class="btn btn-secondary btn-sm">Export all CSV</a>
+  </div>
   {% if not inquiries %}
   <div class="card" style="margin-bottom:24px;">
     <p style="font-size:14px;color:var(--stone);">
@@ -68,8 +78,32 @@
     </p>
   </div>
   {% else %}
+  <!-- Card layout: select-all targets the inquiry checkboxes by class instead of <tbody>. -->
+  <div x-data="bulkSelect()">
+    <div class="bulk-bar" style="margin-bottom:16px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;">
+        <input type="checkbox"
+               @change="$event.target.checked ? selected = [...document.querySelectorAll('.inq-cb')].map(cb => cb.value) : selected = []">
+        Select all
+      </label>
+      <span x-show="selected.length > 0" x-text="selected.length + ' selected'"></span>
+      <form x-show="selected.length > 0" x-cloak method="POST" action="/coord/bulk/inquiries" style="display:inline-flex;gap:6px;align-items:center;">
+        {{ csrf_field(request) }}
+        <input type="hidden" name="action" value="mark_contacted">
+        <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
+        <button type="submit" class="btn btn-primary btn-sm"
+                @click="return confirm('Mark ' + selected.length + ' inquiry(ies) contacted?')">Mark contacted</button>
+      </form>
+      <a x-show="selected.length > 0" x-cloak :href="'/coord/export/inquiries.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
+      <button x-show="selected.length > 0" x-cloak @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>
+    </div>
   {% for inquiry, contacted_by_name in inquiries %}
   <div class="card" style="margin-bottom:16px;">
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--stone);margin-bottom:8px;">
+      <input type="checkbox" class="inq-cb" value="{{ inquiry.id }}"
+             @change="toggle('{{ inquiry.id }}')" :checked="selected.includes('{{ inquiry.id }}')">
+      Select
+    </label>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
       <div>
         <strong style="font-size:15px;">{{ inquiry.name }}</strong>
@@ -123,6 +157,7 @@
     </div>
   </div>
   {% endfor %}
+  </div>
   {% endif %}
 
   <h3 style="margin:24px 0 12px;">Help queries</h3>

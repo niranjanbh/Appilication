@@ -1,9 +1,81 @@
 {% extends "admin/base.html" %}
+{% from "admin/_bulk.html" import bulk_bar, export_all %}
+{% from "_csrf.html" import csrf_field %}
 {% block title %}Consultations — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
   <h2>Consultations <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
 </div>
+
+{% if request.query_params.get('success') == 'on_demand_started' %}
+<div class="alert-bar alert-bar-success">On-demand consultation started. The patient and doctor have been notified to join now.</div>
+{% endif %}
+{% if request.query_params.get('error') == 'doctor_not_available' %}
+<div class="alert-bar alert-bar-error">That doctor is not currently active. Please choose another.</div>
+{% endif %}
+{% if request.query_params.get('error') == 'active_consultation_exists' %}
+<div class="alert-bar alert-bar-error">This patient already has an active consultation for that condition. Close it first, or choose another condition.</div>
+{% endif %}
+{% if request.query_params.get('error') == 'invalid_condition' %}
+<div class="alert-bar alert-bar-error">Please choose a valid condition.</div>
+{% endif %}
+{% if request.query_params.get('error') == 'not_joinable' %}
+<div class="alert-bar alert-bar-error">That consultation isn't open to join right now.</div>
+{% endif %}
+
+{% if admin.role.value == 'super_admin' %}
+<div class="table-wrap" style="padding:16px;margin-bottom:20px;">
+  <div style="font-weight:600;margin-bottom:4px;">Start an on-demand video consultation</div>
+  <p style="font-size:12px;color:var(--stone);margin-bottom:12px;">
+    Connects a patient with an active doctor right now — no payment or slot. The room is
+    created immediately and both are notified to join. The doctor can only start the call once
+    the patient's identity and telemedicine consent are on file.
+  </p>
+  {% if not doctors %}
+  <p style="font-size:13px;color:var(--stone);">No active doctors available.</p>
+  {% else %}
+  <form method="POST" action="/admin/consultations/on-demand" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;"
+        onsubmit="return confirm('Start an on-demand video consultation now?')">
+    {{ csrf_field(request) }}
+    <div>
+      <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Patient</label>
+      <input type="search" placeholder="Search name or Kyros ID…"
+             hx-get="/admin/consultations/patient-search"
+             hx-trigger="input changed delay:300ms, search"
+             hx-target="#ondemand-patient-select"
+             hx-swap="innerHTML"
+             name="q" autocomplete="off"
+             style="display:block;margin-bottom:6px;min-width:220px;">
+      <select name="patient_id" id="ondemand-patient-select" required>
+        <option value="">Type to search…</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Doctor</label>
+      <select name="doctor_id" required>
+        <option value="">Select doctor…</option>
+        {% for doctor, doctor_user in doctors %}
+        <option value="{{ doctor.id }}">Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Condition</label>
+      <select name="condition_category" required>
+        {% for c in conditions %}
+        <option value="{{ c }}">{{ c.replace('_', ' ').title() }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Max participants</label>
+      <input type="number" name="max_participants" min="2" max="12" value="6" style="width:90px;">
+    </div>
+    <button type="submit" class="btn btn-primary">Start now</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 
 <form class="filter-bar"
       hx-get="/admin/consultations"
@@ -27,10 +99,13 @@
   <button type="submit" class="btn btn-primary">Filter</button>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {{ bulk_bar(request, 'consultations', [], 'consultations', 'status_filter=' ~ status_filter ~ '&date_from=' ~ date_from) }}
+  {{ export_all('consultations', 'status_filter=' ~ status_filter ~ '&date_from=' ~ date_from) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Scheduled</th><th>Patient</th><th>Doctor</th><th>Type</th><th>Status</th><th>Fee</th><th></th>
       </tr>
     </thead>

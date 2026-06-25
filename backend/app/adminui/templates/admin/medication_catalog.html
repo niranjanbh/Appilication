@@ -1,11 +1,14 @@
 {% extends "admin/base.html" %}
 {% from "_csrf.html" import csrf_field %}
+{% from "admin/_bulk.html" import bulk_flash %}
 {% block title %}Medication Catalog — Kyros Clinic Admin{% endblock %}
 {% block content %}
 {% set is_super = admin and admin.role.value == 'super_admin' %}
 <div class="page-header">
   <h2>Medication Catalog <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
 </div>
+
+{{ bulk_flash(request) }}
 
 {% if success %}
 <div class="alert-bar alert-bar-success" style="margin-bottom:14px;">
@@ -36,10 +39,34 @@
   {% if search %}<a href="/admin/medication-catalog" class="btn btn-sm">Clear</a>{% endif %}
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {% if is_super %}
+  {# Medications support bulk activate/deactivate/delete but no CSV export, so we
+     inline the bulk bar (no shared export-selected macro) rather than reuse the
+     bulk_bar macro that always renders an export link. #}
+  <div x-show="selected.length > 0" x-cloak class="bulk-bar">
+    <span class="bulk-count" x-text="selected.length + ' selected'"></span>
+    <form method="post" action="/admin/bulk/medications"
+          @submit="return confirm('Apply this action to ' + selected.length + ' medications?')">
+      {{ csrf_field(request) }}
+      <template x-for="id in selected" :key="id">
+        <input type="hidden" name="ids" :value="id">
+      </template>
+      <select name="action" required>
+        <option value="">Choose action…</option>
+        <option value="activate">Activate selected</option>
+        <option value="deactivate">Deactivate selected</option>
+        <option value="delete">Delete selected</option>
+      </select>
+      <button type="submit" class="btn btn-danger btn-sm">Apply</button>
+    </form>
+    <button type="button" class="btn btn-ghost btn-sm" @click="clearAll()">Clear</button>
+  </div>
+  {% endif %}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Image</th><th>Name</th><th>Generic</th><th>Form</th><th>Strength</th><th>Status</th>
         {% if is_super %}<th></th>{% endif %}
       </tr>
@@ -47,6 +74,7 @@
     <tbody>
       {% for m in items %}
       <tr x-data="{ editing: false }">
+        <td><input type="checkbox" data-bulk-id="{{ m.id }}" :checked="isChecked('{{ m.id }}')" @change="toggle('{{ m.id }}')"></td>
         <td>
           {% if m.image_s3_key %}
           <img src="/admin/medication-catalog/{{ m.id }}/image-view" alt="{{ m.name }}"
@@ -76,7 +104,7 @@
       </tr>
       {% if is_super %}
       <tr x-show="editing" x-cloak>
-        <td colspan="7" style="background:var(--ivory);">
+        <td colspan="8" style="background:var(--ivory);">
           <div style="display:flex;gap:24px;flex-wrap:wrap;padding:8px 0;">
             <form method="POST" action="/admin/medication-catalog/{{ m.id }}/update"
                   style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
@@ -111,7 +139,7 @@
       </tr>
       {% endif %}
       {% else %}
-      <tr><td colspan="{{ 7 if is_super else 6 }}" style="text-align:center;color:var(--stone);padding:20px;">No medications found.</td></tr>
+      <tr><td colspan="{{ 8 if is_super else 7 }}" style="text-align:center;color:var(--stone);padding:20px;">No medications found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -1,0 +1,4 @@
+<option value="">{% if patients %}Select patient…{% else %}No matches — keep typing…{% endif %}</option>
+{% for patient, user in patients %}
+<option value="{{ patient.id }}">{{ user.name }}{% if patient.kyros_patient_id %} ({{ patient.kyros_patient_id }}){% endif %}</option>
+{% endfor %}

@@ -4,7 +4,18 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -101,6 +112,23 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = "kc_consultations"
 
+    # A patient may hold at most one active (non-terminal, non-deleted) consultation
+    # per condition. This partial unique index is the database backstop for the
+    # read-check in request_consultation — it closes the TOCTOU race where two
+    # concurrent requests both observe "no active consultation" and both insert.
+    __table_args__ = (
+        Index(
+            "uq_active_consultation_per_condition",
+            "patient_id",
+            "condition_category",
+            unique=True,
+            postgresql_where=text(
+                "status NOT IN ('completed', 'cancelled', 'no_show') "
+                "AND deleted_at IS NULL"
+            ),
+        ),
+    )
+
     patient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("kc_patients.id", ondelete="RESTRICT"),
@@ -118,6 +146,13 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         UUID(as_uuid=True),
         ForeignKey("ad_coordinators.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    # Links a follow-up consultation back to the consultation it originated from.
+    parent_consultation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("kc_consultations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     condition_category: Mapped[str] = mapped_column(
         SAEnum(
@@ -150,9 +185,18 @@ class Consultation(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     )
     video_room_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     video_session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Per-consultation cap on video-room participants. NULL → the platform default
+    # (settings.video_default_max_participants). Staff may raise it (up to
+    # settings.video_max_participants_cap) for an on-demand multi-specialist call.
+    video_max_participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recording_consent: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # LiveKit S3-egress id for an in-flight recording. Persisted when the doctor
+    # joins (recording starts) so the egress can be explicitly stopped when the
+    # consultation completes — without it a recording cannot be halted on demand,
+    # undermining per-consultation recording consent (security rule #20).
+    recording_egress_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     recording_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     pre_consultation_report_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

@@ -53,11 +53,19 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # Cap at 48 MB so it doesn't grow unbounded on a 1 GB host
+    # Cap at 48 MB so it doesn't grow unbounded on a 1 GB host.
+    # This instance is BOTH the Celery broker (db1, untimed queue lists) and the
+    # ephemeral cache (db0: OTPs, rate limits, idempotency keys — all TTL'd).
+    # maxmemory-policy is instance-wide, so `allkeys-lru` would let memory
+    # pressure silently evict queued Celery messages — i.e. drop healthcare
+    # notifications / video-room provisioning tasks. `volatile-lru` evicts only
+    # keys that carry a TTL (the cache), never the broker's untimed lists, so a
+    # task once enqueued is never lost; under pressure an OTP may be evicted
+    # (recoverable — the user re-requests) but a queued task is not.
     command: >
       redis-server
       --maxmemory 48mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --appendonly no
       --save ""
     healthcheck:

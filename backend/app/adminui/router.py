@@ -11,6 +11,7 @@ from app.adminui.deps import verify_csrf
 from app.adminui.views.analytics import router as analytics_router
 from app.adminui.views.audit_log import router as audit_log_router
 from app.adminui.views.auth import router as auth_router
+from app.adminui.views.bulk_actions import router as bulk_actions_router
 from app.adminui.views.consultations import router as consultations_router
 from app.adminui.views.content import router as content_router
 from app.adminui.views.coupons import router as coupons_router
@@ -47,6 +48,9 @@ admin_router.include_router(dsr_router, dependencies=_csrf)
 admin_router.include_router(audit_log_router, dependencies=_csrf)
 admin_router.include_router(analytics_router, dependencies=_csrf)
 admin_router.include_router(settings_router, dependencies=_csrf)
+# Bulk multi-select actions + CSV exports. POSTs are CSRF-protected; GET exports
+# no-op past verify_csrf. Each handler enforces its own session tier internally.
+admin_router.include_router(bulk_actions_router, dependencies=_csrf)
 
 # Static files (CSS, HTMX, Alpine.js) — shared with coordinator portal
 _static_dir = Path(__file__).parent / "static"

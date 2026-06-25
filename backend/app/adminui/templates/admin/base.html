@@ -6,7 +6,10 @@
   <title>{% block title %}Kyros Clinic Admin{% endblock %}</title>
   <link rel="stylesheet" href="/admin/static/css/admin.css">
   <!-- HTMX 2.0.4 and Alpine.js 3.14.7 bundled locally (no third-party CDN). -->
+  <!-- bulk-select must load before Alpine so window.bulkSelect() is defined
+       when Alpine initializes x-data="bulkSelect()". -->
   <script src="/admin/static/js/htmx.min.js" defer></script>
+  <script src="/admin/static/js/bulk-select.js" defer></script>
   <script src="/admin/static/js/alpine.min.js" defer></script>
 </head>
 <body>

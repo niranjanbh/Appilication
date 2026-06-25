@@ -2,7 +2,7 @@
  * Video join screen — three states in one route:
  *   1. Waiting room: fetch token, poll if room not yet provisioned
  *   2. Recording consent dialog: shown once per consultation if not already consented
- *   3. In-call: HMSPrebuilt from @100mslive/react-native-room-kit
+ *   3. In-call: LiveKit (LiveKitRoom from @livekit/react-native)
  *
  * On leave → navigate back to /consultations/[id].
  */
@@ -17,17 +17,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { ComponentType } from 'react';
 import { useThemePreference } from '../../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
 
-// Expo Go never bundles native modules, so requiring 100ms there makes its
-// react-native-hms dependency log "module was not found" (a console.error → red
-// LogBox) before it throws. Detect Expo Go and skip the require entirely to keep
-// the dev console clean; the call phase shows a fallback when HMSPrebuilt is null.
+// LiveKit's React Native SDK is native-only (it depends on react-native-webrtc).
+// Importing it on web — or in Expo Go, which never bundles native modules —
+// throws at require time, so we load it lazily on a real native build only and
+// show a "join from the app" fallback everywhere else.
 function isExpoGo(): boolean {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -38,19 +37,22 @@ function isExpoGo(): boolean {
   }
 }
 
-// 100ms room kit is a native-only SDK. Importing it on web triggers a
-// "react-native-hms module was not found" crash, so load it lazily on a real
-// native build only. Web and Expo Go show a "join on the app" fallback instead.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party SDK has no typed web fallback
-let HMSPrebuilt: ComponentType<any> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party SDK has no web typings
+let LiveKitNative: { registerGlobals: () => void } | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the call UI is composed below from these
+let LK: any = null;
 if (Platform.OS !== 'web' && !isExpoGo()) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    HMSPrebuilt = require('@100mslive/react-native-room-kit').HMSPrebuilt;
+    LK = require('@livekit/react-native');
+    // registerGlobals wires up WebRTC into the RN runtime; must run before use.
+    LK.registerGlobals?.();
+    LiveKitNative = LK;
   } catch {
-    // Native 100ms SDK isn't present. Leave HMSPrebuilt null so the call phase
-    // renders the "join from a real build" fallback instead of crashing.
-    HMSPrebuilt = null;
+    // Native LiveKit SDK isn't present (Expo Go / web). Leave null so the call
+    // phase renders the fallback instead of crashing.
+    LK = null;
+    LiveKitNative = null;
   }
 }
 
@@ -68,11 +70,24 @@ const POLL_INTERVAL_MS  = 5000;
 const MAX_POLL_ATTEMPTS = 24;
 const SPRING = { mass: 0.3, stiffness: 500, damping: 20 };
 
-// 100ms token + layout services (data residency: media stays in-region via the
-// auth token / room template; the init endpoint is the India cluster supplied
-// by the backend in JoinResponse.endpoint).
-const HMS_TOKEN_ENDPOINT  = 'https://auth.100ms.live/v2/token';
-const HMS_LAYOUT_ENDPOINT = 'https://api.100ms.live/v2/layouts/ui';
+// LiveKit publish defaults — high quality with simulcast layers so the SDK can
+// adapt down on poor networks. Data residency is enforced by the backend's
+// LiveKit deployment (ap-south-1); the endpoint comes from JoinResponse.endpoint.
+const LIVEKIT_ROOM_OPTIONS = {
+  adaptiveStream: true,
+  dynacast: true,
+  publishDefaults: {
+    simulcast: true,
+    videoEncoding: {
+      maxBitrate: 3_000_000, // 3 Mbps for the high-quality (720p) layer
+      maxFramerate: 30,
+    },
+    videoSimulcastLayers: [
+      { width: 640, height: 360, encoding: { maxBitrate: 500_000, maxFramerate: 20 } },
+      { width: 1280, height: 720, encoding: { maxBitrate: 1_500_000, maxFramerate: 30 } },
+    ],
+  },
+};
 
 // ── Waiting room ──────────────────────────────────────────────────────────────
 
@@ -256,6 +271,159 @@ const cd = StyleSheet.create({
   skipBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '500' },
 });
 
+// ── Call phase (LiveKit) ────────────────────────────────────────────────────────
+
+/**
+ * In-call layout rendered inside <LiveKitRoom>. Uses LiveKit hooks to lay out
+ * the remote participant full-screen with the local camera as a corner PIP, plus
+ * mic / camera / end-call controls. Built from @livekit/react-native primitives
+ * so we keep full control over the clinical visual register (design tokens only).
+ */
+function CallContent({ onLeave }: { onLeave: () => void }) {
+  const {
+    useTracks,
+    useLocalParticipant,
+    VideoTrack,
+    Track,
+  } = LK;
+
+  // All camera tracks in the room, excluding screen-share, with placeholders so
+  // a participant with the camera off still occupies a tile.
+  const tracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: true }],
+    { onlySubscribed: false },
+  );
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TrackReference is SDK-typed
+  const remote = tracks.find((t: any) => !t.participant?.isLocal);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const local = tracks.find((t: any) => t.participant?.isLocal);
+
+  const toggleMic = useCallback(() => {
+    localParticipant?.setMicrophoneEnabled(!isMicrophoneEnabled);
+  }, [localParticipant, isMicrophoneEnabled]);
+
+  const toggleCam = useCallback(() => {
+    localParticipant?.setCameraEnabled(!isCameraEnabled);
+  }, [localParticipant, isCameraEnabled]);
+
+  return (
+    <View style={call.root}>
+      {/* Main view: remote participant (or waiting message). */}
+      {remote ? (
+        <VideoTrack trackRef={remote} style={call.remoteVideo} objectFit="cover" />
+      ) : (
+        <View style={call.waitingRemote}>
+          <ActivityIndicator size="large" color={colors.jade} />
+          <Text style={call.waitingText}>Waiting for the other participant to join…</Text>
+        </View>
+      )}
+
+      {/* Local camera PIP overlay. */}
+      {local && isCameraEnabled ? (
+        <View style={call.pip}>
+          <VideoTrack trackRef={local} style={call.pipVideo} objectFit="cover" mirror />
+        </View>
+      ) : null}
+
+      {/* Bottom control bar. */}
+      <View style={call.controls}>
+        <Pressable
+          style={[call.ctrlBtn, !isMicrophoneEnabled && call.ctrlBtnOff]}
+          onPress={toggleMic}
+          accessibilityLabel={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        >
+          <Text style={call.ctrlIcon}>{isMicrophoneEnabled ? '🎙️' : '🔇'}</Text>
+        </Pressable>
+        <Pressable
+          style={[call.ctrlBtn, !isCameraEnabled && call.ctrlBtnOff]}
+          onPress={toggleCam}
+          accessibilityLabel={isCameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+        >
+          <Text style={call.ctrlIcon}>{isCameraEnabled ? '📷' : '🚫'}</Text>
+        </Pressable>
+        <Pressable
+          style={[call.ctrlBtn, call.endBtn]}
+          onPress={onLeave}
+          accessibilityLabel="End call"
+        >
+          <Text style={call.ctrlIcon}>📞</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function CallPhase({ joinResp, onLeave }: { joinResp: JoinResponse; onLeave: () => void }) {
+  const { LiveKitRoom } = LK;
+  return (
+    <LiveKitRoom
+      serverUrl={joinResp.endpoint}
+      token={joinResp.token}
+      connect={true}
+      audio={true}
+      video={true}
+      options={LIVEKIT_ROOM_OPTIONS}
+      onDisconnected={onLeave}
+    >
+      <CallContent onLeave={onLeave} />
+    </LiveKitRoom>
+  );
+}
+
+const call = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.forestInk },
+  remoteVideo: { flex: 1, backgroundColor: colors.forestInk },
+  waitingRemote: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[4],
+    backgroundColor: colors.forestInk,
+  },
+  waitingText: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.body,
+    color: colors.ivoryText,
+    textAlign: 'center',
+    paddingHorizontal: spacing[8],
+  },
+  pip: {
+    position: 'absolute',
+    top: spacing[6],
+    right: spacing[5],
+    width: 108,
+    height: 160,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: withAlpha(colors.ivory, 0.5),
+    backgroundColor: colors.forestSurface,
+  },
+  pipVideo: { flex: 1 },
+  controls: {
+    position: 'absolute',
+    bottom: spacing[10],
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing[5],
+  },
+  ctrlBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: withAlpha(colors.ivory, 0.18),
+  },
+  ctrlBtnOff: { backgroundColor: withAlpha(colors.alert, 0.85) },
+  endBtn: { backgroundColor: colors.alert },
+  ctrlIcon: { fontSize: 26 },
+});
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function JoinScreen() {
@@ -323,9 +491,9 @@ export default function JoinScreen() {
     );
   }
 
-  // phase === 'call' — full-screen HMS SDK, keep black bg.
-  // The 100ms SDK is native-only; on the web portal, direct patients to the app.
-  if (!HMSPrebuilt) {
+  // phase === 'call' — full-screen LiveKit call.
+  // The LiveKit RN SDK is native-only; on web / Expo Go, direct patients to the app.
+  if (!LiveKitNative || !LK) {
     const message =
       Platform.OS === 'web'
         ? 'Video consultations are available in the Kyros mobile app. Please open this consultation on your phone to join the call.'
@@ -335,22 +503,11 @@ export default function JoinScreen() {
 
   return (
     <View style={styles.callContainer}>
-      <HMSPrebuilt
-        token={state.joinResp.token}
-        options={{
-          userName: 'Patient',
-          endPoints: {
-            init: state.joinResp.endpoint,
-            token: HMS_TOKEN_ENDPOINT,
-            layout: HMS_LAYOUT_ENDPOINT,
-          },
-        }}
-        onLeave={handleLeave}
-      />
+      <CallPhase joinResp={state.joinResp} onLeave={handleLeave} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  callContainer: { flex: 1, backgroundColor: '#000' },
+  callContainer: { flex: 1, backgroundColor: colors.forestInk },
 });

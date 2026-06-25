@@ -1,5 +1,6 @@
 {% for patient, user in patients %}
 <tr>
+  <td><input type="checkbox" :value="'{{ patient.id }}'" @change="toggle('{{ patient.id }}')" :checked="selected.includes('{{ patient.id }}')"></td>
   <td><a href="/coord/patients/{{ patient.id }}">{{ user.name }}</a></td>
   <td style="color:var(--stone)">{{ user.phone or '—' }}</td>
   <td style="font-size:12px;color:var(--stone);">{{ patient.primary_conditions | join(', ') or '—' }}</td>
@@ -7,5 +8,5 @@
   <td><a href="/coord/patients/{{ patient.id }}" class="btn btn-secondary btn-sm">View</a></td>
 </tr>
 {% else %}
-<tr><td colspan="5" style="text-align:center;color:var(--stone);padding:20px;">No assigned patients found.</td></tr>
+<tr><td colspan="6" style="text-align:center;color:var(--stone);padding:20px;">No assigned patients found.</td></tr>
 {% endfor %}

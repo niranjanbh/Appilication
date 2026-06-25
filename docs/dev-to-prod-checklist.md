@@ -7,8 +7,8 @@ Values used during development/testing that need production replacements before 
 | `KYROS_MFA_ENCRYPTION_KEY` | `backend/.env` | Placeholder `<generate-32+-random-chars>` | Generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` | 2026-06-23 |
 | `EAS projectId` | `mobile/app.json` | `b1a2763c-...` (dev account) | Confirm this is the production Expo project or create a new one | 2026-06-23 |
 | `KYROS_RAZORPAY_KEY_ID` | `backend/.env` | Not set | Get live key from Razorpay dashboard | 2026-06-23 |
-| `KYROS_RAZORPAY_KEY_SECRET` | `backend/.env` | Not set | Get live secret from Razorpay dashboard | 2026-06-23 |
-| `KYROS_RAZORPAY_WEBHOOK_SECRET` | `backend/.env` | Not set | Configure webhook in Razorpay and copy secret | 2026-06-23 |
+| `KYROS_RAZORPAY_KEY_SECRET` | `backend/.env` | Not set (blank → signature check is skipped in dev, logs a warning) | REQUIRED: app now refuses to boot in production if blank. Get live secret from Razorpay dashboard | 2026-06-25 |
+| `KYROS_RAZORPAY_WEBHOOK_SECRET` | `backend/.env` | Not set (blank → webhooks rejected) | REQUIRED: app now refuses to boot in production if blank. Configure webhook in Razorpay and copy secret | 2026-06-25 |
 | `KYROS_HMS_ACCESS_KEY` | `backend/.env` | Not set | Get from 100ms dashboard | 2026-06-23 |
 | `KYROS_HMS_SECRET` | `backend/.env` | Not set | Get from 100ms dashboard | 2026-06-23 |
 | `KYROS_AUTHKEY_API_KEY` | `backend/.env` | Not set | Get from Authkey/MSG91 dashboard | 2026-06-23 |
@@ -20,3 +20,9 @@ Values used during development/testing that need production replacements before 
 | Apple Team ID | `mobile/eas.json` | `REPLACE_WITH_APPLE_TEAM_ID` | Get from Apple Developer account | 2026-06-23 |
 | App Store Connect App ID | `mobile/eas.json` | `REPLACE_WITH_APP_STORE_CONNECT_APP_ID` | Create app in App Store Connect | 2026-06-23 |
 | Android SHA-1 fingerprint | Google Cloud Console | Dev keystore SHA-1 | Verify matches production signing key | 2026-06-23 |
+| `KYROS_LIVEKIT_API_KEY` | `backend/.env` | `APIkyros877055598d` (dev key) | Generate production key on LiveKit server | 2026-06-25 |
+| `KYROS_LIVEKIT_API_SECRET` | `backend/.env` | Dev secret (see `.env`) | Generate production secret on LiveKit server | 2026-06-25 |
+| `KYROS_LIVEKIT_HOST` | `backend/.env` | `ws://livekit:7880` | Production WSS URL e.g. `wss://video.kyrosclinic.com` | 2026-06-25 |
+| `KYROS_LIVEKIT_RECORDINGS_BUCKET` | `backend/.env` | Not set | S3 bucket in `ap-south-1` with bucket-default SSE-KMS encryption (rule #6). Set `KYROS_S3_KMS_KEY_ID` and configure bucket default encryption to `aws:kms` with that key | 2026-06-25 |
+| LiveKit server config keys | `infra/docker/livekit/livekit.yaml` | Dev key pair | Must match `KYROS_LIVEKIT_API_KEY`/`SECRET` in production | 2026-06-25 |
+| LiveKit web SDK (admin/coord join page) | `backend/app/adminui/static/vendor/livekit-client.umd.min.js` | Not vendored yet | Vendor the LiveKit JS client UMD build to `admin/static/vendor/` and `coord/static/vendor/` (bundled, not CDN — admin-ui rule). Until then the staff "Join room" page shows "video client unavailable" | 2026-06-25 |

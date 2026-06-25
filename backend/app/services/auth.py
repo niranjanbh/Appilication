@@ -277,6 +277,13 @@ async def _create_token_pair(
     *,
     mfa_verified: bool = False,
 ) -> TokenPair:
+    # On a fresh login (no parent token being rotated), revoke any existing
+    # sessions from the same device so we don't accumulate duplicates in the
+    # linked-devices list.
+    if parent_id is None:
+        await auth_repo.revoke_same_device_sessions(
+            db, user_id=user.id, user_agent=user_agent or None,
+        )
     session_id = uuid.uuid4()
     raw_refresh = generate_token(32)
     token_hash = hash_refresh_token(raw_refresh)

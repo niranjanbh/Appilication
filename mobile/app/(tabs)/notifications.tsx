@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -105,7 +105,15 @@ export default function NotificationsScreen() {
     queryKey: ['notifications', page],
     queryFn: () => listNotificationsApi({ page, page_size: 30 }),
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
+
+  // Refetch when the tab regains focus so the inbox is fresh on return.
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationReadApi(id),

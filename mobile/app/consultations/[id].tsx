@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Alert } from '../../lib/ui/alert';
+import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
 import {
@@ -146,11 +148,8 @@ export default function ConsultationDetailScreen() {
   const auth     = useAuth();
   const me       = auth.state.status === 'authenticated' ? auth.state.user : null;
 
-  const [consultation, setConsultation] = useState<Consultation | null>(null);
-  const [loading,    setLoading]    = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [paying,     setPaying]     = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
 
   // Razorpay checkout WebView visibility.
   const [checkoutVisible, setCheckoutVisible] = useState(false);
@@ -162,19 +161,25 @@ export default function ConsultationDetailScreen() {
   const [slotsError,   setSlotsError]   = useState<string | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
 
-  const fetchDetail = useCallback(async () => {
-    try {
-      const data = await apiFetch<Consultation>(`/v1/clinic/patient/consultations/${id}`);
-      setConsultation(data);
-      setError(null);
-    } catch {
-      setError('Could not load consultation details.');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const {
+    data: consultation = null,
+    isLoading: loading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['consultation', id],
+    queryFn: () => apiFetch<Consultation>(`/v1/clinic/patient/consultations/${id}`),
+    staleTime: 30_000,
+  });
+  const error = isError ? 'Could not load consultation details.' : null;
 
-  useEffect(() => { fetchDetail(); }, [fetchDetail]);
+  // A coordinator may assign a doctor/slot or a payment may settle server-side,
+  // so refetch whenever this screen regains focus to clear stale data.
+  const fetchDetail = useCallback(async () => { await refetch(); }, [refetch]);
+  useFocusEffect(
+    useCallback(() => { void refetch(); }, [refetch]),
+  );
 
   // Preserve all existing cancel logic. For an unassigned request the copy is a
   // withdrawal (no slot/refund); for a scheduled/confirmed appointment it's a
@@ -280,11 +285,13 @@ export default function ConsultationDetailScreen() {
     setSlotsLoading(true);
     setSlotsError(null);
     try {
-      const now    = new Date();
-      const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      // The backend rejects slots inside the 24h reschedule window, so only
+      // request slots from 24h out — patients never see slots they can't pick.
+      const from   = new Date(Date.now() + RESCHEDULE_WINDOW_MS);
+      const future = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
       const data = await apiFetch<AvailableSlot[]>(
         `/v1/clinic/patient/consultations/slots?doctor_id=${consultation.doctor_id}` +
-        `&date_from=${now.toISOString()}&date_to=${future.toISOString()}`,
+        `&date_from=${from.toISOString()}&date_to=${future.toISOString()}`,
       );
       setSlots(data);
     } catch {
@@ -365,7 +372,13 @@ export default function ConsultationDetailScreen() {
     new Date(consultation.scheduled_start_at).getTime() - Date.now() > RESCHEDULE_WINDOW_MS;
 
   return (
-    <ScrollView style={[styles.flex, { backgroundColor: bg }]} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={[styles.flex, { backgroundColor: bg }]}
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={isFetching && !loading} onRefresh={refetch} tintColor={colors.jade} />
+      }
+    >
 
       {/* Status pill */}
       <View style={[styles.statusPill, { backgroundColor: sc + '18' }]}>

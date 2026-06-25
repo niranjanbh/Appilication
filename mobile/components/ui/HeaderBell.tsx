@@ -1,16 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback } from 'react';
+import { listNotificationsApi } from '../../lib/api/notifications';
 import { colors, fontSize, fontWeight } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
 
-interface HeaderBellProps {
-  unreadCount?: number;
-}
-
-export function HeaderBell({ unreadCount = 0 }: HeaderBellProps) {
+export function HeaderBell() {
   const t = useTheme();
   const router = useRouter();
+
+  // Fetch the unread count from the list endpoint (page_size=1 keeps the payload
+  // tiny — we only need `unread_count`). Polls in the background and refetches on
+  // screen focus so the badge stays current.
+  const { data, refetch } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: () => listNotificationsApi({ page_size: 1, unread_only: true }),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
+
+  const unreadCount = data?.unread_count ?? 0;
 
   return (
     <Pressable

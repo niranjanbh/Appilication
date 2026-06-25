@@ -1,5 +1,10 @@
 """100ms (HMS) video integration.
 
+DEPRECATED: superseded by `app.integrations.livekit_video`. The platform has
+migrated video consultations to LiveKit. This module is retained only so any
+lingering references resolve; do not use it in new code. Remove once all
+call sites and historical room IDs are confirmed migrated.
+
 Provides room creation and role-scoped app token generation.
 Stub mode is active when KYROS_HMS_ACCESS_KEY is empty — returns synthetic IDs
 so local dev and tests work without real 100ms credentials.

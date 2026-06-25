@@ -27,6 +27,11 @@ from app.services import consultation_service
 router = APIRouter()
 templates = Jinja2Templates(directory="app/adminui/templates")
 
+_CONDITIONS = [
+    "thyroid", "weight", "pcos", "skin_hair",
+    "mens_intimate", "hormones_trt", "longevity",
+]
+
 
 def _ctx(request: Request, admin: object) -> AuditContext:
     from app.models.identity import User as UserModel
@@ -65,6 +70,9 @@ async def consultation_list(
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "admin/_consultations_rows.html" if is_htmx else "admin/consultations.html"
     statuses = [s.value for s in ConsultationStatus]
+    # Active-doctor list for the on-demand form is only needed on the full page
+    # render; patients are fetched on demand via the typeahead search endpoint.
+    doctors = [] if is_htmx else await admin_repo.list_active_doctors(db)
     return templates.TemplateResponse(
         request,
         template,
@@ -76,8 +84,143 @@ async def consultation_list(
             "status_filter": status_filter,
             "date_from": date_from,
             "statuses": statuses,
+            "doctors": doctors,
+            "conditions": _CONDITIONS,
             "page_size": 30,
             "now": datetime.now(UTC),
+        },
+    )
+
+
+@router.get("/consultations/patient-search", response_class=HTMLResponse)
+async def patient_search(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+    q: str = "",
+) -> HTMLResponse:
+    """HTMX typeahead: return <option> rows for the on-demand patient select."""
+    patients = await admin_repo.search_patients(db, query=q)
+    return templates.TemplateResponse(
+        request,
+        "admin/_patient_options.html",
+        {"patients": patients},
+    )
+
+
+@router.post("/consultations/on-demand")
+async def create_on_demand_consultation(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+    patient_id: uuid.UUID = Form(...),
+    doctor_id: uuid.UUID = Form(...),
+    condition_category: str = Form(...),
+    max_participants: int = Form(6),
+) -> RedirectResponse:
+    """Start an instant video consultation between any patient and any active doctor.
+
+    Free and CONFIRMED on creation; the room is provisioned immediately and both
+    parties are notified to join. The doctor still cannot OPEN the call until the
+    patient's identity and telemedicine consent are on file (TPG gate).
+    """
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    ctx = _ctx(request, admin)
+
+    if condition_category not in _CONDITIONS:
+        return RedirectResponse(
+            url="/admin/consultations?error=invalid_condition",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    try:
+        consultation = await consultation_service.create_on_demand_consultation(
+            db,
+            patient_id=patient_id,
+            doctor_id=doctor_id,
+            condition_category=condition_category,
+            max_participants=max_participants,
+        )
+    except consultation_service.ConsultationError as exc:
+        await write_audit(
+            db, ctx, action="admin_create_on_demand_consultation",
+            resource_type="consultation", resource_id=None,
+            allowed=False, reason=exc.code,
+        )
+        await db.commit()
+        return RedirectResponse(
+            url=f"/admin/consultations?error={exc.code}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    await write_audit(
+        db, ctx, action="admin_create_on_demand_consultation",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+        log_metadata={"max_participants": consultation.video_max_participants},
+    )
+    return RedirectResponse(
+        url="/admin/consultations?success=on_demand_started",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/consultations/{consultation_id}/join-room", response_class=HTMLResponse)
+async def join_room(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[object, Depends(require_super_admin_session)],
+) -> HTMLResponse | RedirectResponse:
+    """Join a consultation's video room as a visible-identity support participant."""
+    from app.core.config import settings
+    from app.integrations import livekit_video
+    from app.models.clinic import Consultation
+    from app.models.identity import User as UserModel
+
+    assert isinstance(admin, UserModel)
+    ctx = _ctx(request, admin)
+
+    consultation = await db.get(Consultation, consultation_id)
+    if consultation is None or consultation.deleted_at is not None:
+        await write_audit(
+            db, ctx, action="admin_join_consultation_room",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason="not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    if consultation.status not in (
+        ConsultationStatus.CONFIRMED,
+        ConsultationStatus.IN_PROGRESS,
+    ):
+        return RedirectResponse(
+            url="/admin/consultations?error=not_joinable",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    room_id = await consultation_service.ensure_video_room(
+        db, consultation_id=consultation.id
+    )
+    token = livekit_video.generate_staff_token(
+        room_id=room_id, user_id=str(admin.id), role="admin"
+    )
+    await write_audit(
+        db, ctx, action="admin_join_consultation_room",
+        resource_type="consultation", resource_id=consultation.id, allowed=True,
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin/video_room.html",
+        {
+            "admin": admin,
+            "room_id": room_id,
+            "token": token,
+            "ws_url": settings.livekit_host,
+            "role": "admin",
+            "back_url": "/admin/consultations",
         },
     )
 

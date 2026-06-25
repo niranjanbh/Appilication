@@ -22,7 +22,7 @@ import {
 import { Alert } from '../../lib/ui/alert';
 import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { apiFetch } from '../../lib/api/client';
 import { listConditions, type Condition } from '../../lib/api/conditions';
@@ -60,7 +60,7 @@ const CONDITION_ICONS: Record<string, string> = {
   'weight-management': '⚖️',
   diabetes:            '🩸',
   thyroid:             '🦋',
-  pmos:                '🌿',
+  pcos:                '🌿',
   'skin-and-hair':     '✨',
   'sexual-health':     '🔬',
   'hormones-trt':      '⚡',
@@ -84,7 +84,7 @@ const FALLBACK_CONDITIONS: ConditionOption[] = [
   { slug: 'weight-management', label: 'Weight Management',         icon: CONDITION_ICONS['weight-management']! },
   { slug: 'diabetes',          label: 'Diabetes',                  icon: CONDITION_ICONS['diabetes']! },
   { slug: 'thyroid',           label: 'Thyroid',                   icon: CONDITION_ICONS['thyroid']! },
-  { slug: 'pmos',              label: 'PMOS (PCOS)',               icon: CONDITION_ICONS['pmos']! },
+  { slug: 'pcos',              label: 'PCOS',                      icon: CONDITION_ICONS['pcos']! },
   { slug: 'skin-and-hair',     label: 'Skin & Hair',               icon: CONDITION_ICONS['skin-and-hair']! },
   { slug: 'sexual-health',     label: 'Sexual & Intimate Health',  icon: CONDITION_ICONS['sexual-health']! },
   { slug: 'hormones-trt',      label: 'Hormones & TRT',            icon: CONDITION_ICONS['hormones-trt']! },
@@ -162,10 +162,11 @@ function PressCard({ onPress, children, style, accessibilityLabel }: {
 
 // ── Step 1 — Condition ────────────────────────────────────────────────────────
 
-function ConditionStep({ conditions, loading, onSelect, theme }: {
+function ConditionStep({ conditions, loading, onSelect, onClose, theme }: {
   conditions: ConditionOption[];
   loading: boolean;
   onSelect: (slug: string) => void;
+  onClose: () => void;
   theme: ThemeProps;
 }) {
   return (
@@ -174,6 +175,9 @@ function ConditionStep({ conditions, loading, onSelect, theme }: {
       contentContainerStyle={styles.stepContainer}
       showsVerticalScrollIndicator={false}
     >
+      <Pressable onPress={onClose} accessibilityLabel="Close and return to consultations" style={styles.closeBtn}>
+        <Text style={[styles.closeBtnText, { color: theme.textSub }]}>✕ Cancel</Text>
+      </Pressable>
       <StepHeader step={1} title="What would you like to address?" theme={theme} />
       {loading ? (
         <View style={styles.conditionGrid}>
@@ -203,16 +207,17 @@ function ConditionStep({ conditions, loading, onSelect, theme }: {
 
 // ── Step 2 — Requirement + preferred time → submit ─────────────────────────────
 
-function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
+function RequirementStep({ condition, conditions, followUp, onSuccess, onBack, theme }: {
   condition: string;
   conditions: ConditionOption[];
+  followUp?: string;
   onSuccess: (consultationId: string) => void;
   onBack: () => void;
   theme: ThemeProps;
 }) {
-  const [notes, setNotes]       = useState('');
-  const [window, setWindow]     = useState<string>('flexible');
-  const [submitting, setSubmit] = useState(false);
+  const [notes, setNotes]            = useState('');
+  const [timeWindow, setTimeWindow]  = useState<string>('flexible');
+  const [submitting, setSubmit]      = useState(false);
 
   const conditionLabel = conditions.find(c => c.slug === condition)?.label ?? condition;
   const bg = theme.isDark ? colors.forestInk : colors.ivory;
@@ -224,9 +229,10 @@ function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
         method: 'POST',
         body: JSON.stringify({
           condition_category: condition,
-          consultation_type: 'initial',
+          consultation_type: followUp ? 'follow_up' : 'initial',
           requirement_notes: notes.trim() || null,
-          preferred_time_window: window,
+          preferred_time_window: timeWindow,
+          parent_consultation_id: followUp ?? null,
         }),
       });
       onSuccess(data.consultation_id);
@@ -235,7 +241,7 @@ function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
     } finally {
       setSubmit(false);
     }
-  }, [condition, notes, window, onSuccess]);
+  }, [condition, notes, timeWindow, followUp, onSuccess]);
 
   const submitScale = useSharedValue(1);
   const submitAnim  = useAnimatedStyle(() => ({ transform: [{ scale: submitScale.value }] }));
@@ -272,11 +278,11 @@ function RequirementStep({ condition, conditions, onSuccess, onBack, theme }: {
       <Text style={[styles.fieldLabel, { color: theme.textPri }]}>Preferred time</Text>
       <View style={styles.windowGrid}>
         {TIME_WINDOWS.map(w => {
-          const active = w.slug === window;
+          const active = w.slug === timeWindow;
           return (
             <Pressable
               key={w.slug}
-              onPress={() => setWindow(w.slug)}
+              onPress={() => setTimeWindow(w.slug)}
               accessibilityLabel={w.label}
               style={[
                 styles.windowChip,
@@ -365,9 +371,10 @@ type Step = 'condition' | 'requirement' | 'success';
 
 export default function RequestConsultationScreen() {
   const router  = useRouter();
+  const { condition: preselected, followUp } = useLocalSearchParams<{ condition?: string; followUp?: string }>();
   const isDark  = useThemePreference().colorScheme === 'dark';
-  const [step,        setStep]        = useState<Step>('condition');
-  const [condition,   setCondition]   = useState('');
+  const [step,        setStep]        = useState<Step>(preselected ? 'requirement' : 'condition');
+  const [condition,   setCondition]   = useState(preselected ?? '');
   const [confirmedId, setConfirmedId] = useState('');
 
   const conditionsQuery = useQuery({
@@ -400,12 +407,13 @@ export default function RequestConsultationScreen() {
         conditions={conditions}
         loading={conditionsQuery.isLoading}
         onSelect={slug => { setCondition(slug); setStep('requirement'); }}
+        onClose={() => router.replace('/(tabs)/consultations')}
         theme={theme}
       />
     );
   }
   if (step === 'requirement') {
-    return <RequirementStep condition={condition} conditions={conditions} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
+    return <RequirementStep condition={condition} conditions={conditions} followUp={followUp} onSuccess={onSuccess} onBack={() => setStep('condition')} theme={theme} />;
   }
 
   return (
@@ -495,6 +503,10 @@ const styles = StyleSheet.create({
   // Back link
   backBtn:     { alignItems: 'center', paddingTop: spacing[2] },
   backBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.sm },
+
+  // Close / cancel link (Step 1)
+  closeBtn:     { alignSelf: 'flex-start' },
+  closeBtnText: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
 
   // Success screen
   successContainer: {

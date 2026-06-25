@@ -5,7 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Kyros Coordinator{% endblock %}</title>
   <link rel="stylesheet" href="/coord/static/css/admin.css">
+  <style>
+    /* Bulk multi-select action bar (Alpine bulkSelect()). */
+    .bulk-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--ivory);
+      border: 1px solid var(--sage);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .export-bar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+    [x-cloak] { display: none !important; }
+  </style>
   <!-- HTMX 2.0.4 and Alpine.js 3.14.7 bundled locally (no third-party CDN). -->
+  <script>
+    /* Multi-select helper for coordinator list/table pages. Lives on the page
+       wrapper (not inside an HTMX-swapped target) so selection survives row
+       re-renders. Reads checkboxes inside <tbody> for the select-all state. */
+    function bulkSelect() {
+      return {
+        selected: [],
+        get allSelected() {
+          const cbs = document.querySelectorAll('tbody input[type="checkbox"]');
+          return cbs.length > 0 && this.selected.length === cbs.length;
+        },
+        toggle(id) {
+          const idx = this.selected.indexOf(id);
+          if (idx === -1) this.selected.push(id);
+          else this.selected.splice(idx, 1);
+        },
+        toggleAll(event) {
+          if (event.target.checked) {
+            this.selected = [...document.querySelectorAll('tbody input[type="checkbox"]')].map(cb => cb.value);
+          } else {
+            this.selected = [];
+          }
+        },
+        clearAll() {
+          this.selected = [];
+          document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+      };
+    }
+  </script>
   <script src="/coord/static/js/htmx.min.js" defer></script>
   <script src="/coord/static/js/alpine.min.js" defer></script>
 </head>

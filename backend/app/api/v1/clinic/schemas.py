@@ -48,6 +48,8 @@ class ConsultationRequestCreate(BaseModel):
     consultation_type: ConsultationType = ConsultationType.INITIAL
     requirement_notes: str | None = Field(default=None, max_length=2000)
     preferred_time_window: str | None = Field(default=None)
+    # Set when this request is a follow-up to a prior consultation.
+    parent_consultation_id: uuid.UUID | None = None
 
     @field_validator("condition_category")
     @classmethod
@@ -149,6 +151,8 @@ class PatientConsultationRead(BaseModel):
     preferred_time_window: str | None = None
     payment_id: uuid.UUID | None = None
     cancellation_reason: str | None = None
+    # Set when this consultation is a follow-up to a prior one.
+    parent_consultation_id: uuid.UUID | None = None
     created_at: datetime
     # Razorpay order to pay after a coordinator assigns the doctor (status='scheduled',
     # not yet paid). None otherwise.
@@ -190,10 +194,17 @@ class ConsultationRescheduleResponse(BaseModel):
     scheduled_end_at: datetime
 
 
+def _livekit_ws_url() -> str:
+    from app.core.config import settings
+
+    return settings.livekit_host
+
+
 class ConsultationJoinResponse(BaseModel):
     room_id: str
     token: str
-    endpoint: str = "https://prod-in2.100ms.live/hmscore"
+    # LiveKit WebSocket URL the client connects to (ws://… / wss://…).
+    endpoint: str = Field(default_factory=_livekit_ws_url)
 
 
 class RecordingConsentResponse(BaseModel):

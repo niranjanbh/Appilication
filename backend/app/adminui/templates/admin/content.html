@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_bulk.html" import bulk_flash, bulk_bar, export_all %}
 {% block title %}Content — Kyros Clinic Admin{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -7,6 +8,8 @@
   <a href="/admin/content/new" class="btn btn-primary">New content</a>
   {% endif %}
 </div>
+
+{{ bulk_flash(request) }}
 
 {% set _success = request.query_params.get('success') %}
 {% if _success == 'published' %}
@@ -47,10 +50,15 @@
   <button type="submit" class="btn btn-primary">Filter</button>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap" x-data="bulkSelect()">
+  {% if admin and admin.role.value == 'super_admin' %}
+  {{ bulk_bar(request, 'content', [('publish', 'Publish selected'), ('unpublish', 'Unpublish selected'), ('delete', 'Delete selected')], 'content items', 'status_filter=' ~ status_filter) }}
+  {% endif %}
+  {{ export_all('content', 'status_filter=' ~ status_filter) }}
   <table>
     <thead>
       <tr>
+        <th style="width:36px"><input type="checkbox" @change="toggleAll($event)" :checked="allSelected"></th>
         <th>Title</th><th>Type</th><th>Conditions</th><th>Status</th><th>AI disclosure</th><th>Actions</th>
       </tr>
     </thead>

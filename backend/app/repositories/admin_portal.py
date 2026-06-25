@@ -387,6 +387,53 @@ async def list_doctors(
     return pairs, total
 
 
+async def list_active_doctors(
+    db: AsyncSession, *, limit: int = 200
+) -> list[tuple[Doctor, User]]:
+    """Return (Doctor, User) pairs for ACTIVE doctors — for on-demand select menus."""
+    rows = await db.execute(
+        select(Doctor, User)
+        .join(User, User.id == Doctor.user_id)
+        .where(
+            Doctor.deleted_at.is_(None),
+            User.deleted_at.is_(None),
+            Doctor.status == DoctorStatus.ACTIVE,
+        )
+        .order_by(User.name)
+        .limit(limit)
+    )
+    return [(row.Doctor, row.User) for row in rows]
+
+
+async def search_patients(
+    db: AsyncSession, *, query: str, limit: int = 20
+) -> list[tuple[Patient, User]]:
+    """Return (Patient, User) pairs matching a name or Kyros-ID substring.
+
+    Backs the admin on-demand patient typeahead — scales past a fixed dropdown.
+    A blank query returns nothing (the menu shows a 'type to search' prompt).
+    """
+    term = query.strip()
+    if not term:
+        return []
+    like = f"%{term.lower()}%"
+    rows = await db.execute(
+        select(Patient, User)
+        .join(User, User.id == Patient.user_id)
+        .where(
+            Patient.deleted_at.is_(None),
+            User.deleted_at.is_(None),
+            or_(
+                func.lower(User.name).like(like),
+                func.lower(Patient.kyros_patient_id).like(like),
+            ),
+        )
+        .order_by(User.name)
+        .limit(limit)
+    )
+    return [(row.Patient, row.User) for row in rows]
+
+
 async def get_doctor_detail(
     db: AsyncSession, doctor_id: uuid.UUID
 ) -> tuple[Doctor, User] | None:
@@ -654,3 +701,92 @@ async def list_audit_log(
         base.order_by(AuditLog.timestamp.desc()).offset(offset).limit(page_size)
     )
     return list(rows.scalars().all()), total
+
+
+# ── Bulk fetch-by-ids (CSV export of a selected subset) ──────────────────────────
+# These power "Export selected" — the caller passes the checked row ids and we
+# return the matching rows in the same tuple shape the list functions use. A
+# 30-row page is the upper bound on selection size, so an IN(...) is safe.
+
+
+async def get_users_by_ids(
+    db: AsyncSession, ids: list[uuid.UUID]
+) -> list[User]:
+    if not ids:
+        return []
+    rows = await db.execute(
+        select(User)
+        .where(User.id.in_(ids), User.deleted_at.is_(None))
+        .order_by(User.created_at.desc())
+    )
+    return list(rows.scalars().all())
+
+
+async def get_doctors_by_ids(
+    db: AsyncSession, ids: list[uuid.UUID]
+) -> list[tuple[Doctor, User]]:
+    if not ids:
+        return []
+    rows = await db.execute(
+        select(Doctor, User)
+        .join(User, User.id == Doctor.user_id)
+        .where(
+            Doctor.id.in_(ids),
+            Doctor.deleted_at.is_(None),
+            User.deleted_at.is_(None),
+        )
+        .order_by(Doctor.created_at.desc())
+    )
+    return [(row.Doctor, row.User) for row in rows]
+
+
+async def get_consultations_by_ids(
+    db: AsyncSession, ids: list[uuid.UUID]
+) -> list[tuple[Consultation, User, User | None]]:
+    if not ids:
+        return []
+    from sqlalchemy.orm import aliased
+
+    PatientUser = aliased(User, name="patient_user")
+    DoctorUser = aliased(User, name="doctor_user")
+    rows = await db.execute(
+        select(Consultation, PatientUser, DoctorUser)
+        .join(Patient, Patient.id == Consultation.patient_id)
+        .join(PatientUser, PatientUser.id == Patient.user_id)
+        .outerjoin(Doctor, Doctor.id == Consultation.doctor_id)
+        .outerjoin(DoctorUser, DoctorUser.id == Doctor.user_id)
+        .where(Consultation.id.in_(ids), Consultation.deleted_at.is_(None))
+        .order_by(Consultation.scheduled_start_at.desc())
+    )
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
+async def get_payments_by_ids(
+    db: AsyncSession, ids: list[uuid.UUID]
+) -> list[tuple[Payment, User]]:
+    if not ids:
+        return []
+    rows = await db.execute(
+        select(Payment, User)
+        .join(User, User.id == Payment.user_id)
+        .where(Payment.id.in_(ids))
+        .order_by(Payment.created_at.desc())
+    )
+    return [(row.Payment, row.User) for row in rows]
+
+
+async def get_staff_by_ids(
+    db: AsyncSession, ids: list[uuid.UUID]
+) -> list[User]:
+    if not ids:
+        return []
+    rows = await db.execute(
+        select(User)
+        .where(
+            User.id.in_(ids),
+            User.deleted_at.is_(None),
+            User.role.in_(_STAFF_ROLES),
+        )
+        .order_by(User.created_at.desc())
+    )
+    return list(rows.scalars().all())

@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -80,42 +80,33 @@ function CarePlanCard({
 export default function CarePlansListScreen() {
   const router = useRouter();
   const isDark = useThemePreference().colorScheme === 'dark';
-  const [plans, setPlans] = useState<CarePlan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchPlans = useCallback(async () => {
-    try {
-      const data = await listCarePlans();
-      setPlans(data.items);
-      setError(null);
-    } catch {
-      setError('Could not load care plans.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  // Share the home widget's cache (`['care-plans']`) so both surfaces stay in
+  // sync. The widget fetches page 1 with page size 20; mirror that exactly.
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['care-plans'],
+    queryFn: () => listCarePlans(1, 20),
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { void fetchPlans(); }, [fetchPlans]);
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    void fetchPlans();
-  }, [fetchPlans]);
-
+  const plans: CarePlan[] = data?.items ?? [];
   const bg = isDark ? colors.forestInk : colors.ivory;
 
   if (loading) {
     return <View style={[styles.center, { backgroundColor: bg }]}><ActivityIndicator color={colors.jade} /></View>;
   }
 
-  if (error) {
+  if (isError) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={[styles.errorText, { color: colors.alert }]}>{error}</Text>
-        <Pressable style={styles.retryBtn} onPress={() => void fetchPlans()}>
+        <Text style={[styles.errorText, { color: colors.alert }]}>Could not load care plans.</Text>
+        <Pressable style={styles.retryBtn} onPress={() => void refetch()} accessibilityLabel="Retry loading care plans">
           <Text style={[styles.retryText, { color: colors.jade }]}>Try again</Text>
         </Pressable>
       </View>
@@ -131,7 +122,7 @@ export default function CarePlansListScreen() {
     <ScrollView
       style={[styles.scroll, { backgroundColor: bg }]}
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.jade} />}
+      refreshControl={<RefreshControl refreshing={isFetching && !loading} onRefresh={refetch} tintColor={colors.jade} />}
     >
       {plans.length === 0 ? (
         <View style={styles.emptyState}>

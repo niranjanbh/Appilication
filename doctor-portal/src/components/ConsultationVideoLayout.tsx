@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, Clock, ShieldCheck, Video, VideoOff } from 'lucide-react';
+import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import '@livekit/components-styles';
 import { apiFetch } from '../lib/api';
 import { PatientContextPanel } from './PatientContextPanel';
 import { NotesPanel } from './NotesPanel';
@@ -58,19 +60,18 @@ interface VideoAreaProps {
 }
 
 function VideoArea({ consultation }: VideoAreaProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [meetingUrl, setMeetingUrl] = useState<string | null>(null);
+  const [session, setSession] = useState<{ token: string; endpoint: string } | null>(null);
   const isActive = ACTIVE_STATUSES.has(consultation.status);
 
-  // Fetch a doctor-scoped 100ms token from the backend, then build the meeting URL.
-  // The token is requested only after the doctor acknowledges recording consent.
+  // Fetch a doctor-scoped LiveKit token + server URL from the backend. The token
+  // is requested only after the doctor acknowledges recording consent.
   const join = useMutation({
     mutationFn: () =>
       apiFetch<JoinResponse>(`/v1/doctor/consultations/${consultation.id}/join`),
     onSuccess: data => {
-      setMeetingUrl(
-        `https://app.100ms.live/meeting/${data.room_id}?token=${encodeURIComponent(data.token)}`,
-      );
+      if (data.endpoint) {
+        setSession({ token: data.token, endpoint: data.endpoint });
+      }
     },
   });
 
@@ -86,7 +87,7 @@ function VideoArea({ consultation }: VideoAreaProps) {
   }
 
   // Consent gate: the doctor must acknowledge recording before a token is issued.
-  if (!meetingUrl) {
+  if (!session) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-ink/90 rounded-card gap-4 px-8 text-center">
         <ShieldCheck size={40} className="text-sage" />
@@ -128,13 +129,31 @@ function VideoArea({ consultation }: VideoAreaProps) {
         <ElapsedTimer startISO={consultation.scheduled_start_at} />
       </div>
 
-      <iframe
-        ref={iframeRef}
-        src={meetingUrl}
-        allow="camera; microphone; display-capture; fullscreen"
-        className="flex-1 w-full border-0"
-        title="Video consultation"
-      />
+      {/* LiveKit web SDK — VideoConference renders the full call UI (participant
+          tiles, mic/camera/screen-share controls). High-quality capture is
+          configured via the room options below. */}
+      <div className="flex-1 w-full min-h-0">
+        <LiveKitRoom
+          serverUrl={session.endpoint}
+          token={session.token}
+          connect={true}
+          video={true}
+          audio={true}
+          options={{
+            adaptiveStream: true,
+            dynacast: true,
+            publishDefaults: {
+              simulcast: true,
+              videoEncoding: { maxBitrate: 3_000_000, maxFramerate: 30 },
+            },
+          }}
+          onDisconnected={() => setSession(null)}
+          data-lk-theme="default"
+          style={{ height: '100%' }}
+        >
+          <VideoConference />
+        </LiveKitRoom>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 {% from "_csrf.html" import csrf_field %}
 {% for consultation, patient_user, doctor_user in consultations %}
 <tr>
+  <td><input type="checkbox" data-bulk-id="{{ consultation.id }}" :checked="isChecked('{{ consultation.id }}')" @change="toggle('{{ consultation.id }}')"></td>
   <td style="font-size:12px;">{{ consultation.scheduled_start_at.strftime('%d %b %Y %H:%M') if consultation.scheduled_start_at else '—' }}</td>
   <td>{{ patient_user.name if patient_user else '—' }}</td>
   <td>{{ doctor_user.name if doctor_user else '—' }}</td>
@@ -8,6 +9,9 @@
   <td><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
   <td style="color:var(--stone);">₹{{ (consultation.consultation_fee_paise / 100) | int }}</td>
   <td>
+    {% if admin and admin.role.value == 'super_admin' and consultation.status.value in ['confirmed', 'in_progress'] %}
+    <a href="/admin/consultations/{{ consultation.id }}/join-room" class="btn btn-primary btn-sm" style="margin-bottom:6px;">Join</a>
+    {% endif %}
     {% if admin and admin.role.value == 'super_admin' and consultation.status.value in ['scheduled', 'confirmed'] %}
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <form method="POST" action="/admin/consultations/{{ consultation.id }}/cancel"
@@ -31,5 +35,5 @@
   </td>
 </tr>
 {% else %}
-<tr><td colspan="7" style="text-align:center;color:var(--stone);padding:20px;">No consultations found.</td></tr>
+<tr><td colspan="8" style="text-align:center;color:var(--stone);padding:20px;">No consultations found.</td></tr>
 {% endfor %}

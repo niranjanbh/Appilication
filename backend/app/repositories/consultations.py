@@ -96,6 +96,35 @@ async def list_consultations_for_patient(
     return list(items_result.scalars().all()), total
 
 
+async def patient_has_consultation_with_doctor(
+    db: AsyncSession,
+    *,
+    patient_user_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> bool:
+    """Return True if the patient has any non-terminal consultation with this doctor."""
+    from app.models.clinic import Patient
+
+    terminal = (
+        ConsultationStatus.COMPLETED,
+        ConsultationStatus.CANCELLED,
+        ConsultationStatus.NO_SHOW,
+    )
+    result = await db.execute(
+        select(
+            exists().where(
+                Patient.user_id == patient_user_id,
+                Patient.deleted_at.is_(None),
+                Consultation.patient_id == Patient.id,
+                Consultation.doctor_id == doctor_id,
+                Consultation.status.notin_(terminal),
+                Consultation.deleted_at.is_(None),
+            )
+        )
+    )
+    return bool(result.scalar())
+
+
 async def get_available_slots(
     db: AsyncSession,
     *,
@@ -124,6 +153,27 @@ async def get_patient_record(
 
     result = await db.execute(
         select(Patient).where(Patient.user_id == user_id, Patient.deleted_at.is_(None))
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_consultation_for_update(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> Consultation | None:
+    """SELECT FOR UPDATE on the consultation row — serializes concurrent assignment.
+
+    Locks the row so two concurrent transactions cannot both read REQUESTED and
+    proceed to book. Returns the locked Consultation, or None if missing/deleted.
+    """
+    result = await db.execute(
+        select(Consultation)
+        .where(
+            Consultation.id == consultation_id,
+            Consultation.deleted_at.is_(None),
+        )
+        .with_for_update()
     )
     return result.scalar_one_or_none()
 
@@ -205,6 +255,44 @@ async def create_consultation(
     return consultation
 
 
+async def create_adhoc_consultation(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+    condition_category: str,
+    consultation_type: str,
+    scheduled_start_at: datetime,
+    scheduled_end_at: datetime,
+    coordinator_id: uuid.UUID | None = None,
+    video_max_participants: int | None = None,
+) -> Consultation:
+    """Create a staff-initiated, pre-confirmed consultation (no payment, no slot).
+
+    Used by the admin/coordinator on-demand flow: the doctor and patient are set
+    up front, the fee is zero, and the consultation lands directly in CONFIRMED so
+    the room can be provisioned and both parties can join immediately. The partial
+    unique index (uq_active_consultation_per_condition) still applies — the caller
+    catches IntegrityError and surfaces ``active_consultation_exists``.
+    """
+    consultation = Consultation(
+        patient_id=patient_id,
+        doctor_id=doctor_id,
+        coordinator_id=coordinator_id,
+        condition_category=condition_category,
+        consultation_type=consultation_type,
+        scheduled_start_at=scheduled_start_at,
+        scheduled_end_at=scheduled_end_at,
+        consultation_fee_paise=0,
+        discount_paise=0,
+        status=ConsultationStatus.CONFIRMED,
+        video_max_participants=video_max_participants,
+    )
+    db.add(consultation)
+    await db.flush()
+    return consultation
+
+
 async def create_consultation_request(
     db: AsyncSession,
     *,
@@ -214,10 +302,12 @@ async def create_consultation_request(
     coordinator_id: uuid.UUID | None = None,
     requirement_notes: str | None = None,
     preferred_time_window: str | None = None,
+    parent_consultation_id: uuid.UUID | None = None,
 ) -> Consultation:
     """Create a patient-submitted consultation request (status='requested').
 
     No doctor, slot, fee, or payment yet — a coordinator assigns those later.
+    ``parent_consultation_id`` links a follow-up request to its originating consultation.
     """
     consultation = Consultation(
         patient_id=patient_id,
@@ -230,6 +320,7 @@ async def create_consultation_request(
         consultation_fee_paise=None,
         requirement_notes=requirement_notes,
         preferred_time_window=preferred_time_window,
+        parent_consultation_id=parent_consultation_id,
         status=ConsultationStatus.REQUESTED,
     )
     db.add(consultation)
@@ -333,6 +424,32 @@ async def update_consultation_video_room(
     )
 
 
+async def set_video_room_if_absent(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    video_room_id: str,
+) -> str | None:
+    """Set video_room_id only if not already set; return the effective value.
+
+    On-demand provisioning on the join path can race with the beat pre-warm task
+    or a second joiner. The conditional update keeps the first writer's id; because
+    the LiveKit room name is deterministic per consultation, the value is identical
+    either way. Returns the authoritative current value (the winner of the race).
+    """
+    await db.execute(
+        update(Consultation)
+        .where(
+            Consultation.id == consultation_id,
+            Consultation.video_room_id.is_(None),
+        )
+        .values(video_room_id=video_room_id, updated_at=datetime.now(UTC))
+    )
+    return await db.scalar(
+        select(Consultation.video_room_id).where(Consultation.id == consultation_id)
+    )
+
+
 async def get_pre_consult_report_for_patient(
     db: AsyncSession,
     *,
@@ -349,6 +466,87 @@ async def get_pre_consult_report_for_patient(
             PreConsultationReport.consultation_id == consultation_id,
             Patient.user_id == patient_user_id,
             Patient.deleted_at.is_(None),
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_stale_confirmed_consultations(
+    db: AsyncSession,
+    *,
+    grace_minutes: int = 30,
+) -> list[Consultation]:
+    """Return CONFIRMED consultations whose scheduled end is past by >= grace_minutes
+    and that nobody ever joined (actual_start_at IS NULL). These are auto no-shows."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=grace_minutes)
+    result = await db.execute(
+        select(Consultation).where(
+            Consultation.status == ConsultationStatus.CONFIRMED,
+            Consultation.scheduled_end_at <= cutoff,
+            Consultation.actual_start_at.is_(None),
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def has_doctor_notes(db: AsyncSession, *, consultation_id: uuid.UUID) -> bool:
+    """Return True if at least one doctor note exists for the consultation.
+
+    kc_doctor_notes is append-only (no soft-delete column), so no deleted_at filter."""
+    from app.models.clinic import DoctorNote
+
+    result = await db.execute(
+        select(
+            exists().where(
+                DoctorNote.consultation_id == consultation_id,
+            )
+        )
+    )
+    return bool(result.scalar())
+
+
+async def has_active_consultation_for_condition(
+    db: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    condition_category: str,
+) -> bool:
+    """Return True if the patient already has a non-terminal consultation for this
+    condition. Terminal statuses (completed/cancelled/no_show) are excluded, so this
+    catches requested/scheduled/confirmed/in_progress."""
+    terminal = (
+        ConsultationStatus.COMPLETED,
+        ConsultationStatus.CANCELLED,
+        ConsultationStatus.NO_SHOW,
+    )
+    result = await db.execute(
+        select(
+            exists().where(
+                Consultation.patient_id == patient_id,
+                Consultation.condition_category == condition_category,
+                Consultation.status.notin_(terminal),
+                Consultation.deleted_at.is_(None),
+            )
+        )
+    )
+    return bool(result.scalar())
+
+
+async def get_consultation_for_patient_by_id(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    patient_id: uuid.UUID,
+) -> Consultation | None:
+    """Resource-scoped fetch by kc_patients.id — returns None for other patients'
+    consultations or missing rows. Scoped on patient_id (not user_id) for callers
+    that already hold the patient record."""
+    result = await db.execute(
+        select(Consultation).where(
+            Consultation.id == consultation_id,
+            Consultation.patient_id == patient_id,
             Consultation.deleted_at.is_(None),
         )
     )

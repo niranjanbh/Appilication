@@ -109,10 +109,21 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str = ""
 
-    # 100ms (HMS) video
+    # 100ms (HMS) video — legacy, replaced by LiveKit
     hms_access_key: str = ""
     hms_secret: str = ""
     hms_template_id: str = ""
+
+    # LiveKit video
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    livekit_host: str = "ws://localhost:7880"
+    livekit_recordings_bucket: str = ""
+    # Video room participant sizing. The default covers a standard 1:1 consult plus
+    # support seats. Staff may raise it per-consultation (up to the cap) when
+    # creating an on-demand multi-specialist consultation.
+    video_default_max_participants: int = 6
+    video_max_participants_cap: int = 12
 
     # Razorpay
     razorpay_key_id: str = ""
@@ -195,11 +206,13 @@ class Settings(BaseSettings):
             problems.append("KYROS_OTP_SECRET is still the placeholder value")
         if self.mfa_encryption_key.startswith("CHANGEME"):
             problems.append("KYROS_MFA_ENCRYPTION_KEY is still the placeholder value")
-        # Razorpay keys are optional until payments go live
-        # if not self.razorpay_key_secret:
-        #     problems.append("KYROS_RAZORPAY_KEY_SECRET must be set in production")
-        # if not self.razorpay_webhook_secret:
-        #     problems.append("KYROS_RAZORPAY_WEBHOOK_SECRET must be set in production")
+        # Razorpay secrets must be present in production: a blank key secret makes
+        # verify_payment_signature accept all signatures (H3), and a blank webhook
+        # secret rejects all webhooks. Both are unsafe to boot with in production.
+        if not self.razorpay_key_secret:
+            problems.append("KYROS_RAZORPAY_KEY_SECRET must be set in production")
+        if not self.razorpay_webhook_secret:
+            problems.append("KYROS_RAZORPAY_WEBHOOK_SECRET must be set in production")
         if self.debug:
             problems.append("KYROS_DEBUG must be false in production")
         origins = self.cors_allowed_origins

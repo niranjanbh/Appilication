@@ -50,6 +50,10 @@ celery_app.conf.update(
             "task": "kyros.reminder.dispatch_due",
             "schedule": crontab(minute="*/5"),  # every 5 minutes
         },
+        "mark-auto-no-show": {
+            "task": "kyros.consultation.mark_auto_no_show",
+            "schedule": crontab(minute="*/15"),  # every 15 minutes
+        },
     },
 )
 celery_app.autodiscover_tasks([
@@ -64,4 +68,5 @@ celery_app.autodiscover_tasks([
     "app.tasks.report_tasks",
     "app.tasks.analytics_tasks",
     "app.tasks.doctor_tasks",
+    "app.tasks.consultation_tasks",
 ])
