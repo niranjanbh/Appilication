@@ -96,3 +96,47 @@ async def list_manual_datapoints(
     stmt = stmt.order_by(HealthDatapoint.measured_at.desc()).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_latest_datapoints_by_type(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    types: list[HealthDatapointType],
+) -> dict[HealthDatapointType, HealthDatapoint]:
+    """Return the most recent datapoint per requested type (any source).
+
+    Uses PostgreSQL ``DISTINCT ON (type)`` with a ``type, measured_at DESC`` ordering
+    so each type yields its newest reading. Types with no datapoints are absent
+    from the result map.
+    """
+    if not types:
+        return {}
+    stmt = (
+        select(HealthDatapoint)
+        .where(
+            HealthDatapoint.user_id == user_id,
+            HealthDatapoint.type.in_(types),
+        )
+        .order_by(HealthDatapoint.type, HealthDatapoint.measured_at.desc())
+        .distinct(HealthDatapoint.type)
+    )
+    result = await db.execute(stmt)
+    return {dp.type: dp for dp in result.scalars().all()}
+
+
+async def list_datapoints_since(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    datapoint_type: HealthDatapointType,
+    since: datetime,
+) -> list[HealthDatapoint]:
+    """Return a patient's datapoints of one type measured at/after ``since`` (any source)."""
+    stmt = select(HealthDatapoint).where(
+        HealthDatapoint.user_id == user_id,
+        HealthDatapoint.type == datapoint_type,
+        HealthDatapoint.measured_at >= since,
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

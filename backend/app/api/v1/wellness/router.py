@@ -10,6 +10,7 @@ from app.api.v1.wellness.schemas import (
     AdherenceLogRead,
     AdherenceLogRequest,
     DailySummaryResponse,
+    HealthSummaryResponse,
     HealthSyncRequest,
     HealthSyncResponse,
     ReminderCreate,
@@ -515,6 +516,26 @@ async def list_vitals(
         db, ctx, action="list_vitals", resource_type="health_datapoint", allowed=True
     )
     return VitalsListResponse(items=[VitalReadItem.model_validate(r) for r in rows])
+
+
+@router.get("/health-summary", response_model=HealthSummaryResponse)
+async def health_summary(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> HealthSummaryResponse:
+    """Latest synced activity metrics (steps today, resting HR, HRV) for the
+    patient's lifestyle dashboard. Missing metrics come back as null."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    summary = await health_sync_service.get_health_summary(db, user_id=user.id)
+    await write_audit(
+        db, ctx, action="view_health_summary", resource_type="health_summary", allowed=True
+    )
+    return HealthSummaryResponse(**summary)
 
 
 @router.post(

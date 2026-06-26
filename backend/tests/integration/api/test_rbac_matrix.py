@@ -782,6 +782,22 @@ async def test_list_vitals_doctor_returns_403(
     assert resp.status_code == 403
 
 
+# ── /v1/wellness/health-summary — patient-scoped activity summary ────────────
+
+
+async def test_health_summary_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/wellness/health-summary")
+    assert resp.status_code == 401
+
+
+async def test_health_summary_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get("/v1/wellness/health-summary", headers=make_auth_headers(doctor))
+    assert resp.status_code == 403
+
+
 # ── /v1/payments — patient-scoped endpoints ──────────────────────────────────
 # Role matrix: patient=201/200, no-auth=401, doctor=403.
 

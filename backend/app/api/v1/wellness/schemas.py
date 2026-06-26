@@ -172,3 +172,18 @@ class VitalReadItem(BaseModel):
 
 class VitalsListResponse(BaseModel):
     items: list[VitalReadItem]
+
+
+class HealthSummaryResponse(BaseModel):
+    """Latest synced activity metrics for the lifestyle dashboard.
+
+    Every field is nullable — a metric is absent until the patient syncs a wearable
+    that provides it. ``steps_today`` is summed over the current UTC day; resting
+    heart rate and HRV are the most recent readings. ``updated_at`` is the newest
+    measurement time across the included metrics.
+    """
+
+    steps_today: int | None = None
+    resting_heart_rate_bpm: int | None = None
+    hrv_ms: float | None = None
+    updated_at: datetime | None = None

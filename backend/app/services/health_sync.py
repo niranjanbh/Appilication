@@ -152,3 +152,62 @@ async def log_manual_vitals(
 
     inserted, _skipped = await health_sync_repo.upsert_datapoints(db, rows=rows)
     return inserted
+
+
+def _extract_number(value: dict[str, object]) -> float | None:
+    """Pull the single numeric reading out of a datapoint's JSONB value.
+
+    Synced datapoints use type-specific keys ({'count': n}, {'bpm': n}, {'ms': n});
+    manually-logged ones use {'value': n, 'unit': ...}. Either shape carries exactly
+    one numeric, so the first numeric value found is the reading. Booleans are
+    excluded (``bool`` is a subclass of ``int``).
+    """
+    for v in value.values():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+    return None
+
+
+async def get_health_summary(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+) -> dict[str, object]:
+    """Build the lifestyle dashboard summary from synced health datapoints.
+
+    Steps are summed over the current UTC day; resting heart rate and HRV are the
+    latest readings. Any metric with no datapoints comes back as None.
+    """
+    from datetime import UTC, datetime
+
+    latest = await health_sync_repo.get_latest_datapoints_by_type(
+        db,
+        user_id=user_id,
+        types=[HealthDatapointType.RESTING_HEART_RATE, HealthDatapointType.HRV],
+    )
+
+    now = datetime.now(UTC)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    steps_rows = await health_sync_repo.list_datapoints_since(
+        db, user_id=user_id, datapoint_type=HealthDatapointType.STEPS, since=day_start
+    )
+
+    steps_today: int | None = None
+    if steps_rows:
+        steps_today = int(round(sum((_extract_number(r.value) or 0.0) for r in steps_rows)))
+
+    rhr = latest.get(HealthDatapointType.RESTING_HEART_RATE)
+    hrv = latest.get(HealthDatapointType.HRV)
+    rhr_v = _extract_number(rhr.value) if rhr is not None else None
+    hrv_v = _extract_number(hrv.value) if hrv is not None else None
+
+    updated_candidates = [dp.measured_at for dp in (rhr, hrv) if dp is not None]
+    if steps_rows:
+        updated_candidates.append(max(r.measured_at for r in steps_rows))
+
+    return {
+        "steps_today": steps_today,
+        "resting_heart_rate_bpm": int(round(rhr_v)) if rhr_v is not None else None,
+        "hrv_ms": round(hrv_v, 1) if hrv_v is not None else None,
+        "updated_at": max(updated_candidates) if updated_candidates else None,
+    }
