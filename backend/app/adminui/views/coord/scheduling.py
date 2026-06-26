@@ -114,21 +114,18 @@ async def book_consultation(
             status_code=status.HTTP_302_FOUND,
         )
 
-    from app.db.enums import ConsultationType
-    from app.services import pricing_service
-
-    consultation_fee_paise = await pricing_service.get_consultation_fee_paise(
-        db,
-        condition_category=condition_category,
-        consultation_type=ConsultationType.INITIAL,
-    )
+    # Coordinator-booked consultations are complimentary: they create no Razorpay
+    # order, keep payment_id NULL, and are excluded from revenue analytics by the
+    # payment join. Store a zero fee so the patient app and reporting never show a
+    # phantom charge that nothing will ever collect. A fee-bearing booking goes
+    # through the patient-request → assign flow (which prices and creates an order).
     consultation = await coord_repo.book_consultation_for_patient(
         db,
         coordinator_id=coordinator.id,
         patient_id=patient_id,
         slot_id=slot_id,
         condition_category=condition_category,
-        consultation_fee_paise=consultation_fee_paise,
+        consultation_fee_paise=0,
     )
 
     allowed = consultation is not None

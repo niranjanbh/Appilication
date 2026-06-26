@@ -429,7 +429,15 @@ export default function ConsultationDetailScreen() {
           <Row label="Your note" value={consultation.requirement_notes} textPri={textPri} textSub={textSub} borderColor={divider} />
         )}
         {consultation.consultation_fee_paise != null && (
-          <Row label="Fee" value={formatRupees(consultation.consultation_fee_paise)} textPri={textPri} textSub={textSub} borderColor={divider} />
+          <Row
+            label="Fee"
+            value={consultation.consultation_fee_paise === 0
+              ? 'Complimentary'
+              : formatRupees(consultation.consultation_fee_paise)}
+            textPri={textPri}
+            textSub={textSub}
+            borderColor={divider}
+          />
         )}
         {consultation.cancellation_reason && (
           <Row label="Cancellation" value={consultation.cancellation_reason} textPri={textPri} textSub={textSub} borderColor={divider} />
