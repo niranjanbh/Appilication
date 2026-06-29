@@ -82,6 +82,10 @@ function findFirstReminder(reminders: Reminder[]): Reminder | null {
   return best;
 }
 
+function hasActiveIntervalReminders(reminders: Reminder[]): boolean {
+  return reminders.some(r => r.active && r.schedule_cron === null && (r.schedule_interval_minutes ?? 0) > 0);
+}
+
 interface NextUpCardProps {
   reminders: Reminder[];
   selectedDate: Date;
@@ -109,6 +113,7 @@ export function NextUpCard({ reminders, selectedDate, onTakeNow }: NextUpCardPro
   const nowMinutes = tick.getHours() * 60 + tick.getMinutes();
   const next = isToday ? findNextReminder(reminders, nowMinutes) : null;
   const allPast = isToday && !next;
+  const hasIntervalOnly = isToday && !next && hasActiveIntervalReminders(reminders);
 
   if (!isToday) return null;
 
@@ -116,6 +121,18 @@ export function NextUpCard({ reminders, selectedDate, onTakeNow }: NextUpCardPro
   const time = next ? formatScheduleTime(next.schedule_cron) : '';
   const nextMin = next ? getCronMinutesOfDay(next.schedule_cron) : null;
   const countdown = nextMin !== null ? formatCountdown(nextMin - nowMinutes) : '';
+
+  if (hasIntervalOnly) {
+    const intervalR = reminders.find(r => r.active && r.schedule_interval_minutes != null);
+    return (
+      <View style={[s.card, { backgroundColor: t.surface }]}>
+        <Text style={[s.heading, { color: t.textSub }]}>Repeating</Text>
+        <Text style={[s.label, { color: t.text }]}>
+          {intervalR?.label} · every {intervalR?.schedule_interval_minutes} min
+        </Text>
+      </View>
+    );
+  }
 
   if (allPast) {
     const tomorrow = findFirstReminder(reminders);

@@ -9,10 +9,23 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.schedule import cron_matches_date
 from app.db.enums import ReminderAction, ReminderType
 from app.models.wellness import Reminder, ReminderLog
 
 IST = ZoneInfo("Asia/Kolkata")
+
+
+def _reminder_scheduled_on_date(reminder: Reminder, target_date: date_type) -> bool:
+    """True if this reminder has a scheduled occurrence on target_date (IST)."""
+    created_ist = reminder.created_at.astimezone(IST).date()
+    if created_ist > target_date:
+        return False
+    if reminder.schedule_interval_minutes and reminder.schedule_interval_minutes > 0:
+        return True
+    if reminder.schedule_cron:
+        return cron_matches_date(reminder.schedule_cron, target_date)
+    return False
 
 
 async def create_reminder(
@@ -165,21 +178,25 @@ async def get_daily_adherence_summary(
     user_id: uuid.UUID,
     target_date: date_type,
 ) -> tuple[int, int]:
-    """Return (total_active_reminders, completed_count) for a given IST date."""
+    """Return (scheduled_reminders, completed_count) for a given IST date.
+
+    ``total`` counts only reminders scheduled on ``target_date`` (a Monday-only
+    cron does not count on Wednesday; a reminder created after the date does not
+    count). ``completed`` is clamped to ``total`` so progress never exceeds 100%.
+    """
     day_start_ist = datetime(target_date.year, target_date.month, target_date.day, tzinfo=IST)
     day_start = day_start_ist.astimezone(UTC)
     day_end = day_start + timedelta(days=1)
 
-    total_result = await db.execute(
-        select(func.count())
-        .select_from(Reminder)
-        .where(
+    reminders_result = await db.execute(
+        select(Reminder).where(
             Reminder.user_id == user_id,
             Reminder.active.is_(True),
             Reminder.deleted_at.is_(None),
         )
     )
-    total = total_result.scalar() or 0
+    reminders = list(reminders_result.scalars().all())
+    total = sum(1 for r in reminders if _reminder_scheduled_on_date(r, target_date))
 
     completed_result = await db.execute(
         select(func.count(func.distinct(ReminderLog.reminder_id)))
@@ -189,12 +206,13 @@ async def get_daily_adherence_summary(
             ReminderLog.action == ReminderAction.TAKEN,
             ReminderLog.scheduled_at >= day_start,
             ReminderLog.scheduled_at < day_end,
+            Reminder.active.is_(True),
             Reminder.deleted_at.is_(None),
         )
     )
     completed = completed_result.scalar() or 0
 
-    return total, completed
+    return total, min(completed, total)
 
 
 async def get_adherence_streak(
@@ -265,6 +283,7 @@ async def get_week_adherence(
             ReminderLog.action == ReminderAction.TAKEN,
             ReminderLog.scheduled_at >= start_utc,
             ReminderLog.scheduled_at < end_utc,
+            Reminder.active.is_(True),
             Reminder.deleted_at.is_(None),
         )
         .group_by(text("d"))

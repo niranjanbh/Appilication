@@ -141,12 +141,18 @@ def generate_upload_url(
 
 def generate_download_url(*, s3_key: str) -> str:
     """Return a presigned GET URL valid for 10 minutes."""
+    import botocore.exceptions
+    from app.core.exceptions import S3UnavailableError
+
     client = _s3_client()
-    url: str = client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.s3_bucket, "Key": s3_key},
-        ExpiresIn=600,  # 10 minutes
-    )
+    try:
+        url: str = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.s3_bucket, "Key": s3_key},
+            ExpiresIn=600,  # 10 minutes
+        )
+    except botocore.exceptions.NoCredentialsError as exc:
+        raise S3UnavailableError() from exc
     return _to_public_url(url)
 
 

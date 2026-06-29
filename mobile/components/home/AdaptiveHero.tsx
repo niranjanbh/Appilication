@@ -57,11 +57,14 @@ function isJoinable(c: Consultation): boolean {
 
 export function AdaptiveHero({
   consult,
+  hasAnyConsult,
   onBook,
   onOpenConsult,
 }: {
   /** The next scheduled/confirmed/in-progress consult with a slot, or null. */
   consult: Consultation | null;
+  /** True when the patient has at least one consultation in any status. */
+  hasAnyConsult: boolean;
   onBook: () => void;
   onOpenConsult: (id: string) => void;
 }) {
@@ -69,6 +72,10 @@ export function AdaptiveHero({
   const gradientColors: readonly [string, string] = t.isDark
     ? [colors.jadeGlow, colors.forest]
     : [colors.jade, colors.forest];
+
+  // No upcoming slot and user already has a consultation — nothing to show here.
+  // RequestedConsultBanner handles the "under review" state above the hero.
+  if (consult == null && hasAnyConsult) return null;
 
   const hasSlot = consult != null && consult.scheduled_start_at != null;
   const joinable = consult != null && isJoinable(consult);

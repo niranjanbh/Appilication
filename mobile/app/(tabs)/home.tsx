@@ -83,9 +83,10 @@ export default function HomeScreen() {
     }, [refetchConsults]),
   );
 
-  const consults     = consultData?.items ?? [];
-  const requested    = findRequested(consults);
+  const consults      = consultData?.items ?? [];
+  const requested     = findRequested(consults);
   const nextScheduled = findNextScheduled(consults);
+  const hasAnyConsult = consults.length > 0;
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
 
@@ -121,6 +122,7 @@ export default function HomeScreen() {
         {/* ── Adaptive hero — countdown or booking CTA ───────────────────── */}
         <AdaptiveHero
           consult={nextScheduled}
+          hasAnyConsult={hasAnyConsult}
           onBook={() => router.push('/consultations/book')}
           onOpenConsult={(id) => router.push(`/consultations/${id}`)}
         />

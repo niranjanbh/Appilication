@@ -66,11 +66,12 @@ async def _create_scheduled_consult(
     doctor: Doctor,
     start_at: datetime,
     status: ConsultationStatus = ConsultationStatus.SCHEDULED,
+    condition_category: str = "thyroid",
 ) -> tuple[Consultation, Availability]:
     consultation = Consultation(
         patient_id=patient.id,
         doctor_id=doctor.id,
-        condition_category="thyroid",
+        condition_category=condition_category,
         consultation_type="initial",
         scheduled_start_at=start_at,
         scheduled_end_at=start_at + timedelta(minutes=20),
@@ -107,14 +108,18 @@ async def test_selector_picks_past_scheduled_only(db_session: AsyncSession) -> N
         db_session, patient=patient, doctor=doctor, start_at=past
     )
     # Future scheduled — still has a chance to be paid; must be left alone.
+    # Uses a different condition to avoid uq_active_consultation_per_condition.
     await _create_scheduled_consult(
         db_session, patient=patient, doctor=doctor, start_at=future,
         status=ConsultationStatus.SCHEDULED,
+        condition_category="pcos",
     )
     # Past CONFIRMED — owned by the no-show task, not this one.
+    # Uses a different condition to avoid uq_active_consultation_per_condition.
     await _create_scheduled_consult(
         db_session, patient=patient, doctor=doctor, start_at=past - timedelta(hours=1),
         status=ConsultationStatus.CONFIRMED,
+        condition_category="weight",
     )
 
     rows = await consultations_repo.get_expired_unpaid_consultations(

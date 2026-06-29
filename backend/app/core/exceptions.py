@@ -64,3 +64,8 @@ class OtpMaxAttemptsError(KyrosDomainError):
 class RateLimitedError(KyrosDomainError):
     status_code = 429
     detail = "rate_limited"
+
+
+class S3UnavailableError(KyrosDomainError):
+    status_code = 503
+    detail = "storage_unavailable"

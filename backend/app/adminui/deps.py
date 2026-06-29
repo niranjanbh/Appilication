@@ -24,13 +24,13 @@ from app.db.session import get_db
 
 logger = structlog.get_logger(__name__)
 
-_SESSION_TTL = 14_400  # 4 hours in seconds
+_SESSION_TTL = 86_400  # 24 hours in seconds
 _SESSION_KEY_PREFIX = "session:admin:"
 _CSRF_COOKIE = "kyros_admin_csrf"
 _SESSION_COOKIE = "kyros_admin_session"
-# Money-mover / identity actions require authentication within the last 10
-# minutes (admin-ui rules). Login and /admin/reauth refresh this key.
-_FRESH_TTL = 600
+# Money-mover / identity actions require authentication within the last 24
+# hours. Login and /admin/reauth refresh this key.
+_FRESH_TTL = 86_400  # 24 hours
 _FRESH_KEY_PREFIX = "sessionfresh:admin:"
 # Reverse index of every live portal session (admin or coordinator) for a staff
 # user, so an admin-forced session-kill can find and delete them by user id

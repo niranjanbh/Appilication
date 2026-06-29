@@ -16,7 +16,7 @@ unparseable expression never matches (and never raises).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -74,6 +74,37 @@ def cron_matches(cron: str, dt_ist: datetime) -> bool:
         _field_matches(minute_f, dt_ist.minute, 0, 59)
         and _field_matches(hour_f, dt_ist.hour, 0, 23)
         and _field_matches(dom_f, dt_ist.day, 1, 31)
+        and _field_matches(month_f, dt_ist.month, 1, 12)
+        and dow_ok
+    )
+
+
+def cron_matches_date(cron: str, target_date: date) -> bool:
+    """True if the 5-field cron has any firing on ``target_date`` (IST).
+
+    Only the date-level fields are evaluated (day-of-month, month, day-of-week);
+    minute and hour are ignored. Used by adherence summaries to decide whether a
+    reminder was scheduled on a given calendar day without needing a specific time.
+    An expression that is not exactly five fields, or has an unparseable date
+    field, never matches.
+    """
+    parts = cron.split()
+    if len(parts) != 5:
+        return False
+    _minute_f, _hour_f, dom_f, month_f, dow_f = parts
+
+    # Use noon IST as a representative instant — avoids DST edge cases and ensures
+    # hour/minute fields (which we're ignoring) don't accidentally affect the dom
+    # check if someone were to pass this to cron_matches.
+    dt_ist = datetime(target_date.year, target_date.month, target_date.day, 12, 0, tzinfo=IST)
+
+    cron_dow = dt_ist.isoweekday() % 7
+    dow_ok = _field_matches(dow_f, cron_dow, 0, 6)
+    if cron_dow == 0:
+        dow_ok = dow_ok or _field_matches(dow_f, 7, 0, 7)
+
+    return (
+        _field_matches(dom_f, dt_ist.day, 1, 31)
         and _field_matches(month_f, dt_ist.month, 1, 12)
         and dow_ok
     )

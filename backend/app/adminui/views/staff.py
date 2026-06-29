@@ -20,7 +20,7 @@ from app.adminui.deps import (
     require_super_admin_session,
 )
 from app.adminui.schemas import admin as admin_schemas
-from app.core.audit import AuditContext
+from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, UserRole
 from app.db.session import get_db
 from app.repositories import admin_portal as admin_repo
@@ -35,9 +35,28 @@ _MIN_PASSWORD_LENGTH = 12
 
 _STAFF_ROLE_CHOICES = ["admin", "coordinator", "doctor", "super_admin"]
 
+DOCTOR_SPECIALTIES = [
+    "Endocrinology",
+    "Gynaecology (PCOS)",
+    "Thyroid Disorders",
+    "Weight Management",
+    "Dermatology (Skin & Hair)",
+    "Andrology (Men's Health)",
+    "Sexual Medicine",
+    "Longevity Medicine",
+    "General Medicine",
+    "Psychiatry",
+    "Nutrition & Dietetics",
+]
+
 
 def _form_context(error: str | None = None, **values: str) -> dict[str, object]:
-    return {"roles": _STAFF_ROLE_CHOICES, "error": error, "values": values}
+    return {
+        "roles": _STAFF_ROLE_CHOICES,
+        "specialties": DOCTOR_SPECIALTIES,
+        "error": error,
+        "values": values,
+    }
 
 
 _STAFF_LIST_ROLES = ["super_admin", "admin", "coordinator", "doctor"]
@@ -159,9 +178,34 @@ async def staff_create(
             "phone_role_conflict": "That phone number already belongs to an account with a different role.",
             "email_in_use": "That email already belongs to another account.",
             "nmc_required": "Doctors require an NMC registration number.",
+            "nmc_in_use": "That NMC registration number is already registered to another doctor.",
             "not_a_staff_role": "Unknown role.",
         }
+        await write_audit(
+            db, ctx, action="admin_create_staff", resource_type="user",
+            resource_id=None, allowed=False, reason=exc.code,
+            log_metadata={"role": role},
+        )
+        await db.commit()
         return _reject(messages.get(exc.code, "Could not create the account."))
+    except Exception as exc:
+        from sqlalchemy.exc import IntegrityError
+
+        if isinstance(exc, IntegrityError):
+            # Race on NMC/phone/email between pre-check and flush.
+            # Roll back the failed transaction before writing the audit row.
+            await db.rollback()
+            await write_audit(
+                db, ctx, action="admin_create_staff", resource_type="user",
+                resource_id=None, allowed=False, reason="integrity_error",
+                log_metadata={"role": role},
+            )
+            await db.commit()
+            return _reject(
+                "Could not create the account — a conflicting record was created concurrently. "
+                "Please check for an existing account and try again."
+            )
+        raise
 
     return RedirectResponse(
         url=f"/admin/users/{result.user.id}", status_code=status.HTTP_302_FOUND

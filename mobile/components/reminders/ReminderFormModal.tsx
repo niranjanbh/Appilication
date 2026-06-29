@@ -99,7 +99,17 @@ export function ReminderFormModal({ visible, editing, onClose, onSave, isSaving,
         notes: metaStr(meta, 'notes'),
       });
     } else {
-      setForm(DEFAULT_FORM);
+      // Default to now + 5 min (rounded to nearest 5) so the first fire lands today,
+      // not tomorrow (DAILY trigger fires at next occurrence of hour:minute).
+      const soon = new Date(Date.now() + 5 * 60_000);
+      const rawMin = soon.getMinutes();
+      const roundedMin = Math.ceil(rawMin / 5) * 5;
+      const carryHour = roundedMin >= 60 ? 1 : 0;
+      setForm({
+        ...DEFAULT_FORM,
+        scheduleHour: String((soon.getHours() + carryHour) % 24).padStart(2, '0'),
+        scheduleMinute: String(roundedMin % 60).padStart(2, '0'),
+      });
     }
   }, [editing, visible]);
 

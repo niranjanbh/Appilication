@@ -4,6 +4,9 @@
 {% block content %}
 <div class="page-header">
   <h2>Users <span style="font-size:14px;font-weight:400;color:var(--stone);">({{ total }})</span></h2>
+  {% if admin and admin.role.value == 'super_admin' %}
+  <a href="/admin/users/new" class="btn btn-primary">+ Create user</a>
+  {% endif %}
 </div>
 
 {{ bulk_flash(request) }}

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adminui.deps import require_admin_session, require_super_admin_session
 from app.adminui.schemas import admin as admin_schemas
+from app.adminui.views.staff import DOCTOR_SPECIALTIES
 from app.core.audit import AuditContext, write_audit
 from app.db.enums import ActorRole, DoctorStatus
 from app.db.session import get_db
@@ -350,6 +351,7 @@ async def doctor_edit_form(
             "admin": admin,
             "doctor": admin_schemas.AdminDoctorView.model_validate(doctor),
             "doctor_user": admin_schemas.AdminUserView.model_validate(user),
+            "specialties": DOCTOR_SPECIALTIES,
             "error": None,
         },
     )

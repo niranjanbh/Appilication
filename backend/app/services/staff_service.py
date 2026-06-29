@@ -170,16 +170,32 @@ async def create_staff_user(
     if role == UserRole.DOCTOR and not nmc:
         raise StaffServiceError("nmc_required")
 
-    user = await db.scalar(select(User).where(User.phone == phone))
+    # Exclude soft-deleted accounts so they neither block new accounts nor get
+    # silently revived/overwritten.
+    user = await db.scalar(
+        select(User).where(User.phone == phone, User.deleted_at.is_(None))
+    )
     if user is not None and user.role != role:
         raise StaffServiceError(
             "phone_role_conflict",
             f"{phone} already belongs to a '{user.role.value}' account",
         )
 
+    # Check ALL rows (including soft-deleted) — the DB unique constraint on email
+    # covers every row regardless of deleted_at, so a soft-deleted account holding
+    # this email would still cause an IntegrityError on INSERT.
     email_owner = await db.scalar(select(User).where(User.email == email))
     if email_owner is not None and (user is None or email_owner.id != user.id):
         raise StaffServiceError("email_in_use", f"{email} belongs to another account")
+
+    # Pre-check NMC uniqueness before flush to give a friendly error instead of
+    # an IntegrityError 500 when a duplicate NMC is submitted.
+    if role == UserRole.DOCTOR and nmc:
+        existing_nmc = await db.scalar(
+            select(Doctor).where(Doctor.nmc_registration_number == nmc)
+        )
+        if existing_nmc is not None and existing_nmc.user_id != (user.id if user else None):
+            raise StaffServiceError("nmc_in_use", f"NMC {nmc} is already registered")
 
     created = user is None
     if user is None:

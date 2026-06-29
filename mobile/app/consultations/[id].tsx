@@ -416,7 +416,7 @@ export default function ConsultationDetailScreen() {
             value={
               `Dr ${consultation.doctor_name}` +
               (consultation.doctor_specialty && consultation.doctor_specialty.length > 0
-                ? ` · ${formatCategory(consultation.doctor_specialty[0])}`
+                ? ` · ${consultation.doctor_specialty.map(formatCategory).join(', ')}`
                 : '')
             }
             textPri={textPri}

@@ -251,6 +251,7 @@ async def notify_consultation_requested(
                 User.expo_push_token,
                 User.notification_preferences,
             )
+            .select_from(Consultation)
             .join(Patient, Patient.id == Consultation.patient_id)
             .join(User, User.id == Patient.user_id)
             .where(Consultation.id == consultation_id)
@@ -522,6 +523,7 @@ async def notify_consultation_completed(
                 User.expo_push_token,
                 User.notification_preferences,
             )
+            .select_from(Consultation)
             .join(Patient, Patient.id == Consultation.patient_id)
             .join(User, User.id == Patient.user_id)
             .where(Consultation.id == consultation_id)
@@ -609,6 +611,7 @@ async def notify_consultation_cancelled(
                 User.expo_push_token,
                 User.notification_preferences,
             )
+            .select_from(Consultation)
             .join(Patient, Patient.id == Consultation.patient_id)
             .join(User, User.id == Patient.user_id)
             .where(Consultation.id == consultation_id)
@@ -1172,6 +1175,66 @@ async def notify_medication_reminder(
         db,
         user_id=user_id,
         template_name="medication_reminder",
+        title=title,
+        body=body,
+        channels=channels_sent,
+        data=data,
+    )
+
+
+_REMINDER_COPY: dict[str, tuple[str, str]] = {
+    "medication": ("Medication reminder", "Time for your scheduled medication. Tap to log it."),
+    "supplement": ("Supplement reminder", "Time to take your supplement. Tap to log it."),
+    "water": ("Hydration reminder", "Time to drink water. Tap to log it."),
+    "gym": ("Workout reminder", "Time for your {label} session. Tap to log it."),
+    "custom": ("Reminder", "{label}"),
+}
+
+
+def _reminder_title_body(reminder_type: str, label: str) -> tuple[str, str]:
+    title, body_template = _REMINDER_COPY.get(reminder_type, _REMINDER_COPY["custom"])
+    return title, body_template.format(label=label)
+
+
+async def notify_reminder_due(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    reminder_label: str,
+    reminder_type: str,
+) -> None:
+    """Fire a push for a due reminder, with copy branched by reminder type.
+
+    Medication/supplement labels are never shown in push text (PHI rule — security.md #10).
+    """
+    from sqlalchemy import select
+
+    from app.models.identity import User
+
+    result = await db.execute(
+        select(
+            User.expo_push_token,
+            User.notification_preferences,
+        ).where(User.id == user_id)
+    )
+    row = result.first()
+    if row is None:
+        return
+
+    prefs = row.notification_preferences or {}
+    title, body = _reminder_title_body(reminder_type, reminder_label)
+    data = {"screen": "reminders"}
+
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    await _record_notification(
+        db,
+        user_id=user_id,
+        template_name=f"{reminder_type}_reminder",
         title=title,
         body=body,
         channels=channels_sent,

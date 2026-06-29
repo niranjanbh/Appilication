@@ -77,6 +77,110 @@ async def user_list(
     )
 
 
+@router.get("/users/new", response_class=HTMLResponse)
+async def user_create_form(
+    request: Request,
+    admin: Annotated[object, Depends(require_super_admin_session)],
+) -> HTMLResponse:
+    # This form only creates patient accounts; staff accounts (doctor,
+    # coordinator, admin, super_admin) go through /admin/staff/new.
+    return templates.TemplateResponse(
+        request,
+        "admin/user_create.html",
+        {"admin": admin, "roles": ["patient"], "error": None},
+    )
+
+
+@router.post("/users/new")
+async def user_create_submit(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    # Identity creation is a fresh-auth action — same bar as /admin/staff.
+    admin: Annotated[object, Depends(require_fresh_super_admin)],
+    name: str = Form(...),
+    phone: str = Form(default=""),
+    email: str = Form(default=""),
+    role: str = Form(...),
+    password: str = Form(default=""),
+) -> Response:
+    from app.core.security import hash_password
+    from app.db.enums import UserRole
+    from app.repositories import patients as patients_repo
+
+    ctx = _ctx(request, admin)
+    name = name.strip()
+    phone = phone.strip()
+    email = email.strip()
+
+    _STAFF_FORM_ROLES = {"doctor", "coordinator", "admin", "super_admin"}
+
+    def _reject(message: str) -> Response:
+        return templates.TemplateResponse(
+            request,
+            "admin/user_create.html",
+            {"admin": admin, "roles": _ROLES, "error": message},
+            status_code=status.HTTP_200_OK,
+        )
+
+    if len(name) < 2:
+        return _reject("Full name must be at least 2 characters.")
+    if role not in _ROLES:
+        return _reject("Invalid role.")
+    # Doctor, coordinator, admin, and super_admin accounts all require additional
+    # fields (NMC, employee ID, phone verification, E.164 validation) that only
+    # the Staff Creation form collects. Block them here and redirect.
+    if role in _STAFF_FORM_ROLES:
+        return _reject(
+            f"'{role}' accounts must be created via the Staff Creation form "
+            "at /admin/staff/new — it collects all required fields and enforces "
+            "phone validation and re-authentication."
+        )
+    if not phone and not email:
+        return _reject("At least one of phone or email is required.")
+    if email and ("@" not in email or "." not in email.rsplit("@", 1)[-1]):
+        return _reject("Email address does not look valid.")
+
+    password_hash = hash_password(password) if password else None
+    try:
+        user = await users_repo.create(
+            db,
+            name=name,
+            role=UserRole(role),
+            phone=phone or None,
+            email=email or None,
+            password_hash=password_hash,
+        )
+
+        # Every patient needs a 1:1 clinic profile row (kyros_patient_id,
+        # coordinator assignment). Create it now so admin actions that follow
+        # creation (assign coordinator, view patient detail) work immediately.
+        if role == "patient":
+            await patients_repo.get_or_create_for_user(db, user_id=user.id)
+
+        await write_audit(
+            db, ctx, action="admin_create_user", resource_type="user",
+            resource_id=user.id, allowed=True,
+            log_metadata={"role": role},
+        )
+    except Exception as exc:
+        from sqlalchemy.exc import IntegrityError
+
+        # The session is in a must-rollback state after an IntegrityError.
+        # Roll back first so the audit write and commit succeed.
+        await db.rollback()
+        await write_audit(
+            db, ctx, action="admin_create_user", resource_type="user",
+            resource_id=None, allowed=False, reason="create_failed",
+            log_metadata={"role": role},
+        )
+        await db.commit()
+        if isinstance(exc, IntegrityError):
+            return _reject("Could not create user — phone or email may already be in use.")
+        raise
+
+    return RedirectResponse(url=f"/admin/users/{user.id}", status_code=status.HTTP_302_FOUND)
+
+
 @router.get("/users/{user_id}", response_class=HTMLResponse)
 async def user_detail(
     user_id: uuid.UUID,

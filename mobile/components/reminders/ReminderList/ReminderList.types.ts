@@ -7,6 +7,7 @@ export interface ReminderListProps {
   selectedDate: Date;
   onDateChange: (date: Date) => void;
   onEdit: (reminder: Reminder) => void;
+  onAdherence: (reminder: Reminder) => void;
   onDelete: (reminder: Reminder) => void;
   onToggle: (reminder: Reminder) => void;
   onTakeNow: (reminder: Reminder) => void;

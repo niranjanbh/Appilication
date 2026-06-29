@@ -20,6 +20,9 @@ from app.api.v1.wellness.schemas import (
     ReminderListResponse,
     ReminderRead,
     ReminderUpdate,
+    SymptomCheckInCreate,
+    SymptomCheckInRead,
+    TodayCheckInResponse,
     VitalReadItem,
     VitalsListResponse,
     VitalsLogRequest,
@@ -32,6 +35,7 @@ from app.core.rbac import cross_user_404, get_patient_user
 from app.db.enums import ActorRole, HealthDatapointType
 from app.repositories import health_sync as health_sync_repo
 from app.repositories import reminders as reminders_repo
+from app.repositories import symptom_checkin as symptom_checkin_repo
 from app.services import health_sync as health_sync_service
 from app.services import reminders as reminders_service
 
@@ -557,7 +561,7 @@ async def log_adherence(
     reminder = await reminders_repo.get_reminder_for_user(
         db, reminder_id=reminder_id, user_id=user.id
     )
-    await cross_user_404(
+    reminder = await cross_user_404(
         db,
         reminder,
         ctx,
@@ -565,6 +569,20 @@ async def log_adherence(
         resource_type="reminder",
         resource_id=reminder_id,
     )
+    if not reminder.active:
+        await write_audit(
+            db,
+            ctx,
+            action="log_adherence",
+            resource_type="reminder",
+            resource_id=reminder_id,
+            allowed=False,
+            reason="reminder_inactive",
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="reminder_inactive"
+        )
     log = await reminders_service.log_adherence(
         db,
         reminder_id=reminder_id,
@@ -583,3 +601,55 @@ async def log_adherence(
         log_metadata={"action": body.action.value},
     )
     return AdherenceLogRead.model_validate(log)
+
+
+# ── Symptom check-in ──────────────────────────────────────────────────────────
+
+
+@router.get("/symptom-checkin/today", response_model=TodayCheckInResponse)
+async def get_today_checkin(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> TodayCheckInResponse:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    entry = await symptom_checkin_repo.get_today_checkin(db, user_id=user.id)
+    await write_audit(
+        db, ctx, action="view_symptom_checkin_today", resource_type="symptom_checkin", allowed=True
+    )
+    if entry is None:
+        return TodayCheckInResponse(checked_in=False, entry=None)
+    return TodayCheckInResponse(checked_in=True, entry=SymptomCheckInRead.model_validate(entry))
+
+
+@router.post("/symptom-checkin", response_model=SymptomCheckInRead, status_code=status.HTTP_201_CREATED)
+async def submit_checkin(
+    body: SymptomCheckInCreate,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> SymptomCheckInRead:
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+    entry = await symptom_checkin_repo.create_checkin(
+        db,
+        user_id=user.id,
+        mood=body.mood,
+        energy=body.energy,
+        note=body.note,
+    )
+    await write_audit(
+        db,
+        ctx,
+        action="create_symptom_checkin",
+        resource_type="symptom_checkin",
+        resource_id=entry.id,
+        allowed=True,
+        log_metadata={"mood": body.mood, "energy": body.energy},
+    )
+    return SymptomCheckInRead.model_validate(entry)

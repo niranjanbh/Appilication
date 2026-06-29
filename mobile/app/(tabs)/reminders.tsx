@@ -44,7 +44,7 @@ import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate } from '
 
 function formatCronTime(cron: string): string {
   const parts = cron.split(' ');
-  const h24 = parseInt(parts[1] ?? '8', 10);
+  const h24 = parseInt(parts[1] ?? '0', 10);
   const min = (parts[0] ?? '0').padStart(2, '0');
   const ampm = h24 >= 12 ? 'PM' : 'AM';
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
@@ -57,13 +57,13 @@ function formatCronFreq(intervalMinutes: number | null, cron: string | null): st
   return 'As needed';
 }
 
-function todayScheduledAt(cron: string | null): string {
-  if (!cron) return new Date().toISOString();
+function todayScheduledAt(cron: string | null, date: Date = new Date()): string {
+  if (!cron) return date.toISOString();
   const parts = cron.split(' ');
   const hour = parseInt(parts[1] ?? '0', 10);
   const minute = parseInt(parts[0] ?? '0', 10);
-  if (isNaN(hour) || isNaN(minute)) return new Date().toISOString();
-  const d = new Date();
+  if (isNaN(hour) || isNaN(minute)) return date.toISOString();
+  const d = new Date(date);
   d.setHours(hour, minute, 0, 0);
   return d.toISOString();
 }
@@ -155,18 +155,21 @@ export default function RemindersScreen() {
     registerNotificationCategories();
     requestNotificationPermissions();
     notifListenerRef.current = addNotificationResponseListener(
-      (reminderId, scheduledAt, action) => {
+      (reminderId, _frozenScheduledAt, action) => {
+        // Ignore the scheduledAt baked into the notification payload — it is the
+        // day-1 cron occurrence captured at schedule time and is wrong for
+        // day-N taps. Recompute today's occurrence from the live reminder.
+        const reminder = remindersRef.current.find(r => r.id === reminderId);
+        const scheduledAt = reminder ? todayScheduledAt(reminder.schedule_cron) : new Date().toISOString();
         if (action === 'taken' || action === 'skipped') {
           logMutation.mutate({ reminderId, scheduledAt, action });
         } else if (action === 'snoozed') {
           logMutation.mutate({ reminderId, scheduledAt, action });
-          const reminder = remindersRef.current.find(r => r.id === reminderId);
           if (reminder) {
             const snoozeAt = new Date(Date.now() + 15 * 60_000);
             void scheduleReminderNotification(reminderId, reminder.label, snoozeAt);
           }
         } else {
-          const reminder = remindersRef.current.find(r => r.id === reminderId);
           setAdherenceState({ visible: true, reminderId, scheduledAt, label: reminder?.label ?? 'Reminder' });
         }
       },
@@ -198,7 +201,10 @@ export default function RemindersScreen() {
     weekQuery.refetch();
   }
 
-  const refreshing = remindersQuery.isFetching && !remindersQuery.isLoading;
+  const refreshing =
+    (remindersQuery.isFetching && !remindersQuery.isLoading) ||
+    (summaryQuery.isFetching && !summaryQuery.isLoading) ||
+    (weekQuery.isFetching && !weekQuery.isLoading);
 
   const createMutation = useMutation({
     mutationFn: createReminderApi,
@@ -215,12 +221,26 @@ export default function RemindersScreen() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       updateReminderApi(id, { active }),
+    onMutate: async ({ id, active }) => {
+      await qc.cancelQueries({ queryKey: ['reminders'] });
+      const prev = qc.getQueryData<{ reminders: Reminder[]; total: number }>(['reminders']);
+      if (prev) {
+        qc.setQueryData<{ reminders: Reminder[]; total: number }>(['reminders'], {
+          ...prev,
+          reminders: prev.reminders.map(r => r.id === id ? { ...r, active } : r),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) qc.setQueryData(['reminders'], context.prev);
+      Alert.alert('Error', 'Could not update reminder.');
+    },
     onSuccess: async (reminder) => {
       invalidateAll();
       if (reminder.active) await scheduleRepeatingReminder(reminder);
       else await cancelReminderNotifications(reminder.id);
     },
-    onError: () => Alert.alert('Error', 'Could not update reminder.'),
   });
 
   const deleteMutation = useMutation({
@@ -241,6 +261,10 @@ export default function RemindersScreen() {
   }
 
   function openDetail(r: Reminder) { router.push(`/reminders/${r.id}`); }
+  function openAdherence(r: Reminder) {
+    const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
+    setAdherenceState({ visible: true, reminderId: r.id, scheduledAt, label: r.label });
+  }
   function openCreate()             { setModalVisible(true); }
   function handleToggle(r: Reminder) {
     toggleMutation.mutate({ id: r.id, active: !r.active });
@@ -257,7 +281,7 @@ export default function RemindersScreen() {
     ]);
   }
   function handleTakeNow(r: Reminder) {
-    const scheduledAt = todayScheduledAt(r.schedule_cron);
+    const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
     logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'taken' as ReminderAction });
   }
   async function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
@@ -307,6 +331,7 @@ export default function RemindersScreen() {
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             onEdit={openDetail}
+            onAdherence={openAdherence}
             onDelete={confirmDelete}
             onToggle={handleToggle}
             onTakeNow={handleTakeNow}

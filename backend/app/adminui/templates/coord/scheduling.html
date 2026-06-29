@@ -98,7 +98,7 @@
               <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;max-width:260px;">
                 <option value="">Select slot…</option>
                 {% for slot, doctor, slot_doctor_user in slots %}
-                <option value="{{ slot.id }}">{{ slot.slot_start.strftime('%d %b %H:%M') }} — Dr {{ slot_doctor_user.name }} ({{ doctor.specialty | first | default('—') }})</option>
+                <option value="{{ slot.id }}">{{ slot.slot_start.strftime('%d %b %H:%M') }} — Dr {{ slot_doctor_user.name }} ({{ doctor.specialty | join(', ') or '—' }})</option>
                 {% endfor %}
               </select>
               <input type="text" name="coupon_code" placeholder="Coupon (optional)"
@@ -128,6 +128,12 @@
     </div>
   </form>
 
+  <!-- Serialize slot + doctor data for client-side specialty filtering.
+       sp is the full specialty array so multi-specialty doctors appear under
+       every relevant filter chip and the label shows all their specialties. -->
+  {% set _slots_data %}[{% for slot, doctor, doctor_user in slots %}{"id":{{ slot.id | string | tojson }},"lbl":{{ (slot.slot_start.strftime('%d %b %Y %H:%M') ~ ' — Dr ' ~ doctor_user.name ~ ' (' ~ (doctor.specialty | join(', ') or '—') ~ ')') | tojson }},"sp":{{ doctor.specialty | tojson }}}{% if not loop.last %},{% endif %}{% endfor %}]{% endset %}
+  {% set _doctors_data %}[{% for doctor, doctor_user in doctors %}{"id":{{ doctor.id | string | tojson }},"name":{{ doctor_user.name | tojson }},"sp":{{ doctor.specialty | tojson }}}{% if not loop.last %},{% endif %}{% endfor %}]{% endset %}
+
   <!-- Book consultation form -->
   <div class="card" style="margin-bottom:20px;">
     <div class="card-title">Book consultation for patient</div>
@@ -155,15 +161,25 @@
           {% endfor %}
         </select>
       </div>
-      <div>
+      <!-- Slot select with specialty filter -->
+      <div x-data='slotFilter({{ _slots_data | safe }})'>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Filter by specialty</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
+          <button type="button" @click="sp=''"
+                  :style="sp==='' ? 'background:var(--jade);color:#fff;' : 'background:#f0ece3;color:var(--stone);'"
+                  style="border:none;border-radius:20px;padding:3px 10px;font-size:11px;cursor:pointer;">All</button>
+          <template x-for="s in specs" :key="s">
+            <button type="button" @click="sp=s" x-text="s"
+                    :style="sp===s ? 'background:var(--jade);color:#fff;' : 'background:#f0ece3;color:var(--stone);'"
+                    style="border:none;border-radius:20px;padding:3px 10px;font-size:11px;cursor:pointer;"></button>
+          </template>
+        </div>
         <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Slot</label>
         <select name="slot_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;min-width:280px;">
           <option value="">Select slot…</option>
-          {% for slot, doctor, doctor_user in slots %}
-          <option value="{{ slot.id }}">
-            {{ slot.slot_start.strftime('%d %b %Y %H:%M') }} — Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})
-          </option>
-          {% endfor %}
+          <template x-for="s in filtered" :key="s.id">
+            <option :value="s.id" x-text="s.lbl"></option>
+          </template>
         </select>
       </div>
       <button type="submit" class="btn btn-primary">Book</button>
@@ -196,13 +212,25 @@
           {% endfor %}
         </select>
       </div>
-      <div>
+      <!-- Doctor select with specialty filter -->
+      <div x-data='doctorFilter({{ _doctors_data | safe }})'>
+        <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Filter by specialty</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
+          <button type="button" @click="sp=''"
+                  :style="sp==='' ? 'background:var(--jade);color:#fff;' : 'background:#f0ece3;color:var(--stone);'"
+                  style="border:none;border-radius:20px;padding:3px 10px;font-size:11px;cursor:pointer;">All</button>
+          <template x-for="s in specs" :key="s">
+            <button type="button" @click="sp=s" x-text="s"
+                    :style="sp===s ? 'background:var(--jade);color:#fff;' : 'background:#f0ece3;color:var(--stone);'"
+                    style="border:none;border-radius:20px;padding:3px 10px;font-size:11px;cursor:pointer;"></button>
+          </template>
+        </div>
         <label style="font-size:12px;color:var(--stone);display:block;margin-bottom:4px;">Doctor</label>
         <select name="doctor_id" required style="border:1px solid #d4cfc6;border-radius:6px;padding:7px 10px;font-size:13px;">
           <option value="">Select doctor…</option>
-          {% for doctor, doctor_user in doctors %}
-          <option value="{{ doctor.id }}">Dr {{ doctor_user.name }} ({{ doctor.specialty | first | default('—') }})</option>
-          {% endfor %}
+          <template x-for="d in filtered" :key="d.id">
+            <option :value="d.id" x-text="'Dr ' + d.name + (d.sp.length ? ' (' + d.sp.join(', ') + ')' : '')"></option>
+          </template>
         </select>
       </div>
       <div>
@@ -326,4 +354,31 @@
     </table>
   </div>
 </div>
+<script>
+function slotFilter(all) {
+  return {
+    all: all,
+    sp: '',
+    get specs() {
+      return [...new Set(this.all.flatMap(s => s.sp))].sort();
+    },
+    get filtered() {
+      return this.sp ? this.all.filter(s => s.sp.includes(this.sp)) : this.all;
+    },
+  };
+}
+
+function doctorFilter(all) {
+  return {
+    all: all,
+    sp: '',
+    get specs() {
+      return [...new Set(this.all.flatMap(d => d.sp))].sort();
+    },
+    get filtered() {
+      return this.sp ? this.all.filter(d => d.sp.includes(this.sp)) : this.all;
+    },
+  };
+}
+</script>
 {% endblock %}

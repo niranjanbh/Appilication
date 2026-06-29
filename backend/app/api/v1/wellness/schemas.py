@@ -174,6 +174,30 @@ class VitalsListResponse(BaseModel):
     items: list[VitalReadItem]
 
 
+# ── Symptom check-in ──────────────────────────────────────────────────────────
+
+
+class SymptomCheckInCreate(BaseModel):
+    mood: int = Field(..., ge=1, le=5)
+    energy: int = Field(..., ge=1, le=5)
+    note: str | None = Field(None, max_length=500)
+
+
+class SymptomCheckInRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    mood: int
+    energy: int
+    note: str | None
+    checked_in_at: datetime
+
+
+class TodayCheckInResponse(BaseModel):
+    checked_in: bool
+    entry: SymptomCheckInRead | None
+
+
 class HealthSummaryResponse(BaseModel):
     """Latest synced activity metrics for the lifestyle dashboard.
 

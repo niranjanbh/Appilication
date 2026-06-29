@@ -47,7 +47,7 @@
   <div x-show="selected.length > 0" x-cloak class="bulk-bar">
     <span class="bulk-count" x-text="selected.length + ' selected'"></span>
     <form method="post" action="/admin/bulk/medications"
-          @submit="return confirm('Apply this action to ' + selected.length + ' medications?')">
+          @submit="if (!confirm('Apply this action to ' + selected.length + ' medications?')) $event.preventDefault()">
       {{ csrf_field(request) }}
       <template x-for="id in selected" :key="id">
         <input type="hidden" name="ids" :value="id">
@@ -71,9 +71,9 @@
         {% if is_super %}<th></th>{% endif %}
       </tr>
     </thead>
-    <tbody>
-      {% for m in items %}
-      <tr x-data="{ editing: false }">
+    {% for m in items %}
+    <tbody x-data="{ editing: false }">
+      <tr>
         <td><input type="checkbox" data-bulk-id="{{ m.id }}" :checked="isChecked('{{ m.id }}')" @change="toggle('{{ m.id }}')"></td>
         <td>
           {% if m.image_s3_key %}
@@ -103,7 +103,7 @@
         {% endif %}
       </tr>
       {% if is_super %}
-      <tr x-show="editing" x-cloak>
+      <tr x-show="editing" x-cloak x-transition>
         <td colspan="8" style="background:var(--ivory);">
           <div style="display:flex;gap:24px;flex-wrap:wrap;padding:8px 0;">
             <form method="POST" action="/admin/medication-catalog/{{ m.id }}/update"
@@ -138,10 +138,12 @@
         </td>
       </tr>
       {% endif %}
-      {% else %}
-      <tr><td colspan="{{ 8 if is_super else 7 }}" style="text-align:center;color:var(--stone);padding:20px;">No medications found.</td></tr>
-      {% endfor %}
     </tbody>
+    {% else %}
+    <tbody>
+      <tr><td colspan="{{ 8 if is_super else 7 }}" style="text-align:center;color:var(--stone);padding:20px;">No medications found.</td></tr>
+    </tbody>
+    {% endfor %}
   </table>
 </div>
 

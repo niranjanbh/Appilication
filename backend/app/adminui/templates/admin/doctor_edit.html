@@ -25,10 +25,43 @@
         <label for="bio_long">Full bio</label>
         <textarea id="bio_long" name="bio_long" rows="5">{{ doctor.bio_long or '' }}</textarea>
       </div>
-      <div class="form-group">
-        <label for="specialty">Specialty (comma-separated)</label>
-        <input id="specialty" name="specialty" type="text" value="{{ doctor.specialty | join(', ') }}">
+
+      <!-- Specialty tag-picker -->
+      <div class="form-group"
+           x-data='specialtyPicker({{ doctor.specialty | join(", ") | tojson }}, {{ specialties | tojson }})'>
+        <label>Specialty</label>
+        <div @click="$refs.inp.focus()"
+             style="border:1px solid #d4cfc6;border-radius:6px;padding:6px 8px;display:flex;flex-wrap:wrap;gap:4px;min-height:38px;cursor:text;background:#fff;">
+          <template x-for="tag in selected" :key="tag">
+            <span style="background:#e8f4f0;color:#1a3d32;border-radius:4px;padding:2px 8px;font-size:12px;display:flex;align-items:center;gap:4px;">
+              <span x-text="tag"></span>
+              <button type="button" @click.stop="remove(tag)"
+                      style="background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;color:#1a3d32;"
+                      :aria-label="'Remove ' + tag">×</button>
+            </span>
+          </template>
+          <input x-ref="inp" x-model="query" type="text"
+                 placeholder="Type to search or add…"
+                 @focus="open=true" @input="open=true" @blur="setTimeout(()=>open=false,150)"
+                 @keydown.enter.prevent="addQuery()"
+                 @keydown.backspace="onBackspace()"
+                 style="border:none;outline:none;flex:1;min-width:120px;font-size:13px;background:transparent;">
+        </div>
+        <div x-show="open && filtered.length > 0"
+             style="border:1px solid #d4cfc6;border-radius:6px;background:#fff;margin-top:2px;max-height:180px;overflow-y:auto;position:absolute;z-index:20;min-width:240px;box-shadow:0 4px 12px rgba(0,0,0,.08);">
+          <template x-for="s in filtered" :key="s">
+            <div x-text="s" @mousedown.prevent="add(s)"
+                 style="padding:8px 12px;font-size:13px;cursor:pointer;"
+                 @mouseover="$el.style.background='#f5f2eb'"
+                 @mouseout="$el.style.background=''"></div>
+          </template>
+        </div>
+        <input type="hidden" name="specialty" :value="selected.join(', ')">
+        <small style="color:var(--stone);display:block;margin-top:4px;">
+          Select from suggestions or type a custom value and press Enter.
+        </small>
       </div>
+
       <div class="form-group">
         <label for="conditions_treated">Conditions treated (comma-separated)</label>
         <input id="conditions_treated" name="conditions_treated" type="text" value="{{ doctor.conditions_treated | join(', ') }}">
@@ -44,4 +77,28 @@
     </form>
   </div>
 </div>
+
+<script>
+function specialtyPicker(initial, options) {
+  return {
+    options: options,
+    selected: initial ? initial.split(',').map(s => s.trim()).filter(Boolean) : [],
+    query: '',
+    open: false,
+    get filtered() {
+      const q = this.query.toLowerCase();
+      return this.options.filter(o => !this.selected.includes(o) && (!q || o.toLowerCase().includes(q)));
+    },
+    add(val) {
+      const v = val.trim();
+      if (v && !this.selected.includes(v)) this.selected.push(v);
+      this.query = '';
+      this.open = false;
+    },
+    addQuery() { if (this.query.trim()) this.add(this.query); },
+    remove(tag) { this.selected = this.selected.filter(s => s !== tag); },
+    onBackspace() { if (!this.query && this.selected.length) this.selected.pop(); },
+  };
+}
+</script>
 {% endblock %}

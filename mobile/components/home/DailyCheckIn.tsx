@@ -148,7 +148,7 @@ export function DailyCheckIn() {
     step === 'mood'
       ? 'How are you feeling today?'
       : step === 'energy'
-        ? 'How's your energy?'
+        ? "How's your energy?"
         : 'Ready to log it?';
 
   const options = step === 'mood' ? MOOD_OPTIONS : step === 'energy' ? ENERGY_OPTIONS : [];

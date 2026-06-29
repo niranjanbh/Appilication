@@ -54,7 +54,7 @@
         <option value="post_consult_followup">Post-consult follow-up</option>
       </select>
       <button type="submit" class="btn btn-primary btn-sm"
-              @click="return confirm('Send message to ' + selected.length + ' patient(s)?')">Send</button>
+              @click="if (!confirm('Send message to ' + selected.length + ' patient(s)?')) $event.preventDefault()">Send</button>
     </form>
     <!-- Bulk create follow-up -->
     <form method="POST" action="/coord/bulk/patients" style="display:inline-flex;gap:6px;align-items:center;">
@@ -65,7 +65,7 @@
       <input type="text" name="note" required maxlength="500" placeholder="Follow-up note (operational only)…"
              style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;width:220px;">
       <button type="submit" class="btn btn-primary btn-sm"
-              @click="return confirm('Create follow-up for ' + selected.length + ' patient(s)?')">Add</button>
+              @click="if (!confirm('Create follow-up for ' + selected.length + ' patient(s)?')) $event.preventDefault()">Add</button>
     </form>
     <a :href="'/coord/export/patients.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
     <button @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>

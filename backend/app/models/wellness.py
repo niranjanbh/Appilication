@@ -90,6 +90,18 @@ class HealthSyncSession(Base, UUIDMixin, TimestampMixin):
     )
 
 
+class SymptomCheckIn(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "wn_symptom_checkins"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    mood: Mapped[int] = mapped_column(Integer, nullable=False)
+    energy: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    checked_in_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class HealthDatapoint(Base):
     """Monthly-partitioned health datapoint. PK includes measured_at for Postgres partitioning."""
 

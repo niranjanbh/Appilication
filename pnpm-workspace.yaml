@@ -4,6 +4,12 @@ packages:
   - doctor-portal
   - website
 
+allowBuilds:
+  esbuild: false
+  msgpackr-extract: false
+  sharp: false
+  workerd: false
+
 ignoredBuiltDependencies:
   - esbuild
   - sharp

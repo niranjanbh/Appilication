@@ -74,7 +74,7 @@
         <input type="hidden" name="action" value="mark_complete">
         <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
         <button type="submit" class="btn btn-primary btn-sm"
-                @click="return confirm('Mark ' + selected.length + ' follow-up(s) complete?')">Mark complete</button>
+                @click="if (!confirm('Mark ' + selected.length + ' follow-up(s) complete?')) $event.preventDefault()">Mark complete</button>
       </form>
       <a :href="'/coord/export/followups.csv?show={{ show }}&ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
       <button @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>

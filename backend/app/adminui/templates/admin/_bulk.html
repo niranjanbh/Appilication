@@ -28,7 +28,7 @@
   <span class="bulk-count" x-text="selected.length + ' selected'"></span>
   {% if actions %}
   <form method="post" action="/admin/bulk/{{ entity }}"
-        @submit="return confirm('Apply this action to ' + selected.length + ' {{ label }}?')">
+        @submit="if (!confirm('Apply this action to ' + selected.length + ' {{ label }}?')) $event.preventDefault()">
     {{ csrf_field(request) }}
     <template x-for="id in selected" :key="id">
       <input type="hidden" name="ids" :value="id">

@@ -140,6 +140,13 @@ export interface ReminderSchedule {
   schedule_interval_minutes: number | null;
 }
 
+function nextCronOccurrence(hm: { hour: number; minute: number }): Date {
+  const now = new Date();
+  const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hm.hour, hm.minute, 0, 0);
+  if (candidate.getTime() <= now.getTime()) candidate.setDate(candidate.getDate() + 1);
+  return candidate;
+}
+
 function parseCronHourMinute(cron: string): { hour: number; minute: number } | null {
   const parts = cron.split(' ');
   const minute = parseInt(parts[0] ?? '', 10);
@@ -147,6 +154,20 @@ function parseCronHourMinute(cron: string): { hour: number; minute: number } | n
   if (isNaN(hour) || isNaN(minute)) return null;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return { hour, minute };
+}
+
+/**
+ * Returns 0-6 (Sun-Sat) if the cron day-of-week field is a single specific day,
+ * else null (daily, or a complex range/list/step expression we don't locally
+ * schedule). Cron treats both 0 and 7 as Sunday → normalized to 0.
+ */
+function parseCronWeekday(cron: string): number | null {
+  const parts = cron.split(' ');
+  const dowF = parts[4] ?? '*';
+  if (dowF === '*') return null; // daily
+  const v = parseInt(dowF, 10);
+  if (isNaN(v) || String(v) !== dowF) return null; // complex expression
+  return v === 7 ? 0 : v; // normalize 7→0 for Sunday; 0-6
 }
 
 /**
@@ -171,15 +192,28 @@ export async function scheduleRepeatingReminder(
     const types = Notifications.SchedulableTriggerInputTypes;
 
     let trigger: Record<string, unknown> | null = null;
+    let scheduledAt = new Date().toISOString();
+
     if (reminder.schedule_interval_minutes && reminder.schedule_interval_minutes > 0) {
       trigger = {
         type: types.TIME_INTERVAL,
         seconds: Math.max(60, reminder.schedule_interval_minutes * 60),
         repeats: true,
       };
+      // First interval fire is `now + interval`
+      scheduledAt = new Date(Date.now() + reminder.schedule_interval_minutes * 60_000).toISOString();
     } else if (reminder.schedule_cron) {
       const hm = parseCronHourMinute(reminder.schedule_cron);
-      if (hm) trigger = { type: types.DAILY, hour: hm.hour, minute: hm.minute };
+      if (hm) {
+        const weekday = parseCronWeekday(reminder.schedule_cron);
+        if (weekday !== null) {
+          // Weekly trigger: Expo weekday is 1=Sun … 7=Sat, so +1 from JS 0-6.
+          trigger = { type: types.WEEKLY, weekday: weekday + 1, hour: hm.hour, minute: hm.minute };
+        } else {
+          trigger = { type: types.DAILY, hour: hm.hour, minute: hm.minute };
+        }
+        scheduledAt = nextCronOccurrence(hm).toISOString();
+      }
     }
     if (!trigger) return null;
 
@@ -189,7 +223,7 @@ export async function scheduleRepeatingReminder(
         body: reminder.label,
         data: {
           reminderId: reminder.id,
-          scheduledAt: new Date().toISOString(),
+          scheduledAt,
           label: reminder.label,
         } satisfies ReminderNotificationData,
         categoryIdentifier: 'REMINDER_ADHERENCE',

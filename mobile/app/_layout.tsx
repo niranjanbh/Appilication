@@ -132,6 +132,19 @@ function RootLayoutNav() {
       <Stack.Screen name="vitals" options={{ title: 'Log vitals' }} />
       <Stack.Screen name="activity" options={{ title: 'Activity' }} />
       <Stack.Screen name="chat/index" options={{ title: 'Coordinator' }} />
+      <Stack.Screen name="consultations/[id]" options={{ title: 'Consultation' }} />
+      <Stack.Screen name="consultations/book" options={{ title: 'Book a consultation' }} />
+      <Stack.Screen name="consultations/pre-consult-report" options={{ title: 'Pre-consultation report' }} />
+      <Stack.Screen name="consultations/join/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="care-plans/[id]" options={{ title: 'Care Plan' }} />
+      <Stack.Screen name="care-plans/index" options={{ title: 'Care Plans' }} />
+      <Stack.Screen name="education/index" options={{ title: 'Education' }} />
+      <Stack.Screen name="education/[id]" options={{ title: 'Article' }} />
+      <Stack.Screen name="biomarkers/[name]" options={{ title: 'Biomarker' }} />
+      <Stack.Screen name="prescriptions/index" options={{ title: 'Prescriptions' }} />
+      <Stack.Screen name="prescriptions/[id]" options={{ title: 'Prescription' }} />
+      <Stack.Screen name="reports/[id]" options={{ title: 'Lab Report' }} />
+      <Stack.Screen name="reports/upload" options={{ title: 'Upload Report' }} />
     </Stack>
   );
 }

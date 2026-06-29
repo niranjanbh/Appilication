@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import (
@@ -294,6 +294,26 @@ async def assign_patient_coordinator(
         target.assigned_patient_ids = [*target.assigned_patient_ids, pid]
 
     patient.assigned_coordinator_id = coordinator_id
+
+    # Backfill any open consultations that were created before an active
+    # coordinator existed (coordinator_id IS NULL). Without this, a patient
+    # whose consultation was submitted when no coordinator was on duty remains
+    # invisible in the coordinator's queue even after assignment.
+    if coordinator_id is not None:
+        await db.execute(
+            update(Consultation)
+            .where(
+                Consultation.patient_id == patient_id,
+                Consultation.coordinator_id.is_(None),
+                Consultation.status.in_([
+                    ConsultationStatus.REQUESTED,
+                    ConsultationStatus.SCHEDULED,
+                ]),
+                Consultation.deleted_at.is_(None),
+            )
+            .values(coordinator_id=coordinator_id)
+        )
+
     await db.flush()
     return patient
 

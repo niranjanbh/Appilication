@@ -253,7 +253,9 @@ async def get_prescription_pdf_url(
 
 def _generate_presigned_url(pdf_url: str) -> str:
     """Convert s3://bucket/key to a presigned HTTPS URL (sync boto3)."""
+    import botocore.exceptions
     from app.core.config import settings
+    from app.core.exceptions import S3UnavailableError
     from app.integrations.s3 import _s3_client
 
     if pdf_url.startswith("s3://"):
@@ -263,9 +265,12 @@ def _generate_presigned_url(pdf_url: str) -> str:
         key = pdf_url
 
     client = _s3_client()
-    url: str = client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.s3_bucket, "Key": key},
-        ExpiresIn=900,
-    )
+    try:
+        url: str = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.s3_bucket, "Key": key},
+            ExpiresIn=900,
+        )
+    except botocore.exceptions.NoCredentialsError as exc:
+        raise S3UnavailableError() from exc
     return url

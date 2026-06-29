@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -71,16 +71,55 @@ function getCronHour(cron: string | null): number | null {
   return isNaN(h) ? null : h;
 }
 
+function cronFieldMatches(field: string, value: number, lo: number, hi: number): boolean {
+  for (const part of field.split(',')) {
+    let step = 1;
+    let rng = part.trim();
+    if (rng.includes('/')) {
+      const [r, sp] = rng.split('/', 2);
+      step = parseInt(sp ?? '1', 10);
+      if (isNaN(step) || step <= 0) continue;
+      rng = r ?? '';
+    }
+    let lo2: number, hi2: number;
+    if (rng === '*') { lo2 = lo; hi2 = hi; }
+    else if (rng.includes('-')) {
+      const [a, b] = rng.split('-', 2);
+      lo2 = parseInt(a ?? '', 10); hi2 = parseInt(b ?? '', 10);
+      if (isNaN(lo2) || isNaN(hi2)) continue;
+    } else {
+      lo2 = hi2 = parseInt(rng, 10);
+      if (isNaN(lo2)) continue;
+    }
+    if (lo2 <= value && value <= hi2 && (value - lo2) % step === 0) return true;
+  }
+  return false;
+}
+
 function matchesCronDate(cron: string | null, date: Date): boolean {
   if (!cron) return true;
   const parts = cron.split(' ');
-  const cronDom = parts[2];
-  const cronMonth = parts[3];
-  const cronDow = parts[4];
-  if (cronDom !== '*' && parseInt(cronDom, 10) !== date.getDate()) return false;
-  if (cronMonth !== '*' && parseInt(cronMonth, 10) !== date.getMonth() + 1) return false;
-  if (cronDow !== '*' && parseInt(cronDow, 10) !== date.getDay()) return false;
-  return true;
+  if (parts.length !== 5) return true; // malformed → show it
+  const domF = parts[2] ?? '*';
+  const monthF = parts[3] ?? '*';
+  const dowF = parts[4] ?? '*';
+
+  const dom = date.getDate();
+  const month = date.getMonth() + 1;
+  const jsDay = date.getDay(); // 0=Sun
+
+  const monthOk = cronFieldMatches(monthF, month, 1, 12);
+  if (!monthOk) return false;
+
+  const domWild = domF === '*';
+  const dowWild = dowF === '*';
+  const domOk = domWild || cronFieldMatches(domF, dom, 1, 31);
+  // dow: cron 0 and 7 are both Sunday
+  const dowOk = dowWild || cronFieldMatches(dowF, jsDay, 0, 6) || (jsDay === 0 && cronFieldMatches(dowF, 7, 0, 7));
+
+  // Standard cron: if both dom and dow are restricted, OR them; otherwise AND
+  if (!domWild && !dowWild) return domOk || dowOk;
+  return domOk && dowOk;
 }
 
 // ── Time-of-day grouping ──────────────────────────────────────────────────────
@@ -139,11 +178,17 @@ function getCronMinutes(cron: string | null): number | null {
   return h * 60 + m;
 }
 
-function getTemporalState(cron: string | null, selectedDate: Date, now: Date): TemporalState {
+function getTemporalState(cron: string | null, intervalMinutes: number | null, selectedDate: Date, now: Date): TemporalState {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const selStart   = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
   if (selStart < todayStart) return 'past';
   if (selStart > todayStart) return 'future';
+  if (cron === null) {
+    // Interval reminder: always relevant when shown on today's view. The date
+    // checks above already cover past/future days, so treat it as upcoming.
+    void intervalMinutes;
+    return 'upcoming';
+  }
   const cronMin = getCronMinutes(cron);
   if (cronMin === null) return 'future';
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -189,7 +234,11 @@ interface WeekStripProps {
 
 function WeekStrip({ selectedDate, onSelectDate, onToggleCalendar, calendarExpanded, weekSummary }: WeekStripProps) {
   const t = useTheme();
-  const today = useMemo(() => new Date(), []);
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setToday(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
 
   const summaryMap = useMemo(() => {
@@ -492,6 +541,7 @@ interface ReminderRowProps {
   reminder: Reminder;
   temporalState: TemporalState;
   onEdit: (r: Reminder) => void;
+  onAdherence: (r: Reminder) => void;
   onDelete: (r: Reminder) => void;
   onToggle: (r: Reminder) => void;
   onTakeNow: (r: Reminder) => void;
@@ -556,7 +606,7 @@ function SwipeLeftAction({ progress }: { progress: SharedValue<number> }) {
   );
 }
 
-function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTakeNow }: ReminderRowProps) {
+function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, onToggle, onTakeNow }: ReminderRowProps) {
   const t    = useTheme();
   const meta = TYPE_META[reminder.type] ?? TYPE_META.custom;
   const time = formatScheduleTime(reminder.schedule_cron);
@@ -585,22 +635,13 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
     [],
   );
 
-  return (
-    <ReanimatedSwipeable
-      ref={swipeRef}
-      friction={2}
-      leftThreshold={40}
-      overshootLeft={false}
-      renderLeftActions={renderLeftActions}
-      onSwipeableOpen={handleSwipeOpen}
-      containerStyle={swipe.swipeContainer}
-    >
+  const content = (
       <HapticPressable
         haptic="selection"
         scaleTo={0.98}
-        onPress={() => onEdit(reminder)}
+        onPress={() => onAdherence(reminder)}
         onLongPress={() => onEdit(reminder)}
-        accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}`}
+        accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}. Tap to log, long-press to edit.`}
       >
         <View
           style={[
@@ -649,8 +690,8 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
             </View>
           </View>
 
-          {/* Claim the touch so toggling / deleting never bubbles up to the
-              row's edit onPress. */}
+          {/* Claim the touch so toggling / deleting / editing never bubbles up to
+              the row's adherence onPress. */}
           <View
             style={row.controls}
             onStartShouldSetResponder={() => true}
@@ -669,6 +710,14 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
             />
 
             <Pressable
+              onPress={() => onEdit(reminder)}
+              hitSlop={8}
+              accessibilityLabel={`Edit ${reminder.label}`}
+            >
+              <Ionicons name="create-outline" size={16} color={t.textSub} />
+            </Pressable>
+
+            <Pressable
               onPress={() => onDelete(reminder)}
               hitSlop={8}
               accessibilityLabel={`Delete ${reminder.label}`}
@@ -678,6 +727,24 @@ function ReminderRow({ reminder, temporalState, onEdit, onDelete, onToggle, onTa
           </View>
         </View>
       </HapticPressable>
+  );
+
+  // Past rows are read-only history — no swipe-to-take affordance.
+  if (isPast) {
+    return content;
+  }
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      friction={2}
+      leftThreshold={40}
+      overshootLeft={false}
+      renderLeftActions={renderLeftActions}
+      onSwipeableOpen={handleSwipeOpen}
+      containerStyle={swipe.swipeContainer}
+    >
+      {content}
     </ReanimatedSwipeable>
   );
 }
@@ -772,10 +839,14 @@ const swipe = StyleSheet.create({
 
 // ── ReminderList ──────────────────────────────────────────────────────────────
 
-export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onDelete, onToggle, onTakeNow, dailySummary, weekSummary, refreshControl }: ReminderListProps) {
+export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onAdherence, onDelete, onToggle, onTakeNow, dailySummary, weekSummary, refreshControl }: ReminderListProps) {
   const t = useTheme();
   const [calendarExpanded, setCalendarExpanded] = useState(false);
-  const now = useMemo(() => new Date(), []);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const displayDate = useMemo(() => {
     const opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
@@ -838,8 +909,9 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
                 <ReminderRow
                   key={r.id}
                   reminder={r}
-                  temporalState={getTemporalState(r.schedule_cron, selectedDate, now)}
+                  temporalState={getTemporalState(r.schedule_cron, r.schedule_interval_minutes ?? null, selectedDate, now)}
                   onEdit={onEdit}
+                  onAdherence={onAdherence}
                   onDelete={onDelete}
                   onToggle={onToggle}
                   onTakeNow={onTakeNow}

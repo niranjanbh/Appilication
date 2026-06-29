@@ -92,7 +92,7 @@
         <input type="hidden" name="action" value="mark_contacted">
         <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
         <button type="submit" class="btn btn-primary btn-sm"
-                @click="return confirm('Mark ' + selected.length + ' inquiry(ies) contacted?')">Mark contacted</button>
+                @click="if (!confirm('Mark ' + selected.length + ' inquiry(ies) contacted?')) $event.preventDefault()">Mark contacted</button>
       </form>
       <a x-show="selected.length > 0" x-cloak :href="'/coord/export/inquiries.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
       <button x-show="selected.length > 0" x-cloak @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>

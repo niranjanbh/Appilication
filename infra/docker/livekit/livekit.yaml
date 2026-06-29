@@ -11,9 +11,6 @@ room:
   max_participants: 4
   empty_timeout: 300
 
-# High-quality video defaults for telemedicine
-video:
-  dynacast: true
 
 logging:
   json: true

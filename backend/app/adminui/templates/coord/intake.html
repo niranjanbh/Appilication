@@ -47,7 +47,7 @@
         <input type="hidden" name="action" value="send_reminder">
         <template x-for="id in selected" :key="id"><input type="hidden" name="ids" :value="id"></template>
         <button type="submit" class="btn btn-primary btn-sm"
-                @click="return confirm('Send a reminder to ' + selected.length + ' patient(s)?')">Send reminder</button>
+                @click="if (!confirm('Send a reminder to ' + selected.length + ' patient(s)?')) $event.preventDefault()">Send reminder</button>
       </form>
       <a x-show="selected.length > 0" x-cloak :href="'/coord/export/intake.csv?ids=' + selected.join(',')" class="btn btn-secondary btn-sm">Export CSV</a>
       <button x-show="selected.length > 0" x-cloak @click="clearAll()" class="btn btn-ghost btn-sm">Clear</button>

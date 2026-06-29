@@ -48,7 +48,7 @@ const TYPE_LABEL: Record<ReminderType, string> = {
 function formatScheduleTime(cron: string | null): string {
   if (!cron) return '';
   const parts = cron.split(' ');
-  const h24 = parseInt(parts[1] ?? '8', 10);
+  const h24 = parseInt(parts[1] ?? '0', 10);
   const min = (parts[0] ?? '0').padStart(2, '0');
   const ampm = h24 >= 12 ? 'PM' : 'AM';
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
@@ -137,12 +137,26 @@ export default function ReminderDetailScreen() {
 
   const toggleMutation = useMutation({
     mutationFn: ({ rid, active }: { rid: string; active: boolean }) => updateReminderApi(rid, { active }),
+    onMutate: async ({ rid, active }) => {
+      await qc.cancelQueries({ queryKey: ['reminders'] });
+      const prev = qc.getQueryData<{ reminders: Reminder[]; total: number }>(['reminders']);
+      if (prev) {
+        qc.setQueryData<{ reminders: Reminder[]; total: number }>(['reminders'], {
+          ...prev,
+          reminders: prev.reminders.map(r => r.id === rid ? { ...r, active } : r),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) qc.setQueryData(['reminders'], context.prev);
+      Alert.alert('Error', 'Could not update reminder.');
+    },
     onSuccess: async (updated) => {
       invalidateAll();
       if (updated.active) await scheduleRepeatingReminder(updated);
       else await cancelReminderNotifications(updated.id);
     },
-    onError: () => Alert.alert('Error', 'Could not update reminder.'),
   });
 
   const deleteMutation = useMutation({
@@ -175,7 +189,9 @@ export default function ReminderDetailScreen() {
 
   function invalidateImage() {
     qc.invalidateQueries({ queryKey: ['reminders'] });
-    qc.invalidateQueries({ queryKey: ['reminder-image', id] });
+    // The image query is disabled once the photo is removed, so invalidate would
+    // skip it and leave the stale signed URL cached. Remove it outright instead.
+    qc.removeQueries({ queryKey: ['reminder-image', id] });
   }
 
   const uploadImageMutation = useMutation({

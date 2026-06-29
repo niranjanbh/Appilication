@@ -92,3 +92,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    # FastAPI 0.115 uses asyncio.iscoroutinefunction which Python 3.14 deprecated.
+    # Suppressed until FastAPI cuts a release that switches to inspect.iscoroutinefunction.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:fastapi",
+]

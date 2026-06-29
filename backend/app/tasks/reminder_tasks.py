@@ -24,26 +24,27 @@ def dispatch_due_reminders(self: object) -> dict[str, Any]:
 async def _dispatch_due_async() -> dict[str, Any]:
     import uuid as _uuid
 
-    from app.db.enums import ReminderType
     from app.db.session import AsyncSessionLocal
     from app.repositories.reminders import get_due_reminders
-    from app.services.notifications import notify_medication_reminder
+    from app.services.notifications import notify_reminder_due
 
     async with AsyncSessionLocal() as db:
-        # Schedule-aware: each pair is a reminder genuinely due in this window plus
-        # its occurrence timestamp (the dispatch idempotency slot).
         due = await get_due_reminders(db, active_only=True)
         dispatched = 0
-        for reminder, occurrence in due:
-            # Only fire push for medication reminders; other types handled separately
-            if str(reminder.type) == ReminderType.MEDICATION.value:
-                await notify_medication_reminder(
-                    db,
-                    user_id=_uuid.UUID(str(reminder.user_id)),
-                    reminder_label=reminder.label,
-                    reminder_id=_uuid.UUID(str(reminder.id)),
-                    occurrence=occurrence,
-                )
-                dispatched += 1
+        skipped_local = 0
+        for reminder, _occurrence in due:
+            # Skip server push when the device already has a local notification
+            # scheduled — sending both would double-notify the patient.
+            channels = reminder.notification_channels or []
+            if "push" in channels:
+                skipped_local += 1
+                continue
+            await notify_reminder_due(
+                db,
+                user_id=_uuid.UUID(str(reminder.user_id)),
+                reminder_label=reminder.label,
+                reminder_type=reminder.type.value,
+            )
+            dispatched += 1
 
-    return {"dispatched_count": dispatched}
+    return {"dispatched_count": dispatched, "skipped_local_count": skipped_local}

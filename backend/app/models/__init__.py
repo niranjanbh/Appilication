@@ -30,7 +30,7 @@ from app.models.payment import Payment, Refund
 from app.models.pricing import Coupon, PricingConfig
 from app.models.public import BookingInquiry, Lead
 from app.models.sign_off import SignOffRecord
-from app.models.wellness import HealthDatapoint, HealthSyncSession, Reminder, ReminderLog
+from app.models.wellness import HealthDatapoint, HealthSyncSession, Reminder, ReminderLog, SymptomCheckIn
 
 __all__ = [
     "AuditLog",
@@ -68,6 +68,7 @@ __all__ = [
     "Reminder",
     "ReminderLog",
     "SignOffRecord",
+    "SymptomCheckIn",
     "StaffMfa",
     "StaffRole",
     "User",

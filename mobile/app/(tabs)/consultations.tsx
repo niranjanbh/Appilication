@@ -280,7 +280,7 @@ function ConsultationCard({
                 <Text style={[styles.cardNote, { color: t.text }]}>
                   {item.doctor_name ? `Dr ${item.doctor_name}` : 'Doctor assigned'}
                   {item.doctor_specialty && item.doctor_specialty.length > 0
-                    ? ` · ${formatCat(item.doctor_specialty[0])}`
+                    ? ` · ${item.doctor_specialty.map(formatCat).join(', ')}`
                     : ''}
                 </Text>
               </View>
@@ -301,7 +301,7 @@ function ConsultationCard({
                   <Text style={[styles.cardNote, { color: t.text }]}>
                     Dr {item.doctor_name}
                     {item.doctor_specialty && item.doctor_specialty.length > 0
-                      ? ` · ${formatCat(item.doctor_specialty[0])}`
+                      ? ` · ${item.doctor_specialty.map(formatCat).join(', ')}`
                       : ''}
                   </Text>
                 </View>
@@ -347,7 +347,7 @@ function ConsultationCard({
               <HintRow icon="clipboard-outline" label="View care plan" t={t}
                 onPress={() => router.push('/care-plans')} />
               <HintRow icon="add-circle-outline" label="Book follow-up" t={t}
-                onPress={() => router.push('/consultations/book')} />
+                onPress={() => router.push(`/consultations/book?followUp=${item.id}`)} />
             </View>
           )}
 

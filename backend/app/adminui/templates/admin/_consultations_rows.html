@@ -7,7 +7,7 @@
   <td>{{ doctor_user.name if doctor_user else '—' }}</td>
   <td style="color:var(--stone);">{{ consultation.consultation_type.value }}</td>
   <td><span class="chip chip-{{ consultation.status.value }}">{{ consultation.status.value }}</span></td>
-  <td style="color:var(--stone);">₹{{ (consultation.consultation_fee_paise / 100) | int }}</td>
+  <td style="color:var(--stone);">{% if consultation.consultation_fee_paise is not none %}₹{{ (consultation.consultation_fee_paise / 100) | int }}{% else %}—{% endif %}</td>
   <td>
     {% if admin and admin.role.value == 'super_admin' and consultation.status.value in ['confirmed', 'in_progress'] %}
     <a href="/admin/consultations/{{ consultation.id }}/join-room" class="btn btn-primary btn-sm" style="margin-bottom:6px;">Join</a>
