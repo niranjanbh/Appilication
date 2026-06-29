@@ -183,6 +183,9 @@ async def test_patient_join_provisions_room_on_demand(
 
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    # TPG gate now applies to the patient join too — grant the consent so the
+    # request reaches the room-provisioning path under test.
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
     consultation = await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=None
     )
@@ -221,6 +224,8 @@ async def test_patient_join_room_provisioning_failure_returns_503(
 
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    # Clear the TPG gate so the test reaches the provisioning failure under test.
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
     consultation = await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=None
     )
@@ -245,6 +250,7 @@ async def test_patient_join_provisioned_returns_token(
 
     patient = await _create_patient_profile(db_session, patient_user.id)
     doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    await _grant_telemedicine_consent(db_session, user_id=patient_user.id)
     room_id = f"stub-room-{uuid.uuid4()}"
     consultation = await _create_consultation(
         db_session, patient=patient, doctor=doctor, video_room_id=room_id

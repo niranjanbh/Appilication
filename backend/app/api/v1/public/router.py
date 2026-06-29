@@ -16,7 +16,10 @@ from app.api.v1.public.schemas import (
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.services import public_booking
-from app.services.notifications import notify_ops_new_inquiry
+from app.services.notifications import (
+    notify_booking_inquiry_received,
+    notify_ops_new_inquiry,
+)
 
 router = APIRouter(tags=["public"])
 
@@ -87,7 +90,17 @@ async def create_booking_inquiry(
         user_agent=request.headers.get("user-agent"),
     )
     # Runs after the get_db commit — the alert never describes a rolled-back row.
-    background_tasks.add_task(notify_ops_new_inquiry, kind="booking_inquiry")
+    # The inquiry id is the dedup scope so each distinct submission alerts ops.
+    background_tasks.add_task(
+        notify_ops_new_inquiry, kind="booking_inquiry", dedup_id=str(inquiry.id)
+    )
+    # Acknowledge receipt to the patient by email (no-op if no email was given).
+    background_tasks.add_task(
+        notify_booking_inquiry_received,
+        name=payload.name,
+        email=payload.email,
+        dedup_id=str(inquiry.id),
+    )
     return BookingInquiryRead(
         id=inquiry.id,
         message=(
@@ -123,7 +136,9 @@ async def create_lead(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
-    background_tasks.add_task(notify_ops_new_inquiry, kind="lead")
+    background_tasks.add_task(
+        notify_ops_new_inquiry, kind="lead", dedup_id=str(lead.id)
+    )
     return LeadRead(
         id=lead.id,
         message="Thank you. We will reply to your email within 1 business day.",

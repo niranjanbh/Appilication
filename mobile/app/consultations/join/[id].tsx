@@ -20,7 +20,7 @@ import {
 import { useThemePreference } from '../../../lib/theme-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { apiFetch } from '../../../lib/api/client';
+import { apiFetch, ApiError } from '../../../lib/api/client';
 import { borderRadius, colors, fontFamily, fontSize, spacing , withAlpha } from '../../../lib/design-tokens';
 
 // LiveKit's React Native SDK is native-only (it depends on react-native-webrtc).
@@ -440,8 +440,14 @@ export default function JoinScreen() {
       const joinResp = await apiFetch<JoinResponse>(`/v1/clinic/patient/consultations/${id}/join`, { method: 'GET' });
       setState({ phase: 'consent', joinResp });
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : '';
-      if (errMsg.includes('503')) {
+      const status = err instanceof ApiError ? err.status : 0;
+      const detail =
+        err instanceof ApiError && err.body && typeof err.body === 'object'
+          ? String((err.body as { detail?: unknown }).detail ?? '')
+          : '';
+
+      // Video room still provisioning — retry with backoff.
+      if (status === 503) {
         pollAttempts.current += 1;
         if (pollAttempts.current >= MAX_POLL_ATTEMPTS) {
           setState({ phase: 'error', message: 'Video room is taking longer than expected. Please try again in a moment.' });
@@ -450,7 +456,21 @@ export default function JoinScreen() {
         pollTimer.current = setTimeout(fetchToken, POLL_INTERVAL_MS);
         return;
       }
-      if (errMsg.includes('404')) { setState({ phase: 'error', message: 'Consultation not found.' }); return; }
+      if (status === 404) { setState({ phase: 'error', message: 'Consultation not found.' }); return; }
+      // TPG pre-flight: the call can't start until the patient is consult-ready.
+      // Surface the specific, actionable reason instead of a generic failure.
+      if (status === 409 && detail === 'identity_not_verified') {
+        setState({ phase: 'error', message: 'Please verify your phone number in your profile before joining this consultation.' });
+        return;
+      }
+      if (status === 409 && detail === 'telemedicine_consent_missing') {
+        setState({ phase: 'error', message: 'Please accept the telemedicine consent (Profile → Privacy & security) before joining this consultation.' });
+        return;
+      }
+      if (status === 409) {
+        setState({ phase: 'error', message: 'This consultation is not open to join right now.' });
+        return;
+      }
       setState({ phase: 'error', message: 'Could not connect to the call. Please try again.' });
     }
   }, [id]);

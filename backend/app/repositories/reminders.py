@@ -282,10 +282,38 @@ async def get_due_reminders(
     db: AsyncSession,
     *,
     active_only: bool = True,
-) -> list[Reminder]:
-    """Return all active reminders for notification dispatch."""
+    now: datetime | None = None,
+    window_minutes: int = 5,
+) -> list[tuple[Reminder, datetime]]:
+    """Return reminders with a scheduled occurrence in the dispatch window.
+
+    Schedule-aware: each candidate is evaluated against its ``schedule_cron``
+    (IST) or ``schedule_interval_minutes`` (anchored at ``created_at``). Only
+    reminders genuinely due in ``(now - window_minutes, now]`` are returned, each
+    paired with its occurrence timestamp (UTC) — the dispatch idempotency slot.
+
+    ``window_minutes`` should match the beat tick (every 5 minutes) so each
+    scheduled minute lands in exactly one window. ``now`` is injectable for tests.
+    """
+    from app.core.schedule import due_occurrence
+
+    eval_now = now or datetime.now(UTC)
+    window = timedelta(minutes=window_minutes)
+
     stmt = select(Reminder).where(Reminder.deleted_at.is_(None))
     if active_only:
         stmt = stmt.where(Reminder.active.is_(True))
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+
+    due: list[tuple[Reminder, datetime]] = []
+    for reminder in result.scalars().all():
+        occurrence = due_occurrence(
+            schedule_cron=reminder.schedule_cron,
+            schedule_interval_minutes=reminder.schedule_interval_minutes,
+            created_at=reminder.created_at,
+            now=eval_now,
+            window=window,
+        )
+        if occurrence is not None:
+            due.append((reminder, occurrence))
+    return due

@@ -95,6 +95,7 @@ async def request_consultation(
     # Validate the parent reference up front: it must exist, belong to THIS patient,
     # and be a completed consultation. Cross-user / missing parents return the same
     # error (security rule #1: no enumeration via differing responses).
+    parent: Consultation | None = None
     if parent_consultation_id is not None:
         parent = await consultations_repo.get_consultation_for_patient_by_id(
             db, consultation_id=parent_consultation_id, patient_id=patient.id
@@ -113,9 +114,18 @@ async def request_consultation(
         if has_active:
             raise ConsultationError("active_consultation_exists")
 
-    # Per-consultation load balancing: route this request to the active
-    # coordinator currently handling the fewest patients (None if none exist).
-    coordinator_id = await patients_repo.route_consultation_to_coordinator(db, patient)
+    # Coordinator routing:
+    # - Follow-ups stay with the coordinator who handled the original consultation
+    #   so the same person has full context and patient history.
+    # - New consultations go to the least-loaded active coordinator.
+    if is_follow_up and parent is not None and parent.coordinator_id is not None:
+        coordinator_id: uuid.UUID | None = parent.coordinator_id
+        # Ensure the coordinator can still see this patient in their queue.
+        await patients_repo.ensure_patient_linked_to_coordinator(
+            db, patient=patient, coordinator_id=coordinator_id
+        )
+    else:
+        coordinator_id = await patients_repo.route_consultation_to_coordinator(db, patient)
 
     # The read-check above is a fast path for a clean UX error, but it has a TOCTOU
     # gap: two concurrent requests can both read "no active consultation" and both
@@ -136,6 +146,30 @@ async def request_consultation(
         )
     except IntegrityError as exc:
         raise ConsultationError("active_consultation_exists") from exc
+
+    # Alert the assigned coordinator (or the ops inbox) that a new request awaits
+    # triage, and acknowledge receipt to the patient. Both are fire-and-forget: a
+    # broker/email hiccup must never fail the request itself.
+    try:
+        from app.services.notifications import notify_coordinator_new_request
+
+        await notify_coordinator_new_request(db, consultation_id=consultation.id)
+    except Exception:
+        logger.exception(
+            "request_consultation.coordinator_alert_failed",
+            consultation_id=str(consultation.id),
+        )
+
+    try:
+        from app.services.notifications import notify_consultation_requested
+
+        await notify_consultation_requested(db, consultation_id=consultation.id)
+    except Exception:
+        logger.exception(
+            "request_consultation.patient_ack_failed",
+            consultation_id=str(consultation.id),
+        )
+
     return consultation
 
 
@@ -259,8 +293,17 @@ async def assign_consultation(
         )
         raise
 
-    from app.services.notifications import notify_doctor_assigned
-    await notify_doctor_assigned(db, consultation_id=updated.id)
+    # Fire-and-forget: a broker/dispatch failure must never roll back a completed
+    # assignment (the slot is booked and the Razorpay order exists).
+    try:
+        from app.services.notifications import notify_doctor_assigned
+
+        await notify_doctor_assigned(db, consultation_id=updated.id)
+    except Exception:
+        logger.exception(
+            "assign_consultation.notify_failed",
+            consultation_id=str(updated.id),
+        )
 
     return updated, payment
 
@@ -319,9 +362,17 @@ async def confirm_payment(
     if updated is None:
         raise ConsultationError("consultation_update_failed")
 
-    # Dispatch appointment confirmation notifications (fire-and-forget Celery tasks)
-    from app.services.notifications import notify_appointment_confirmed
-    await notify_appointment_confirmed(db, consultation_id=consultation.id)
+    # Dispatch appointment confirmation notifications (fire-and-forget). A
+    # broker/dispatch failure must never roll back a captured payment.
+    try:
+        from app.services.notifications import notify_appointment_confirmed
+
+        await notify_appointment_confirmed(db, consultation_id=consultation.id)
+    except Exception:
+        logger.exception(
+            "confirm_payment.notify_failed",
+            consultation_id=str(consultation.id),
+        )
 
     return updated
 
@@ -382,6 +433,20 @@ async def admin_cancel_consultation(
     if updated is None:
         raise ConsultationError("consultation_update_failed")
 
+    # Tell the patient their appointment was cancelled (and whether it was
+    # refunded). Fire-and-forget: a notification failure must not fail the cancel.
+    try:
+        from app.services.notifications import notify_consultation_cancelled
+
+        await notify_consultation_cancelled(
+            db, consultation_id=updated.id, refund_issued=refund_issued
+        )
+    except Exception:
+        logger.exception(
+            "admin_cancel_consultation.notify_failed",
+            consultation_id=str(updated.id),
+        )
+
     return updated, refund_issued
 
 
@@ -422,6 +487,18 @@ async def admin_reassign_consultation(
     )
     if updated is None:
         raise ConsultationError("consultation_update_failed")
+
+    # Tell the patient their appointment was moved. Fire-and-forget: a
+    # notification failure must not fail the reassignment.
+    try:
+        from app.services.notifications import notify_consultation_reassigned
+
+        await notify_consultation_reassigned(db, consultation_id=updated.id)
+    except Exception:
+        logger.exception(
+            "admin_reassign_consultation.notify_failed",
+            consultation_id=str(updated.id),
+        )
 
     return updated
 
@@ -718,6 +795,18 @@ async def complete_consultation(
     )
     if updated is None:
         raise ConsultationError("consultation_update_failed")
+
+    # Tell the patient their consultation is complete (push + inbox + email).
+    # Fire-and-forget: a notification failure must not fail completion.
+    try:
+        from app.services.notifications import notify_consultation_completed
+
+        await notify_consultation_completed(db, consultation_id=consultation.id)
+    except Exception:
+        logger.warning(
+            "complete_consultation.notify_failed",
+            consultation_id=str(consultation.id),
+        )
 
     return updated
 

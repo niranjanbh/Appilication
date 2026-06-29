@@ -140,6 +140,59 @@ async def test_complete_consultation_in_progress_returns_200(
     assert consultation.actual_end_at is not None
 
 
+async def test_complete_consultation_writes_patient_notification(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Completing a consult records a 'consultation_completed' inbox notification
+    for the patient (P1 fix: the patient must be told the consult is done)."""
+    from sqlalchemy import select
+
+    from app.db.enums import NoteType
+    from app.models.clinic import DoctorNote
+    from app.models.identity import User as UserModel
+    from app.models.notifications import Notification
+
+    patient_user = await create_patient_user(db_session)
+    doctor_user = await create_doctor_user(db_session)
+    assert isinstance(patient_user, UserModel)
+    assert isinstance(doctor_user, UserModel)
+
+    patient = await _create_patient_profile(db_session, patient_user.id)
+    doctor = await _create_doctor_profile(db_session, doctor_user.id)
+    consultation = await _create_consultation(
+        db_session,
+        patient=patient,
+        doctor=doctor,
+        status=ConsultationStatus.IN_PROGRESS,
+        actual_start_at=datetime.now(UTC),
+    )
+    db_session.add(
+        DoctorNote(
+            consultation_id=consultation.id,
+            doctor_id=doctor.id,
+            patient_id=patient.id,
+            note_type=NoteType.CLINICAL,
+            content="Reviewed; plan documented.",
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/v1/doctor/consultations/{consultation.id}/complete",
+        headers=make_auth_headers(doctor_user),
+    )
+    assert resp.status_code == 200, resp.text
+
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == patient_user.id,
+            Notification.template_name == "consultation_completed",
+        )
+    )
+    assert notification is not None
+    assert notification.data.get("resource_id") == str(consultation.id)
+
+
 async def test_complete_consultation_confirmed_returns_409_not_in_progress(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

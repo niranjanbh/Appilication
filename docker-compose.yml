@@ -117,7 +117,7 @@ services:
     command: >
       celery -A app.worker.celery_app worker
       --loglevel=INFO
-      --queues=default
+      --queues=default,notifications,reports,ocr,payments,maintenance
       --concurrency=2
 
   celery-beat:

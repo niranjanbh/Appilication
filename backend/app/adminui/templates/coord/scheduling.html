@@ -24,6 +24,15 @@
   {% if request.query_params.get('success') == 'assigned' %}
   <div class="alert-bar alert-bar-success">Doctor assigned. The patient has been notified to pay and confirm.</div>
   {% endif %}
+  {% if request.query_params.get('error') in ['coupon_not_found','coupon_expired','coupon_inactive','coupon_exhausted','coupon_not_yet_valid','order_below_minimum'] %}
+  <div class="alert-bar alert-bar-error">Coupon could not be applied ({{ request.query_params.get('error').replace('_',' ') }}). The assignment was not completed — retry with a valid code or leave the coupon blank.</div>
+  {% endif %}
+  {% if request.query_params.get('success') == 'no_show' %}
+  <div class="alert-bar alert-bar-success">Consultation marked as a no-show. The slot has been released.</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'no_show_failed' %}
+  <div class="alert-bar alert-bar-error">Could not mark no-show — the consultation isn't one of your patients', has already closed, or hasn't started yet.</div>
+  {% endif %}
   {% if request.query_params.get('success') == 'cancelled' %}
   <div class="alert-bar alert-bar-success">Consultation cancelled. Any captured payment has been refunded.</div>
   {% endif %}
@@ -92,6 +101,8 @@
                 <option value="{{ slot.id }}">{{ slot.slot_start.strftime('%d %b %H:%M') }} — Dr {{ slot_doctor_user.name }} ({{ doctor.specialty | first | default('—') }})</option>
                 {% endfor %}
               </select>
+              <input type="text" name="coupon_code" placeholder="Coupon (optional)"
+                     style="border:1px solid #d4cfc6;border-radius:6px;padding:4px 8px;font-size:11px;max-width:130px;">
               <button type="submit" class="btn btn-primary btn-sm">Assign</button>
             </form>
             {% else %}
@@ -250,6 +261,13 @@
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {% if consultation.status.value in ['confirmed', 'in_progress'] %}
               <a href="/coord/scheduling/{{ consultation.id }}/join-room" class="btn btn-primary btn-sm">Join</a>
+              {% endif %}
+              {% if consultation.status.value in ['scheduled', 'confirmed'] and consultation.scheduled_start_at < now %}
+              <form method="POST" action="/coord/scheduling/{{ consultation.id }}/no-show"
+                    onsubmit="return confirm('Mark this consultation as a patient no-show? The slot is released and no refund is issued.')">
+                {{ csrf_field(request) }}
+                <button type="submit" class="btn btn-secondary btn-sm">No-show</button>
+              </form>
               {% endif %}
               {% if slots %}
               <form method="POST" action="/coord/scheduling/{{ consultation.id }}/reschedule"

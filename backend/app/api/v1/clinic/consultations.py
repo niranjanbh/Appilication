@@ -417,6 +417,40 @@ async def patient_join_consultation(
             detail="consultation_not_joinable",
         )
 
+    # TPG pre-flight (same hard gate the doctor's open_consultation enforces):
+    # the consult cannot legally proceed unless the patient's identity is verified
+    # and an active telemedicine consent is on file. Checking here too means the
+    # patient gets an actionable reason instead of silently sitting in a room the
+    # doctor can never open. Checked before provisioning so a blocked join never
+    # spins up a room.
+    from app.db.enums import ConsentType
+    from app.repositories import consent as consent_repo
+
+    if not user.phone_verified:
+        await write_audit(
+            db, ctx, action="join_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason="identity_not_verified",
+        )
+        await db.commit()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="identity_not_verified"
+        )
+
+    telemedicine_consent = await consent_repo.get_active_consent(
+        db, user_id=user.id, consent_type=ConsentType.TELEMEDICINE
+    )
+    if telemedicine_consent is None:
+        await write_audit(
+            db, ctx, action="join_consultation",
+            resource_type="consultation", resource_id=consultation_id,
+            allowed=False, reason="telemedicine_consent_missing",
+        )
+        await db.commit()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="telemedicine_consent_missing"
+        )
+
     room_id = consultation.video_room_id
     if room_id is None:
         # Provision on demand so a not-yet-provisioned room doesn't dead-end the

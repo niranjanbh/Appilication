@@ -63,3 +63,55 @@ async def _mark_auto_no_show_async() -> dict[str, int]:
 
     logger.info("consultation.mark_auto_no_show.done", marked=marked)
     return {"marked": marked}
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="kyros.consultation.expire_unpaid_scheduled",
+    bind=True,
+    max_retries=0,  # beat task — don't retry, next tick fires again
+    acks_late=True,
+)
+def expire_unpaid_scheduled(self: Any) -> dict[str, int]:
+    """Beat task: cancel SCHEDULED consultations whose start time has passed unpaid.
+
+    A SCHEDULED consultation that was never paid+confirmed (assign flow) or never
+    intake-confirmed (coordinator book flow) holds its Availability slot indefinitely.
+    Once its start time is past by the grace window it can never be honoured, so we
+    cancel it and release the slot back to AVAILABLE. No refund is involved — these
+    were never paid (a captured payment transitions the consult to CONFIRMED).
+    """
+    import asyncio
+
+    return asyncio.run(_expire_unpaid_scheduled_async())
+
+
+async def _expire_unpaid_scheduled_async() -> dict[str, int]:
+    from app.db.enums import ConsultationStatus
+    from app.db.session import AsyncSessionLocal
+    from app.repositories import consultations as consultations_repo
+
+    expired = 0
+    async with AsyncSessionLocal() as db:
+        stale = await consultations_repo.get_expired_unpaid_consultations(
+            db, grace_minutes=GRACE_MINUTES
+        )
+        for consultation in stale:
+            updated = await consultations_repo.update_consultation(
+                db,
+                consultation_id=consultation.id,
+                status=ConsultationStatus.CANCELLED,
+                cancellation_reason="Auto-cancelled — payment not completed before the scheduled time.",
+            )
+            if updated is not None:
+                await consultations_repo.release_slot(
+                    db, consultation_id=consultation.id
+                )
+                expired += 1
+                logger.info(
+                    "consultation.expire_unpaid",
+                    consultation_id=str(consultation.id),
+                )
+        await db.commit()
+
+    logger.info("consultation.expire_unpaid_scheduled.done", expired=expired)
+    return {"expired": expired}

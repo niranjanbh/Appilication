@@ -54,6 +54,10 @@ celery_app.conf.update(
             "task": "kyros.consultation.mark_auto_no_show",
             "schedule": crontab(minute="*/15"),  # every 15 minutes
         },
+        "expire-unpaid-scheduled": {
+            "task": "kyros.consultation.expire_unpaid_scheduled",
+            "schedule": crontab(minute="*/15"),  # every 15 minutes
+        },
     },
 )
 celery_app.autodiscover_tasks([

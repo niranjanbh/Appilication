@@ -60,6 +60,7 @@ interface VideoAreaProps {
 }
 
 function VideoArea({ consultation }: VideoAreaProps) {
+  const qc = useQueryClient();
   const [session, setSession] = useState<{ token: string; endpoint: string } | null>(null);
   const isActive = ACTIVE_STATUSES.has(consultation.status);
 
@@ -72,6 +73,10 @@ function VideoArea({ consultation }: VideoAreaProps) {
       if (data.endpoint) {
         setSession({ token: data.token, endpoint: data.endpoint });
       }
+      // Joining opens the consult (CONFIRMED -> IN_PROGRESS) server-side. Refresh
+      // the detail query so the cached status reflects that — otherwise the
+      // "Complete consultation" button (gated on in_progress) never appears.
+      qc.invalidateQueries({ queryKey: ['consultation', consultation.id] });
     },
   });
 
@@ -171,7 +176,26 @@ const SIDE_TABS: { id: SideTab; label: string }[] = [
   { id: 'edu', label: 'Education' },
 ];
 
-const COMPLETABLE_STATUSES = new Set(['scheduled', 'confirmed', 'in_progress']);
+// The backend only permits IN_PROGRESS -> COMPLETED (consultation_service
+// _ALLOWED_TRANSITIONS). Showing the button on scheduled/confirmed produced a
+// silent 409; gate it to in_progress so it only appears once the doctor has
+// opened (joined) the call.
+const COMPLETABLE_STATUSES = new Set(['in_progress']);
+
+// Map the backend's 409 detail codes to doctor-facing guidance.
+function completeErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : '';
+  if (msg.includes('doctor_notes_required')) {
+    return 'Add at least one consultation note before completing.';
+  }
+  if (msg.includes('consultation_not_in_progress')) {
+    return 'This consultation is not in progress — join the call before completing.';
+  }
+  if (msg.includes('consultation_not_started')) {
+    return 'The consultation has not started yet.';
+  }
+  return 'Could not complete the consultation. Please try again.';
+}
 
 function CompleteConsultationButton({ consultation }: { consultation: ConsultationDetail }) {
   const qc = useQueryClient();
@@ -187,6 +211,8 @@ function CompleteConsultationButton({ consultation }: { consultation: Consultati
       setConfirming(false);
       qc.invalidateQueries({ queryKey: ['consultation', consultation.id] });
     },
+    // Keep the confirm UI open on failure so the error message stays visible
+    // and the doctor can fix the cause (e.g. add a note) and retry.
   });
 
   if (!COMPLETABLE_STATUSES.has(consultation.status)) return null;
@@ -209,6 +235,11 @@ function CompleteConsultationButton({ consultation }: { consultation: Consultati
         >
           Cancel
         </button>
+        {complete.isError && (
+          <span className="font-body text-caption text-alert">
+            {completeErrorMessage(complete.error)}
+          </span>
+        )}
       </div>
     );
   }

@@ -388,6 +388,8 @@ async def cancel_consultation_for_coordinator(
     """Cancel a consultation only if it belongs to an assigned patient."""
     from sqlalchemy import update
 
+    from app.repositories import consultations as consultations_repo
+
     assigned = await _get_assigned_ids(db, coordinator_id)
 
     result = await db.execute(
@@ -411,16 +413,60 @@ async def cancel_consultation_for_coordinator(
         )
         .returning(Consultation)
     )
-    # Release the slot
-    await db.execute(
-        update(Availability)
-        .where(Availability.consultation_id == consultation_id)
-        .values(
-            status=AvailabilityStatus.AVAILABLE,
-            consultation_id=None,
-            updated_at=datetime.now(UTC),
+    # Release the slot back to available.
+    await consultations_repo.release_slot(db, consultation_id=consultation_id)
+    return updated.scalar_one_or_none()
+
+
+async def mark_no_show_for_coordinator(
+    db: AsyncSession,
+    *,
+    coordinator_id: uuid.UUID,
+    consultation_id: uuid.UUID,
+) -> Consultation | None:
+    """Mark an assigned patient's past consultation as a patient NO_SHOW.
+
+    No refund — the slot was held and the doctor was available (refund-worthy
+    doctor no-shows go through the super-admin cancel path). Scoped to the
+    coordinator's assigned patients. Returns None when the consultation is not
+    one of this coordinator's patients', is not in a markable status
+    (SCHEDULED/CONFIRMED), or its scheduled start is still in the future — the
+    route surfaces a single generic error for all of these.
+    """
+    from sqlalchemy import update
+
+    from app.repositories import consultations as consultations_repo
+
+    assigned = await _get_assigned_ids(db, coordinator_id)
+
+    consultation = await db.scalar(
+        select(Consultation).where(
+            Consultation.id == consultation_id,
+            Consultation.patient_id.in_(assigned),
+            Consultation.deleted_at.is_(None),
         )
     )
+    if consultation is None:
+        return None
+    if consultation.status not in (
+        ConsultationStatus.SCHEDULED,
+        ConsultationStatus.CONFIRMED,
+    ):
+        return None
+    # Can't no-show a consultation that hasn't started yet.
+    if consultation.scheduled_start_at is None or (
+        consultation.scheduled_start_at > datetime.now(UTC)
+    ):
+        return None
+
+    updated = await db.execute(
+        update(Consultation)
+        .where(Consultation.id == consultation_id)
+        .values(status=ConsultationStatus.NO_SHOW, updated_at=datetime.now(UTC))
+        .returning(Consultation)
+    )
+    # Release the held slot back to available.
+    await consultations_repo.release_slot(db, consultation_id=consultation_id)
     return updated.scalar_one_or_none()
 
 
@@ -429,9 +475,12 @@ async def list_upcoming_consultations(
     *,
     coordinator_id: uuid.UUID,
 ) -> list[tuple[Consultation, User, User | None]]:
-    """Future scheduled/confirmed consultations for assigned patients.
+    """Current and upcoming scheduled/confirmed consultations for assigned patients.
 
-    Returns (Consultation, patient_user, doctor_user) — scheduling data only.
+    Includes the last 24h (not just the future) so a coordinator can act on a
+    just-passed appointment — e.g. mark a no-show before the auto-sweep beat task
+    runs, or when that task is delayed. Returns (Consultation, patient_user,
+    doctor_user) — scheduling data only.
     """
     assigned = await _get_assigned_ids(db, coordinator_id)
     if not assigned:
@@ -440,6 +489,7 @@ async def list_upcoming_consultations(
     from sqlalchemy.orm import aliased
 
     DoctorUser = aliased(User, name="doctor_user")  # noqa: N806 (aliased ORM entity, used class-like)
+    window_start = datetime.now(UTC) - timedelta(hours=24)
     result = await db.execute(
         select(Consultation, User, DoctorUser)
         .join(Patient, Patient.id == Consultation.patient_id)
@@ -451,7 +501,7 @@ async def list_upcoming_consultations(
             Consultation.status.in_(
                 (ConsultationStatus.SCHEDULED, ConsultationStatus.CONFIRMED)
             ),
-            Consultation.scheduled_start_at >= datetime.now(UTC),
+            Consultation.scheduled_start_at >= window_start,
             Consultation.deleted_at.is_(None),
         )
         .order_by(Consultation.scheduled_start_at)
@@ -473,6 +523,8 @@ async def reschedule_consultation_for_coordinator(
     reschedulable, or the new slot is taken (caller's transaction rolls back).
     """
     from sqlalchemy import update
+
+    from app.repositories import consultations as consultations_repo
 
     assigned = await _get_assigned_ids(db, coordinator_id)
     if not assigned:
@@ -504,15 +556,8 @@ async def reschedule_consultation_for_coordinator(
     if slot is None:
         return None
 
-    await db.execute(
-        update(Availability)
-        .where(Availability.consultation_id == consultation_id)
-        .values(
-            status=AvailabilityStatus.AVAILABLE,
-            consultation_id=None,
-            updated_at=datetime.now(UTC),
-        )
-    )
+    # Free the old slot, then book the newly locked one.
+    await consultations_repo.release_slot(db, consultation_id=consultation_id)
 
     await db.execute(
         update(Availability)

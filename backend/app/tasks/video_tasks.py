@@ -20,12 +20,8 @@ from app.worker import celery_app
 logger = structlog.get_logger(__name__)
 
 
-class HMSTransientError(Exception):
-    """Raised for retryable video-provider API errors (network, 5xx).
-
-    Name retained for backward compatibility with existing retry wiring; the
-    provider is now LiveKit.
-    """
+class VideoProvisioningError(Exception):
+    """Raised for retryable video-provider (LiveKit) API errors (network, 5xx)."""
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
@@ -61,7 +57,7 @@ async def _provision_upcoming_rooms_async() -> dict[str, int]:
 @celery_app.task(  # type: ignore[untyped-decorator]
     name="kyros.video.provision_video_room",
     bind=True,
-    autoretry_for=(HMSTransientError, ConnectionError, TimeoutError),
+    autoretry_for=(VideoProvisioningError, ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=120,
     retry_jitter=True,
@@ -82,7 +78,7 @@ def provision_video_room(self: Any, consultation_id: str) -> dict[str, Any]:
         result = asyncio.run(_provision_video_room_async(consultation_id, bound_logger))
         bound_logger.info("task.completed", result=result)
         return result
-    except (HMSTransientError, ConnectionError, TimeoutError):
+    except (VideoProvisioningError, ConnectionError, TimeoutError):
         bound_logger.warning("task.retrying", attempt=self.request.retries + 1)
         raise
     except Exception:
@@ -117,7 +113,7 @@ async def _provision_video_room_async(
             room_id = await livekit_video.create_room(consultation_id=consultation_id)
         except Exception as exc:
             if _is_transient(exc):
-                raise HMSTransientError(str(exc)) from exc
+                raise VideoProvisioningError(str(exc)) from exc
             raise
 
         await consultations_repo.update_consultation_video_room(

@@ -158,8 +158,12 @@ async def notify_appointment_confirmed(
         "resource_id": str(consultation_id),
     }
 
+    dedup_id = f"appointment_confirmation:{consultation_id}"
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -168,6 +172,7 @@ async def notify_appointment_confirmed(
             phone=row.phone,
             template_name="appointment_confirmation",
             params=[first, date_str, time_only],
+            dedup_id=dedup_id,
         )
         if row.phone:
             channels_sent.append("whatsapp")
@@ -181,6 +186,7 @@ async def notify_appointment_confirmed(
                 first_name=first,
                 time_str=time_str,
             ),
+            dedup_id=dedup_id,
         )
         if row.email:
             channels_sent.append("email")
@@ -213,7 +219,94 @@ async def notify_appointment_confirmed(
                 first_name=_first_name(doctor_row.name),
                 time_str=time_str,
             ),
+            dedup_id=f"doctor_new_booking:{consultation_id}",
         )
+
+
+# ── Consultation requested (patient acknowledgement) ──────────────────────────
+
+
+async def notify_consultation_requested(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Acknowledge to the patient that their in-app consultation request was
+    received (push + inbox + email).
+
+    No clinical content and no condition name travel on any channel — the message
+    is a generic "we've got it, a coordinator will be in touch" receipt.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                User.name,
+                User.email,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning(
+            "notify_consultation_requested.consultation_not_found",
+            consultation_id=str(consultation_id),
+        )
+        return
+
+    prefs = row.notification_preferences or {}
+    first = _first_name(row.name)
+
+    title = "Request received"
+    body = (
+        "We've received your consultation request. A care coordinator will assign "
+        "the right specialist and time shortly."
+    )
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "consultation_requested",
+        "resource_id": str(consultation_id),
+    }
+
+    dedup_id = f"consultation_requested:{consultation_id}"
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    if _pref(prefs, "email"):
+        _dispatch_email(
+            to_email=row.email,
+            subject="We've received your Kyros consultation request",
+            html_body=render_email("consultation_requested", first_name=first),
+            dedup_id=dedup_id,
+        )
+        if row.email:
+            channels_sent.append("email")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="consultation_requested",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
 
 
 # ── Doctor assigned to a request ──────────────────────────────────────────────
@@ -226,12 +319,14 @@ async def notify_doctor_assigned(
 ) -> None:
     """Tell the patient a coordinator assigned a doctor + time to their request.
 
-    The patient must now pay to confirm. Push + inbox only — no clinical content,
-    no doctor identity in external channels.
+    The patient must now pay to confirm. Push + inbox to the patient (no clinical
+    content, no doctor identity in external channels); the assigned doctor gets a
+    generic email that a patient has been scheduled with them.
     """
     from sqlalchemy import select
 
     from app.models.clinic import Consultation, Patient
+    from app.models.doctor import Doctor
     from app.models.identity import User
 
     row = (
@@ -265,7 +360,10 @@ async def notify_doctor_assigned(
 
     channels_sent: list[str] = []
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=f"doctor_assigned:{consultation_id}",
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -278,6 +376,31 @@ async def notify_doctor_assigned(
         channels=channels_sent or ["inbox"],
         data=data,
     )
+
+    # Tell the assigned doctor by email — generic, no patient details (external
+    # channel). The consult is SCHEDULED pending the patient's payment, so the
+    # doctor is told it is provisional.
+    doctor_row = (
+        await db.execute(
+            select(User.name, User.email)
+            .join(Doctor, Doctor.user_id == User.id)
+            .join(Consultation, Consultation.doctor_id == Doctor.id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if doctor_row is not None and doctor_row.email:
+        _dispatch_email(
+            to_email=doctor_row.email,
+            subject="A patient has been scheduled with you on Kyros",
+            html_body=render_email(
+                "doctor_consult_assigned",
+                first_name=_first_name(doctor_row.name),
+                time_str=time_str,
+            ),
+            # Per-consultation: without this, the constant subject would suppress
+            # every assignment after the doctor's first within a 24h window.
+            dedup_id=f"doctor_consult_assigned:{consultation_id}",
+        )
 
 
 # ── On-demand consultation (staff-initiated, join now) ─────────────────────────
@@ -332,7 +455,10 @@ async def notify_on_demand_consultation(
 
     channels_sent: list[str] = []
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=f"on_demand_consultation:{consultation_id}",
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -364,17 +490,334 @@ async def notify_on_demand_consultation(
                 first_name=_first_name(doctor_row.name),
                 time_str=_ist_str(row.scheduled_start_at),
             ),
+            dedup_id=f"on_demand_doctor:{consultation_id}",
         )
+
+
+# ── Consultation completed ────────────────────────────────────────────────────
+
+
+async def notify_consultation_completed(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Tell the patient (push + inbox + email) their consultation is complete.
+
+    Generic language only — no clinical content, doctor notes, or prescription
+    details travel on any channel (PHI rule). The patient opens the app for the
+    specifics.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                User.name,
+                User.email,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning(
+            "notify_consultation_completed.consultation_not_found",
+            consultation_id=str(consultation_id),
+        )
+        return
+
+    prefs = row.notification_preferences or {}
+    first = _first_name(row.name)
+
+    title = "Consultation complete"
+    body = (
+        "Your consultation is complete. Any notes or prescriptions from your "
+        "doctor are now available in the app."
+    )
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "consultation_completed",
+        "resource_id": str(consultation_id),
+    }
+
+    dedup_id = f"consultation_completed:{consultation_id}"
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    if _pref(prefs, "email"):
+        _dispatch_email(
+            to_email=row.email,
+            subject="Your Kyros consultation is complete",
+            html_body=render_email("consultation_completed", first_name=first),
+            dedup_id=dedup_id,
+        )
+        if row.email:
+            channels_sent.append("email")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="consultation_completed",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
+
+
+# ── Consultation cancelled / reassigned by staff ──────────────────────────────
+
+
+async def notify_consultation_cancelled(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+    refund_issued: bool,
+) -> None:
+    """Tell the patient (push + inbox + email) that staff cancelled their
+    appointment, noting whether a refund was initiated.
+
+    Generic language only — no clinical content or cancellation reason travels on
+    any channel.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                User.name,
+                User.email,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning(
+            "notify_consultation_cancelled.consultation_not_found",
+            consultation_id=str(consultation_id),
+        )
+        return
+
+    prefs = row.notification_preferences or {}
+    first = _first_name(row.name)
+
+    refund_line = (
+        " A full refund has been initiated and will reach your account in 5–7 days."
+        if refund_issued
+        else ""
+    )
+    title = "Appointment cancelled"
+    body = f"Your Kyros appointment has been cancelled.{refund_line}"
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "consultation_cancelled",
+        "resource_id": str(consultation_id),
+    }
+
+    dedup_id = f"consultation_cancelled:{consultation_id}"
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    if _pref(prefs, "email"):
+        _dispatch_email(
+            to_email=row.email,
+            subject="Your Kyros appointment has been cancelled",
+            html_body=render_email(
+                "consultation_cancelled",
+                first_name=first,
+                refund_issued="1" if refund_issued else "",
+            ),
+            dedup_id=dedup_id,
+        )
+        if row.email:
+            channels_sent.append("email")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="consultation_cancelled",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
+
+
+async def notify_consultation_reassigned(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Tell the patient (push + inbox + email) their appointment was moved to a
+    new time (and possibly a new specialist) by staff.
+
+    The new time is the only specific detail; no clinical content or doctor
+    identity travels on external channels.
+    """
+    from sqlalchemy import select
+
+    from app.models.clinic import Consultation, Patient
+    from app.models.identity import User
+
+    row = (
+        await db.execute(
+            select(
+                Patient.user_id,
+                Consultation.scheduled_start_at,
+                User.name,
+                User.email,
+                User.expo_push_token,
+                User.notification_preferences,
+            )
+            .join(Patient, Patient.id == Consultation.patient_id)
+            .join(User, User.id == Patient.user_id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).first()
+    if row is None:
+        logger.warning(
+            "notify_consultation_reassigned.consultation_not_found",
+            consultation_id=str(consultation_id),
+        )
+        return
+
+    prefs = row.notification_preferences or {}
+    first = _first_name(row.name)
+    time_str = _ist_str(row.scheduled_start_at)
+
+    title = "Appointment rescheduled"
+    body = f"Your Kyros appointment has been moved to {time_str}. Tap to view details."
+    data = {
+        "screen": "consultation",
+        "id": str(consultation_id),
+        "template_name": "consultation_reassigned",
+        "resource_id": str(consultation_id),
+    }
+
+    dedup_id = f"consultation_reassigned:{consultation_id}"
+    channels_sent: list[str] = []
+    if _pref(prefs, "push"):
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
+        if row.expo_push_token:
+            channels_sent.append("push")
+
+    if _pref(prefs, "email"):
+        _dispatch_email(
+            to_email=row.email,
+            subject="Your Kyros appointment has been rescheduled",
+            html_body=render_email(
+                "consultation_reassigned",
+                first_name=first,
+                time_str=time_str,
+            ),
+            dedup_id=dedup_id,
+        )
+        if row.email:
+            channels_sent.append("email")
+
+    await _record_notification(
+        db,
+        user_id=row.user_id,
+        template_name="consultation_reassigned",
+        title=title,
+        body=body,
+        channels=channels_sent or ["inbox"],
+        data=data,
+    )
+
+
+# ── New consultation request (coordinator triage alert) ───────────────────────
+
+
+async def notify_coordinator_new_request(
+    db: AsyncSession,
+    *,
+    consultation_id: uuid.UUID,
+) -> None:
+    """Alert the assigned coordinator that a new in-app consultation request is
+    waiting to be triaged (doctor + slot assignment).
+
+    Falls back to the ops inbox when the request could not be routed to a
+    coordinator. Deliberately content-free — no patient name or condition travels
+    on the email; the coordinator opens the portal for the details.
+    """
+    from sqlalchemy import select
+
+    from app.core.config import settings
+    from app.models.admin import Coordinator
+    from app.models.clinic import Consultation
+    from app.models.identity import User
+
+    to_email = (
+        await db.execute(
+            select(User.email)
+            .join(Coordinator, Coordinator.user_id == User.id)
+            .join(Consultation, Consultation.coordinator_id == Coordinator.id)
+            .where(Consultation.id == consultation_id)
+        )
+    ).scalar_one_or_none()
+
+    # Unrouted request (no active coordinator) → ops inbox backstop.
+    if not to_email:
+        to_email = settings.ops_notify_email or settings.admin_alert_email
+    if not to_email:
+        return
+
+    _dispatch_email(
+        to_email=to_email,
+        subject="[Kyros] New consultation request awaiting assignment",
+        html_body=render_email("coordinator_new_request"),
+        # Per-consultation: the subject is identical for every request, so without
+        # this each coordinator would receive only one alert per 24h window.
+        dedup_id=f"coordinator_new_request:{consultation_id}",
+    )
 
 
 # ── Staff alerts (ops inbox) ──────────────────────────────────────────────────
 
 
-def notify_ops_new_inquiry(*, kind: str) -> None:
+def notify_ops_new_inquiry(*, kind: str, dedup_id: str | None = None) -> None:
     """Alert the ops inbox that a new website submission is waiting.
 
     kind: "booking_inquiry" or "lead". Deliberately content-free — no name,
     phone, or condition. Staff open the coordinator portal for details.
+
+    ``dedup_id`` (the inquiry/lead id) keeps each distinct submission a distinct
+    alert; the subject alone is identical across submissions and would otherwise
+    suppress every alert after the first within a 24h window.
     """
     from app.core.config import settings
 
@@ -389,10 +832,41 @@ def notify_ops_new_inquiry(*, kind: str) -> None:
             to_email=to_email,
             subject=f"[Kyros] New {kind_label} from the website",
             html_body=render_email("ops_new_inquiry", kind_label=kind_label),
+            dedup_id=f"ops_new_inquiry:{dedup_id}" if dedup_id else None,
         )
     except Exception:
         # A broker outage must not fail the inquiry submission itself.
         logger.exception("notify_ops_new_inquiry_failed", kind=kind)
+
+
+def notify_booking_inquiry_received(
+    *, name: str, email: str | None, dedup_id: str | None = None
+) -> None:
+    """Acknowledge a public website booking inquiry to the patient by email.
+
+    Pre-account flow — the patient has no user row yet, so this is email-only (no
+    inbox, no push). No condition name travels in the message (PHI discipline);
+    it is a generic "we've received your request" receipt. A missing email (the
+    field is optional on the inquiry form) makes this a no-op.
+
+    ``dedup_id`` (the inquiry id) scopes the idempotency window to this specific
+    inquiry so it never collides with the in-app request acknowledgement, which
+    shares the same subject line.
+    """
+    if not email:
+        return
+    try:
+        _dispatch_email(
+            to_email=email,
+            subject="We've received your Kyros consultation request",
+            html_body=render_email(
+                "booking_inquiry_received", first_name=_first_name(name)
+            ),
+            dedup_id=f"booking_inquiry_received:{dedup_id}" if dedup_id else None,
+        )
+    except Exception:
+        # A broker outage must not fail the inquiry submission itself.
+        logger.exception("notify_booking_inquiry_received_failed")
 
 
 # ── Appointment reminder ──────────────────────────────────────────────────────
@@ -442,8 +916,12 @@ async def notify_appointment_reminder(
         "resource_id": str(consultation_id),
     }
 
+    dedup_id = f"appointment_reminder:{consultation_id}"
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -452,6 +930,7 @@ async def notify_appointment_reminder(
             phone=row.phone,
             template_name="appointment_reminder",
             params=[first, time_only],
+            dedup_id=dedup_id,
         )
         if row.phone:
             channels_sent.append("whatsapp")
@@ -465,6 +944,7 @@ async def notify_appointment_reminder(
                 first_name=first,
                 time_str=time_only,
             ),
+            dedup_id=dedup_id,
         )
         if row.email:
             channels_sent.append("email")
@@ -523,8 +1003,12 @@ async def notify_lab_result_ready(
         "resource_id": str(lab_report_id),
     }
 
+    dedup_id = f"lab_result_ready:{lab_report_id}"
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -533,6 +1017,7 @@ async def notify_lab_result_ready(
             phone=row.phone,
             template_name="lab_result_ready",
             params=[first],
+            dedup_id=dedup_id,
         )
         if row.phone:
             channels_sent.append("whatsapp")
@@ -594,8 +1079,12 @@ async def notify_pre_consult_report_ready(
         "resource_id": str(consultation_id),
     }
 
+    dedup_id = f"pre_consult_report_ready:{consultation_id}"
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -604,6 +1093,7 @@ async def notify_pre_consult_report_ready(
             phone=row.phone,
             template_name="pre_consult_report_ready",
             params=[first, time_only],
+            dedup_id=dedup_id,
         )
         if row.phone:
             channels_sent.append("whatsapp")
@@ -627,8 +1117,18 @@ async def notify_medication_reminder(
     *,
     user_id: uuid.UUID,
     reminder_label: str,
+    reminder_id: uuid.UUID | None = None,
+    occurrence: datetime | None = None,
 ) -> None:
-    """Fire push only for a medication reminder (label is never shown in push text)."""
+    """Fire push only for a medication reminder (label is never shown in push text).
+
+    ``reminder_id`` + ``occurrence`` scope the dedup window to one firing of one
+    reminder: distinct medications no longer suppress one another, and the same
+    scheduled dose fires once even if the (every-5-min) dispatcher sees it on two
+    overlapping beat runs. The dispatcher is now schedule-aware, so each dose fires
+    at its scheduled time. Without these (legacy callers) the dedup falls back to
+    the per-(user,title) window.
+    """
     from sqlalchemy import select
 
     from app.models.identity import User
@@ -652,8 +1152,19 @@ async def notify_medication_reminder(
     body = f"Hi {first}, time for your scheduled medication. Tap to log it."
     data = {"screen": "reminders", "template_name": "medication_reminder"}
 
+    # Per-reminder, per-occurrence when known; otherwise the legacy per-(user,title)
+    # window (which collapses all of a user's medication reminders into one).
+    if reminder_id is not None and occurrence is not None:
+        dedup_id: str | None = f"medication_reminder:{reminder_id}:{occurrence.isoformat()}"
+    elif reminder_id is not None:
+        dedup_id = f"medication_reminder:{reminder_id}"
+    else:
+        dedup_id = None
     if _pref(prefs, "push"):
-        _dispatch_push(push_token=row.expo_push_token, title=title, body=body, data=data)
+        _dispatch_push(
+            push_token=row.expo_push_token, title=title, body=body, data=data,
+            dedup_id=dedup_id,
+        )
         if row.expo_push_token:
             channels_sent.append("push")
 
@@ -677,12 +1188,19 @@ def _dispatch_push(
     title: str,
     body: str,
     data: dict[str, str] | None = None,
+    dedup_id: str | None = None,
 ) -> None:
     if not push_token:
         return
     from app.tasks.notification_tasks import send_push_notification_task
     send_push_notification_task.apply_async(
-        kwargs={"push_token": push_token, "title": title, "body": body, "data": data or {}},
+        kwargs={
+            "push_token": push_token,
+            "title": title,
+            "body": body,
+            "data": data or {},
+            "dedup_id": dedup_id,
+        },
         queue="notifications",
     )
 
@@ -692,12 +1210,18 @@ def _dispatch_whatsapp(
     phone: str | None,
     template_name: str,
     params: list[str],
+    dedup_id: str | None = None,
 ) -> None:
     if not phone:
         return
     from app.tasks.notification_tasks import send_whatsapp_task
     send_whatsapp_task.apply_async(
-        kwargs={"phone": phone, "template_name": template_name, "params": params},
+        kwargs={
+            "phone": phone,
+            "template_name": template_name,
+            "params": params,
+            "dedup_id": dedup_id,
+        },
         queue="notifications",
     )
 
@@ -707,12 +1231,18 @@ def _dispatch_email(
     to_email: str | None,
     subject: str,
     html_body: str,
+    dedup_id: str | None = None,
 ) -> None:
     if not to_email:
         return
     from app.tasks.notification_tasks import send_email_task
     send_email_task.apply_async(
-        kwargs={"to_email": to_email, "subject": subject, "html_body": html_body},
+        kwargs={
+            "to_email": to_email,
+            "subject": subject,
+            "html_body": html_body,
+            "dedup_id": dedup_id,
+        },
         queue="notifications",
     )
 
@@ -956,6 +1486,155 @@ def _tpl_doctor_new_booking(*, first_name: str, time_str: str) -> str:
     )
 
 
+def _tpl_doctor_consult_assigned(*, first_name: str, time_str: str) -> str:
+    return _render(
+        title="A patient has been scheduled with you",
+        heading="New Patient Assigned",
+        body_html=(
+            _body_p(f"Hi Dr. {first_name},")
+            + _body_p(
+                f"A patient has been scheduled with you for "
+                f"<strong>{time_str} IST</strong>, pending their payment confirmation."
+            )
+            + _body_p(
+                "You will receive a final confirmation once the patient completes "
+                "payment. Open your Kyros doctor portal to review the details."
+            )
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
+def _tpl_consultation_requested(*, first_name: str) -> str:
+    return _render(
+        title="We've received your Kyros consultation request",
+        heading="Request Received",
+        body_html=(
+            _body_p(f"Hi {first_name},")
+            + _body_p(
+                "Thank you — we've received your consultation request. A Kyros care "
+                "coordinator will assign the right specialist and a time slot shortly."
+            )
+            + _body_p(
+                "You'll get a notification as soon as your appointment is ready to "
+                "confirm. You can track the status anytime in the Kyros app."
+            )
+            + _cta_button("View in App")
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
+def _tpl_booking_inquiry_received(*, first_name: str) -> str:
+    return _render(
+        title="We've received your Kyros consultation request",
+        heading="Request Received",
+        body_html=(
+            _body_p(f"Hi {first_name},")
+            + _body_p(
+                "Thank you for reaching out to Kyros. We've received your request and "
+                "a care coordinator will contact you on your phone within 4 hours to "
+                "schedule your consultation."
+            )
+            + _body_p(
+                "If you have any questions in the meantime, simply reply to the "
+                "coordinator's call or message."
+            )
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
+def _tpl_consultation_completed(*, first_name: str) -> str:
+    return _render(
+        title="Your Kyros consultation is complete",
+        heading="Consultation Complete",
+        body_html=(
+            _body_p(f"Hi {first_name},")
+            + _body_p(
+                "Thank you for consulting with Kyros. Your consultation is now complete."
+            )
+            + _body_p(
+                "Any notes, prescriptions, or care plan your doctor shared are "
+                "available in the Kyros app."
+            )
+            + _cta_button("View in App")
+            + _body_p("Take care,<br>Team Kyros")
+        ),
+    )
+
+
+def _tpl_consultation_cancelled(*, first_name: str, refund_issued: str = "") -> str:
+    refund_p = (
+        _body_p(
+            "A full refund has been initiated and will reach your original payment "
+            "method within 5–7 business days."
+        )
+        if refund_issued
+        else ""
+    )
+    return _render(
+        title="Your Kyros appointment has been cancelled",
+        heading="Appointment Cancelled",
+        body_html=(
+            _body_p(f"Hi {first_name},")
+            + _body_p(
+                "We're sorry — your Kyros appointment has been cancelled. We "
+                "apologise for any inconvenience."
+            )
+            + refund_p
+            + _body_p(
+                "You can book a new consultation anytime in the Kyros app, and a "
+                "coordinator will help you find the right specialist and time."
+            )
+            + _cta_button("Book Again")
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
+def _tpl_consultation_reassigned(*, first_name: str, time_str: str) -> str:
+    return _render(
+        title="Your Kyros appointment has been rescheduled",
+        heading="Appointment Rescheduled",
+        body_html=(
+            _body_p(f"Hi {first_name},")
+            + _body_p(
+                f"Your Kyros appointment has been moved to "
+                f"<strong>{time_str} IST</strong>."
+            )
+            + _body_p(
+                "No action is needed from you — your payment carries over. Open the "
+                "Kyros app to view the updated details."
+            )
+            + _cta_button("View Appointment")
+            + _body_p("See you then,<br>Team Kyros")
+        ),
+    )
+
+
+def _tpl_coordinator_new_request() -> str:
+    # Content-free by design — no patient details on an external channel.
+    return _render(
+        title="New consultation request waiting",
+        heading="New Consultation Request",
+        body_html=(
+            _body_p(
+                "A new <strong>consultation request</strong> was just submitted in "
+                "the Kyros app and is waiting to be assigned a doctor and time slot."
+            )
+            + _body_p(
+                "Open the coordinator portal to review the request and assign a "
+                "specialist."
+            )
+            + _cta_button(
+                "Open Request Queue", "https://api.kyrosclinic.com/coord/scheduling"
+            )
+            + _body_p("Team Kyros")
+        ),
+    )
+
+
 def _tpl_ops_new_inquiry(*, kind_label: str) -> str:
     # No patient details by design — email is an external channel.
     return _render(
@@ -984,5 +1663,12 @@ _EMAIL_TEMPLATES: dict[str, Callable[..., str]] = {
     "medication_reminder": _tpl_medication_reminder,
     "otp_code": _tpl_otp_code,
     "doctor_new_booking": _tpl_doctor_new_booking,
+    "doctor_consult_assigned": _tpl_doctor_consult_assigned,
+    "consultation_requested": _tpl_consultation_requested,
+    "consultation_completed": _tpl_consultation_completed,
+    "consultation_cancelled": _tpl_consultation_cancelled,
+    "consultation_reassigned": _tpl_consultation_reassigned,
+    "booking_inquiry_received": _tpl_booking_inquiry_received,
+    "coordinator_new_request": _tpl_coordinator_new_request,
     "ops_new_inquiry": _tpl_ops_new_inquiry,
 }

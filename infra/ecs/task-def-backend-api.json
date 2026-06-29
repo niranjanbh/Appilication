@@ -36,15 +36,17 @@
         { "name": "KYROS_RAZORPAY_KEY_ID",     "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:razorpay_key_id::" },
         { "name": "KYROS_RAZORPAY_KEY_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:razorpay_key_secret::" },
         { "name": "KYROS_RAZORPAY_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:razorpay_webhook_secret::" },
-        { "name": "KYROS_HMS_ACCESS_KEY",      "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:hms_access_key::" },
-        { "name": "KYROS_HMS_SECRET",          "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:hms_secret::" },
+        { "name": "KYROS_LIVEKIT_API_KEY",     "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:livekit_api_key::" },
+        { "name": "KYROS_LIVEKIT_API_SECRET",  "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:livekit_api_secret::" },
         { "name": "KYROS_MSG91_AUTH_KEY",      "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:msg91_auth_key::" },
         { "name": "KYROS_AISENSY_API_KEY",     "valueFrom": "arn:aws:secretsmanager:ap-south-1:ACCOUNT_ID:secret:kyros/prod/backend:aisensy_api_key::" }
       ],
       "environment": [
         { "name": "KYROS_APP_ENV",    "value": "production" },
         { "name": "KYROS_AWS_REGION", "value": "ap-south-1" },
-        { "name": "KYROS_S3_BUCKET",  "value": "kyros-prod-uploads" }
+        { "name": "KYROS_S3_BUCKET",  "value": "kyros-prod-uploads" },
+        { "name": "KYROS_LIVEKIT_HOST", "value": "wss://video.kyrosclinic.com" },
+        { "name": "KYROS_LIVEKIT_RECORDINGS_BUCKET", "value": "kyros-prod-recordings" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "curl -f http://localhost:8000/healthz || exit 1"],

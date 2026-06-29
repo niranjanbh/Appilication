@@ -62,6 +62,46 @@ async def test_request_assigns_coordinator_when_patient_unassigned(
     assert consultation.id in [c.id for c, _patient_user in queue]
 
 
+async def test_request_writes_patient_ack_notification(
+    db_session: AsyncSession,
+) -> None:
+    """Submitting a request writes a 'consultation_requested' inbox notification
+    acknowledging receipt to the patient (P2 fix)."""
+    from sqlalchemy import select
+
+    from app.models.notifications import Notification
+
+    coord_user = await create_coordinator_user(db_session)
+    coord = Coordinator(
+        user_id=coord_user.id,
+        status=CoordinatorStatus.ACTIVE,
+        assigned_patient_ids=[],
+    )
+    db_session.add(coord)
+    await db_session.flush()
+
+    patient_user = await create_patient_user(db_session)
+    await db_session.flush()
+    await patients_repo.get_or_create_for_user(db_session, user_id=patient_user.id)
+
+    consultation = await consultation_service.request_consultation(
+        db_session,
+        patient_user_id=patient_user.id,
+        condition_category="thyroid",
+        consultation_type="initial",
+    )
+    await db_session.flush()
+
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == patient_user.id,
+            Notification.template_name == "consultation_requested",
+        )
+    )
+    assert notification is not None
+    assert notification.data.get("resource_id") == str(consultation.id)
+
+
 async def test_new_consultation_routes_to_least_loaded_coordinator(
     db_session: AsyncSession,
 ) -> None:

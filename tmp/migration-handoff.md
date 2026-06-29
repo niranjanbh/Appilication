@@ -128,8 +128,16 @@ is DONE so the other laptop can `git pull` and drop the schema-mismatch.
    consultation counts and per-consult averages become honest.)
 2. **Regenerate API clients** if `booking_source` should be exposed to any surface:
    `make openapi && make generate-clients`. (Not required for Parts 1–2.)
-3. **Revisit the open audit gaps** (from the consultation-flow review), still outstanding:
-   - Unpaid `scheduled` consults never expire → slot leak (needs a Celery expiry task).
-   - Doctor portal "Complete" button shown on non-`in_progress` states → silent 409.
-   - Patient can join a room the doctor can't open (TPG gate invisible to patient).
-   - Coordinator assign form can't apply a coupon; coordinators have no no-show action.
+3. **Open audit gaps — status** (from the consultation-flow review):
+   - ✅ Unpaid `scheduled` consults never expire → slot leak — FIXED (`expire_unpaid_scheduled`
+     beat task + `get_expired_unpaid_consultations`).
+   - ✅ Doctor portal "Complete" button on non-`in_progress` → silent 409 — FIXED (gated to
+     `in_progress`, error surfaced, join invalidates the query).
+   - ✅ Patient can join a room the doctor can't open — FIXED (patient join now enforces the
+     same TPG gate and returns an actionable 409; mobile shows the reason).
+   - ✅ Coordinator coupon at assign + coordinator no-show action — FIXED.
+   - ⏳ Hand-written API types vs. generated clients (#7) — STILL OPEN. Needs the codegen
+     toolchain: run `make openapi && make generate-clients` on a machine with `uv` + node,
+     then commit the regenerated `mobile/lib/api/generated/` and
+     `doctor-portal/src/api/generated/`. No concrete data bug today; this is standards/drift
+     prevention.

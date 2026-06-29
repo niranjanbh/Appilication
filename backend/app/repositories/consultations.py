@@ -491,6 +491,32 @@ async def get_stale_confirmed_consultations(
     return list(result.scalars().all())
 
 
+async def get_expired_unpaid_consultations(
+    db: AsyncSession,
+    *,
+    grace_minutes: int = 30,
+) -> list[Consultation]:
+    """Return SCHEDULED consultations whose start time is past by >= grace_minutes.
+
+    A consultation only leaves SCHEDULED by being paid+confirmed, cancelled, or
+    rescheduled. So one still SCHEDULED after its start time came and went was never
+    paid (assign flow) or never intake-confirmed (coordinator book flow). Either way
+    it must be cancelled and its slot released — otherwise the Availability row stays
+    BOOKED forever, leaking doctor capacity. Mirrors get_stale_confirmed_consultations
+    but for the unpaid/unconfirmed SCHEDULED state rather than the no-join CONFIRMED state.
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=grace_minutes)
+    result = await db.execute(
+        select(Consultation).where(
+            Consultation.status == ConsultationStatus.SCHEDULED,
+            Consultation.scheduled_start_at.is_not(None),
+            Consultation.scheduled_start_at <= cutoff,
+            Consultation.deleted_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def has_doctor_notes(db: AsyncSession, *, consultation_id: uuid.UUID) -> bool:
     """Return True if at least one doctor note exists for the consultation.
 

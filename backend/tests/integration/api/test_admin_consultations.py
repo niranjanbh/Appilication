@@ -62,3 +62,52 @@ async def test_admin_list_status_filter_includes_requested(
     ids = [c.id for (c, _patient_user, _doctor_user) in triples]
     assert consult.id in ids
     assert total >= 1
+
+
+async def test_admin_cancel_writes_patient_notification(
+    db_session: AsyncSession,
+) -> None:
+    """Admin cancellation tells the patient via a 'consultation_cancelled' inbox
+    notification (P3 fix)."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.db.enums import ConsultationStatus
+    from app.models.clinic import Consultation
+    from app.models.notifications import Notification
+    from app.services import consultation_service
+
+    user = await create_patient_user(db_session)
+    await db_session.flush()
+    patient = await patients_repo.get_or_create_for_user(db_session, user_id=user.id)
+
+    now = datetime.now(UTC)
+    consultation = Consultation(
+        patient_id=patient.id,
+        condition_category="thyroid",
+        consultation_type="initial",
+        scheduled_start_at=now + timedelta(hours=4),
+        scheduled_end_at=now + timedelta(hours=4, minutes=20),
+        consultation_fee_paise=60000,
+        status=ConsultationStatus.SCHEDULED,
+    )
+    db_session.add(consultation)
+    await db_session.flush()
+
+    updated, refund_issued = await consultation_service.admin_cancel_consultation(
+        db_session, consultation_id=consultation.id, reason="doctor unavailable"
+    )
+    await db_session.flush()
+
+    assert updated.status == ConsultationStatus.CANCELLED
+    assert refund_issued is False  # no payment linked
+
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == user.id,
+            Notification.template_name == "consultation_cancelled",
+        )
+    )
+    assert notification is not None
+    assert notification.data.get("resource_id") == str(consultation.id)

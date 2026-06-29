@@ -30,15 +30,19 @@ async def _dispatch_due_async() -> dict[str, Any]:
     from app.services.notifications import notify_medication_reminder
 
     async with AsyncSessionLocal() as db:
-        reminders = await get_due_reminders(db, active_only=True)
+        # Schedule-aware: each pair is a reminder genuinely due in this window plus
+        # its occurrence timestamp (the dispatch idempotency slot).
+        due = await get_due_reminders(db, active_only=True)
         dispatched = 0
-        for reminder in reminders:
+        for reminder, occurrence in due:
             # Only fire push for medication reminders; other types handled separately
             if str(reminder.type) == ReminderType.MEDICATION.value:
                 await notify_medication_reminder(
                     db,
                     user_id=_uuid.UUID(str(reminder.user_id)),
                     reminder_label=reminder.label,
+                    reminder_id=_uuid.UUID(str(reminder.id)),
+                    occurrence=occurrence,
                 )
                 dispatched += 1
 

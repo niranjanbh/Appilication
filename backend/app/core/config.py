@@ -109,11 +109,6 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str = ""
 
-    # 100ms (HMS) video — legacy, replaced by LiveKit
-    hms_access_key: str = ""
-    hms_secret: str = ""
-    hms_template_id: str = ""
-
     # LiveKit video
     livekit_api_key: str = ""
     livekit_api_secret: str = ""

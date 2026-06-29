@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useThemePreference } from '../../lib/theme-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { apiFetch } from '../../lib/api/client';
+import { apiFetch, ApiError } from '../../lib/api/client';
 import {
   confirmConsultationPayment,
   type RazorpayCheckoutResult,
@@ -319,10 +319,15 @@ export default function ConsultationDetailScreen() {
               setShowReschedule(false);
               await fetchDetail();
             } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : '';
-              const friendly = msg.includes('reschedule_window_closed')
+              // The backend error code is in the ApiError body's `detail`, not the
+              // message ("API error 400"). Read detail so the specific guidance fires.
+              const detail =
+                e instanceof ApiError && e.body && typeof e.body === 'object'
+                  ? String((e.body as { detail?: unknown }).detail ?? '')
+                  : '';
+              const friendly = detail.includes('reschedule_window_closed')
                 ? 'Appointments can only be rescheduled more than 24 hours in advance.'
-                : msg.includes('slot_not_available')
+                : detail.includes('slot_not_available')
                   ? 'That slot was just taken. Please pick another time.'
                   : 'Could not reschedule. Please try again.';
               Alert.alert('Error', friendly);

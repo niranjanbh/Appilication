@@ -412,3 +412,45 @@ async def test_delete_nonexistent_reminder_returns_404(
         f"/v1/wellness/reminders/{uuid.uuid4()}", headers=patient_headers
     )
     assert resp.status_code == 404
+
+
+# ── Schedule-aware dispatch (get_due_reminders) ───────────────────────────────
+
+async def test_get_due_reminders_is_schedule_aware(
+    db_session: AsyncSession, patient: object
+) -> None:
+    """A daily-8am reminder is due only in the window around 08:00 IST, and is
+    returned paired with its occurrence (the dispatch idempotency slot)."""
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    from app.db.enums import ReminderType
+    from app.models.identity import User as UserModel
+    from app.repositories import reminders as reminders_repo
+
+    assert isinstance(patient, UserModel)
+    ist = ZoneInfo("Asia/Kolkata")
+
+    reminder = await reminders_repo.create_reminder(
+        db_session,
+        user_id=patient.id,
+        type=ReminderType.MEDICATION,
+        label="Thyroxine",
+        schedule_cron="0 8 * * *",
+        schedule_interval_minutes=None,
+        notification_channels=["push"],
+        extra_metadata=None,
+    )
+    await db_session.flush()
+
+    # 08:02 IST — the 08:00 dose is due; occurrence is 08:00 IST expressed in UTC.
+    due_now = datetime(2026, 6, 27, 8, 2, tzinfo=ist).astimezone(UTC)
+    due = await reminders_repo.get_due_reminders(db_session, now=due_now)
+    mine = [(r, occ) for r, occ in due if r.id == reminder.id]
+    assert len(mine) == 1
+    assert mine[0][1] == datetime(2026, 6, 27, 8, 0, tzinfo=ist).astimezone(UTC)
+
+    # 09:00 IST — nothing due for this reminder.
+    off_now = datetime(2026, 6, 27, 9, 0, tzinfo=ist).astimezone(UTC)
+    due_off = await reminders_repo.get_due_reminders(db_session, now=off_now)
+    assert all(r.id != reminder.id for r, _ in due_off)

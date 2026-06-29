@@ -96,6 +96,27 @@ async def ensure_coordinator_assigned(db: AsyncSession, patient: Patient) -> Non
     await db.flush()
 
 
+async def ensure_patient_linked_to_coordinator(
+    db: AsyncSession,
+    *,
+    patient: Patient,
+    coordinator_id: uuid.UUID,
+) -> None:
+    """Ensure a patient appears in the given coordinator's assigned_patient_ids.
+
+    Used when routing a follow-up to the original coordinator — the patient may
+    already be linked (common case), but if the coordinator was changed since the
+    original consultation this keeps the queue visible.  Idempotent.
+    """
+    coordinator = await db.get(Coordinator, coordinator_id)
+    if coordinator is None:
+        return
+    pid = str(patient.id)
+    if pid not in coordinator.assigned_patient_ids:
+        coordinator.assigned_patient_ids = [*coordinator.assigned_patient_ids, pid]
+    await db.flush()
+
+
 async def route_consultation_to_coordinator(
     db: AsyncSession, patient: Patient
 ) -> uuid.UUID | None:

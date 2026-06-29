@@ -86,6 +86,7 @@ async def scheduling_view(
             "requests": coord_schemas.consultation_user_pairs(requests),
             "conditions": _CONDITIONS,
             "days_ahead": days_ahead,
+            "now": now,
             "error": None,
         },
     )
@@ -311,11 +312,14 @@ async def assign_consultation(
     db: Annotated[AsyncSession, Depends(get_db)],
     coord: Annotated[object, Depends(require_coord_session)],
     slot_id: uuid.UUID = Form(...),
+    coupon_code: str = Form(default=""),
 ) -> RedirectResponse:
     """Assign a doctor + slot to a patient's consultation request.
 
-    The doctor is determined by the chosen slot. Prices the fee, creates the
-    Razorpay order the patient pays, and moves the request to 'scheduled'.
+    The doctor is determined by the chosen slot. Prices the fee, optionally applies
+    a coupon, creates the Razorpay order the patient pays, and moves the request to
+    'scheduled'. An invalid coupon fails the assignment with the coupon error code so
+    the coordinator can retry with a valid code or none.
     """
     from app.models.identity import User as UserModel
     assert isinstance(coord, UserModel)
@@ -333,6 +337,7 @@ async def assign_consultation(
             consultation_id=consultation_id,
             coordinator_id=coordinator.id,
             slot_id=slot_id,
+            coupon_code=coupon_code.strip() or None,
         )
     except consultation_service.ConsultationError as exc:
         # Roll back any partial slot/payment work, then record the denial
@@ -452,6 +457,43 @@ async def reschedule_consultation(
     )
     return RedirectResponse(
         url="/coord/scheduling?success=rescheduled", status_code=status.HTTP_302_FOUND
+    )
+
+
+@router.post("/scheduling/{consultation_id}/no-show")
+async def mark_no_show(
+    consultation_id: uuid.UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    coord: Annotated[object, Depends(require_coord_session)],
+) -> RedirectResponse:
+    """Mark an assigned patient's past consultation as a no-show. No refund — the
+    slot was held and the doctor was available. The slot is released back to open."""
+    from app.models.identity import User as UserModel
+    assert isinstance(coord, UserModel)
+
+    ctx = _ctx(request, coord)
+    coordinator = await coord_repo.get_coordinator_by_user_id(db, user_id=coord.id)
+    if coordinator is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    marked = await coord_repo.mark_no_show_for_coordinator(
+        db, coordinator_id=coordinator.id, consultation_id=consultation_id
+    )
+    allowed = marked is not None
+    await write_audit(
+        db, ctx, action="coord_mark_no_show", resource_type="consultation",
+        resource_id=consultation_id, allowed=allowed,
+        reason=None if allowed else "not_assigned_not_started_or_wrong_status",
+    )
+
+    if not allowed:
+        return RedirectResponse(
+            url="/coord/scheduling?error=no_show_failed",
+            status_code=status.HTTP_302_FOUND,
+        )
+    return RedirectResponse(
+        url="/coord/scheduling?success=no_show", status_code=status.HTTP_302_FOUND
     )
 
 
