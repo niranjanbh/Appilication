@@ -50,6 +50,10 @@ celery_app.conf.update(
             "task": "kyros.reminder.dispatch_due",
             "schedule": crontab(minute="*/5"),  # every 5 minutes
         },
+        "deactivate-ended-reminders": {
+            "task": "kyros.reminder.deactivate_ended",
+            "schedule": crontab(hour=0, minute=30),  # daily, 00:30 UTC ≈ 6 AM IST
+        },
         "mark-auto-no-show": {
             "task": "kyros.consultation.mark_auto_no_show",
             "schedule": crontab(minute="*/15"),  # every 15 minutes

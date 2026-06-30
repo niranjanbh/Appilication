@@ -4,7 +4,7 @@ import { PullQuote } from '../../components/ui/PullQuote';
 import { CTASection } from '../../components/marketing/CTASection';
 
 export const metadata: Metadata = {
-  title: 'How to Consult a Specialist at Kyros Clinic',
+  title: 'How to Consult a Specialist',
   description:
     'Choose your condition, complete a short intake, consult a specialist, receive a plan. One doctor who stays with you across follow-ups.',
   alternates: { canonical: 'https://kyrosclinic.com/how-it-works' },

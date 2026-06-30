@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   borderRadius,
   colors,
@@ -35,6 +37,13 @@ export function TodayProgressCard({ summary }: TodayProgressCardProps) {
   const { total, completed, streak } = summary;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   const allDone = total > 0 && completed >= total;
+
+  // Smoothly grow/shrink the bar as completions change, instead of snapping.
+  const fillPct = useSharedValue(Math.min(pct, 100));
+  useEffect(() => {
+    fillPct.value = withTiming(Math.min(pct, 100), { duration: 450 });
+  }, [pct, fillPct]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fillPct.value}%` }));
   const streakMsg = allDone ? getStreakMessage(streak) : null;
   const progressMsg = getProgressMessage(completed, total);
 
@@ -58,13 +67,11 @@ export function TodayProgressCard({ summary }: TodayProgressCardProps) {
       {total > 0 ? (
         <>
           <View style={[s.trackBg, { backgroundColor: t.isDark ? withAlpha(colors.stoneDim, 0.20) : colors.borderLight }]}>
-            <View
+            <Animated.View
               style={[
                 s.trackFill,
-                {
-                  backgroundColor: barColor,
-                  width: `${Math.min(pct, 100)}%`,
-                },
+                { backgroundColor: barColor },
+                fillStyle,
               ]}
             />
           </View>

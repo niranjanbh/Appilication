@@ -35,6 +35,10 @@ def _stub_download(*, s3_key: str) -> str:
     return "https://s3.example.com/view?signed=yes"
 
 
+def _stub_delete(*, s3_key: str) -> None:
+    return None
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -277,13 +281,50 @@ async def test_reminder_image_flow(
         )
     assert url.status_code == 200
 
-    # Delete image → subsequent url 404
-    assert (await client.delete(
-        f"/v1/wellness/reminders/{rid}/image", headers=patient_headers
-    )).status_code == 204
+    # Delete image → S3 object removed, subsequent url 404
+    with patch("app.integrations.s3.delete_object", side_effect=_stub_delete) as del_mock:
+        assert (await client.delete(
+            f"/v1/wellness/reminders/{rid}/image", headers=patient_headers
+        )).status_code == 204
+    del_mock.assert_called_once()
     assert (await client.get(
         f"/v1/wellness/reminders/{rid}/image-url", headers=patient_headers
     )).status_code == 404
+
+
+async def test_deleting_reminder_cleans_up_custom_image(
+    client: AsyncClient, patient_headers: dict[str, str]
+) -> None:
+    """Soft-deleting a reminder with a custom photo deletes the S3 object so it
+    is not orphaned."""
+    reminder = await _create_reminder(client, patient_headers)
+    rid = reminder["id"]
+
+    with patch("app.integrations.s3.generate_image_upload_url", side_effect=_stub_image_upload):
+        await client.post(
+            f"/v1/wellness/reminders/{rid}/image-initiate", headers=patient_headers,
+            json={"filename": "mypill.png", "content_type": "image/png", "file_size_bytes": 1024},
+        )
+    with patch("app.integrations.s3.head_object", side_effect=_stub_head):
+        await client.post(f"/v1/wellness/reminders/{rid}/image-finalize", headers=patient_headers)
+
+    with patch("app.integrations.s3.delete_object", side_effect=_stub_delete) as del_mock:
+        resp = await client.delete(f"/v1/wellness/reminders/{rid}", headers=patient_headers)
+    assert resp.status_code == 204
+    del_mock.assert_called_once()
+
+
+async def test_deleting_reminder_without_image_skips_s3(
+    client: AsyncClient, patient_headers: dict[str, str]
+) -> None:
+    """A reminder with no custom photo deletes cleanly without touching S3."""
+    reminder = await _create_reminder(client, patient_headers)
+    with patch("app.integrations.s3.delete_object", side_effect=_stub_delete) as del_mock:
+        resp = await client.delete(
+            f"/v1/wellness/reminders/{reminder['id']}", headers=patient_headers
+        )
+    assert resp.status_code == 204
+    del_mock.assert_not_called()
 
 
 async def test_reminder_image_cross_patient_404(

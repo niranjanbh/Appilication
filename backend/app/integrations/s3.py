@@ -203,6 +203,17 @@ def head_object(*, s3_key: str) -> dict[str, Any] | None:
         raise
 
 
+def delete_object(*, s3_key: str) -> None:
+    """Delete an S3 object. Idempotent — a missing key is not an error.
+
+    S3 DeleteObject already returns success for a non-existent key, so this is
+    safe to call during cleanup (e.g. removing a reminder's custom photo) without
+    a prior existence check.
+    """
+    client = _s3_client()
+    client.delete_object(Bucket=settings.s3_bucket, Key=s3_key)
+
+
 def download_bytes(*, s3_key: str) -> bytes:
     """Download an S3 object into memory and return its bytes."""
     import io

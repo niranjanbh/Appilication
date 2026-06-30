@@ -1,6 +1,7 @@
 import type {
   AdherenceLogRead,
   AdherenceLogRequest,
+  AdherenceSummary,
   DailySummary,
   Reminder,
   ReminderCreate,
@@ -40,6 +41,10 @@ export function getDailySummaryApi(date?: string): Promise<DailySummary> {
 
 export function getWeekSummaryApi(weekStart: string): Promise<WeekSummaryResponse> {
   return apiFetch(`/v1/wellness/reminders/week-summary?start=${weekStart}`);
+}
+
+export function getAdherenceSummaryApi(): Promise<AdherenceSummary> {
+  return apiFetch('/v1/wellness/reminders/adherence-summary');
 }
 
 export function logAdherenceApi(

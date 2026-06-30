@@ -5,7 +5,7 @@ import { CTASection } from '../../components/marketing/CTASection';
 import { ORG, ORG_ID } from '../../lib/organization';
 
 export const metadata: Metadata = {
-  title: 'About Kyros Clinic',
+  title: 'About',
   description:
     'Kyros Clinic is a doctor-first telemedicine clinic built for India\'s hormonal health gap. Founded by Niranjan Bhimanadham.',
   alternates: { canonical: 'https://kyrosclinic.com/about' },

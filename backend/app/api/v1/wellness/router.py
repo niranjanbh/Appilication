@@ -9,6 +9,7 @@ from app.api.deps import DbSession
 from app.api.v1.wellness.schemas import (
     AdherenceLogRead,
     AdherenceLogRequest,
+    AdherenceSummaryResponse,
     DailySummaryResponse,
     HealthSummaryResponse,
     HealthSyncRequest,
@@ -32,7 +33,7 @@ from app.api.v1.wellness.schemas import (
 )
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import cross_user_404, get_patient_user
-from app.db.enums import ActorRole, HealthDatapointType
+from app.db.enums import ActorRole, HealthDatapointType, ReminderSourceType
 from app.repositories import health_sync as health_sync_repo
 from app.repositories import reminders as reminders_repo
 from app.repositories import symptom_checkin as symptom_checkin_repo
@@ -106,6 +107,9 @@ async def daily_summary(
         db, user_id=user.id, target_date=target
     )
     streak = await reminders_repo.get_adherence_streak(db, user_id=user.id)
+    resolved_ids, completed_ids = await reminders_repo.get_day_status_reminder_ids(
+        db, user_id=user.id, target_date=target
+    )
 
     await write_audit(
         db, ctx, action="daily_summary", resource_type="reminder", allowed=True
@@ -116,6 +120,8 @@ async def daily_summary(
         total=total,
         completed=completed,
         streak=streak,
+        resolved_reminder_ids=resolved_ids,
+        completed_reminder_ids=completed_ids,
     )
 
 
@@ -163,6 +169,39 @@ async def week_summary(
     )
 
     return WeekSummaryResponse(days=days)
+
+
+@router.get("/reminders/adherence-summary", response_model=AdherenceSummaryResponse)
+async def adherence_summary(
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_patient_user)],
+) -> AdherenceSummaryResponse:
+    """The patient's own longer-horizon adherence snapshot — the same metrics a
+    doctor sees, self-scoped."""
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    rate = await reminders_repo.get_overall_adherence_rate(db, user_id=user.id)
+    current_streak = await reminders_repo.get_adherence_streak(db, user_id=user.id)
+    longest_streak = await reminders_repo.get_longest_streak(db, user_id=user.id)
+    last_missed_at = await reminders_repo.get_last_missed_at(db, user_id=user.id)
+    active_rx = await reminders_repo.count_active_reminders_by_source(
+        db, user_id=user.id, source_type=ReminderSourceType.PRESCRIPTION.value
+    )
+
+    await write_audit(
+        db, ctx, action="view_adherence_summary", resource_type="reminder", allowed=True
+    )
+    return AdherenceSummaryResponse(
+        adherence_rate_30d=rate,
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        last_missed_at=last_missed_at,
+        active_prescription_reminders=active_rx,
+    )
 
 
 @router.post("/reminders", response_model=ReminderRead, status_code=status.HTTP_201_CREATED)
@@ -257,7 +296,7 @@ async def delete_reminder(
     reminder = await reminders_repo.get_reminder_for_user(
         db, reminder_id=reminder_id, user_id=user.id
     )
-    await cross_user_404(
+    reminder = await cross_user_404(
         db,
         reminder,
         ctx,
@@ -265,7 +304,7 @@ async def delete_reminder(
         resource_type="reminder",
         resource_id=reminder_id,
     )
-    await reminders_repo.soft_delete_reminder(db, reminder_id=reminder_id, user_id=user.id)
+    await reminders_service.delete_reminder(db, reminder=reminder)
     await write_audit(
         db,
         ctx,

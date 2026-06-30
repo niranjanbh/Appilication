@@ -14,3 +14,8 @@
 /conditions/pcos                      /conditions/pmos            301
 /learn/pcos                           /learn/pmos                 301
 /learn/pcos/*                         /learn/pmos/:splat          301
+
+# 2026-06: Learn-article conversion CTA points at /assessment, which has no route.
+# Until a dedicated assessment flow ships, alias it to the booking page so the
+# primary conversion link on ~48 articles resolves instead of 404ing.
+/assessment                           /book                       301

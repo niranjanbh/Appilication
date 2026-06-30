@@ -48,3 +48,26 @@ async def _dispatch_due_async() -> dict[str, Any]:
             dispatched += 1
 
     return {"dispatched_count": dispatched, "skipped_local_count": skipped_local}
+
+
+@celery_app.task(name="kyros.reminder.deactivate_ended", bind=True)  # type: ignore[untyped-decorator]
+def deactivate_ended_reminders(self: object) -> dict[str, Any]:
+    """Deactivate reminders whose finite course (``ends_at``) has fully passed.
+
+    Runs daily. A finite medication course stops producing occurrences once
+    ``ends_at`` is past (the due-query and adherence math already ignore it); this
+    just flips ``active`` to false so it also drops out of the patient's active
+    list instead of lingering. Idempotent.
+    """
+    return _run_async(_deactivate_ended_async())  # type: ignore[no-any-return]
+
+
+async def _deactivate_ended_async() -> dict[str, Any]:
+    from app.db.session import AsyncSessionLocal
+    from app.repositories.reminders import deactivate_ended_reminders as _deactivate
+
+    async with AsyncSessionLocal() as db:
+        count = await _deactivate(db)
+        await db.commit()
+
+    return {"deactivated_count": count}

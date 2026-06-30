@@ -51,12 +51,16 @@ function formatCountdown(diffMinutes: number): string {
   return m > 0 ? `in ${h}h ${m}m` : `in ${h}h`;
 }
 
-function findNextReminder(reminders: Reminder[], nowMinutes: number): Reminder | null {
+function findNextReminder(
+  reminders: Reminder[],
+  nowMinutes: number,
+  resolved: Set<string>,
+): Reminder | null {
   let best: Reminder | null = null;
   let bestDiff = Infinity;
 
   for (const r of reminders) {
-    if (!r.active) continue;
+    if (!r.active || resolved.has(r.id)) continue;
     const rMin = getCronMinutesOfDay(r.schedule_cron);
     if (rMin === null) continue;
     const diff = rMin - nowMinutes;
@@ -66,6 +70,36 @@ function findNextReminder(reminders: Reminder[], nowMinutes: number): Reminder |
     }
   }
   return best;
+}
+
+// The most overdue still-pending reminder today: a daily (cron) reminder whose
+// time has passed and which has not yet been taken or skipped. Earliest time =
+// most overdue, so it surfaces first.
+function findOverdueReminder(
+  reminders: Reminder[],
+  nowMinutes: number,
+  resolved: Set<string>,
+): Reminder | null {
+  let best: Reminder | null = null;
+  let bestMin = Infinity;
+
+  for (const r of reminders) {
+    if (!r.active || resolved.has(r.id)) continue;
+    const rMin = getCronMinutesOfDay(r.schedule_cron);
+    if (rMin === null) continue;
+    if (rMin < nowMinutes && rMin < bestMin) {
+      bestMin = rMin;
+      best = r;
+    }
+  }
+  return best;
+}
+
+function formatOverdue(diffMinutes: number): string {
+  if (diffMinutes < 60) return `${diffMinutes} min overdue`;
+  const h = Math.floor(diffMinutes / 60);
+  const m = diffMinutes % 60;
+  return m > 0 ? `${h}h ${m}m overdue` : `${h}h overdue`;
 }
 
 function findFirstReminder(reminders: Reminder[]): Reminder | null {
@@ -86,13 +120,17 @@ function hasActiveIntervalReminders(reminders: Reminder[]): boolean {
   return reminders.some(r => r.active && r.schedule_cron === null && (r.schedule_interval_minutes ?? 0) > 0);
 }
 
+const EMPTY_SET: Set<string> = new Set();
+
 interface NextUpCardProps {
   reminders: Reminder[];
   selectedDate: Date;
   onTakeNow: (reminder: Reminder) => void;
+  /** Ids of reminders already taken/skipped today — excluded from overdue/next. */
+  resolvedToday?: Set<string>;
 }
 
-export function NextUpCard({ reminders, selectedDate, onTakeNow }: NextUpCardProps) {
+export function NextUpCard({ reminders, selectedDate, onTakeNow, resolvedToday }: NextUpCardProps) {
   const t = useTheme();
   const [tick, setTick] = useState(() => new Date());
 
@@ -110,12 +148,49 @@ export function NextUpCard({ reminders, selectedDate, onTakeNow }: NextUpCardPro
     );
   }, [selectedDate]);
 
+  const resolved = resolvedToday ?? EMPTY_SET;
   const nowMinutes = tick.getHours() * 60 + tick.getMinutes();
-  const next = isToday ? findNextReminder(reminders, nowMinutes) : null;
-  const allPast = isToday && !next;
-  const hasIntervalOnly = isToday && !next && hasActiveIntervalReminders(reminders);
+  const overdue = isToday ? findOverdueReminder(reminders, nowMinutes, resolved) : null;
+  const next = isToday ? findNextReminder(reminders, nowMinutes, resolved) : null;
+  const allPast = isToday && !overdue && !next;
+  const hasIntervalOnly = isToday && !overdue && !next && hasActiveIntervalReminders(reminders);
 
   if (!isToday) return null;
+
+  // Overdue takes priority: a passed, still-pending reminder is the user's most
+  // urgent action, so it pre-empts the upcoming "Next Up" suggestion.
+  if (overdue) {
+    const oMeta = TYPE_META[overdue.type] ?? TYPE_META.custom;
+    const oTime = formatScheduleTime(overdue.schedule_cron);
+    const oMin = getCronMinutesOfDay(overdue.schedule_cron);
+    const overdueBy = oMin !== null ? formatOverdue(nowMinutes - oMin) : '';
+    return (
+      <View style={[s.card, s.overdueCard, { backgroundColor: t.surface }]}>
+        <View style={s.headingRow}>
+          <Ionicons name="alert-circle" size={14} color={colors.terracotta} />
+          <Text style={[s.heading, { color: colors.terracotta }]}>Overdue</Text>
+        </View>
+        <View style={s.body}>
+          <IconChip icon={oMeta.icon} tint={oMeta.tint} size={40} />
+          <View style={s.info}>
+            <Text style={[s.label, { color: t.text }]} numberOfLines={1}>
+              {overdue.label}
+            </Text>
+            <Text style={[s.timeLine, { color: colors.terracotta }]}>
+              {oTime}{overdueBy ? ` · ${overdueBy}` : ''}
+            </Text>
+          </View>
+          <Pressable
+            style={[s.takeBtn, { backgroundColor: withAlpha(colors.jade, t.isDark ? 0.20 : 0.12) }]}
+            onPress={() => onTakeNow(overdue)}
+            accessibilityLabel={`Take ${overdue.label} now`}
+          >
+            <Text style={[s.takeBtnText, { color: colors.jade }]}>Take Now</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   const meta = next ? (TYPE_META[next.type] ?? TYPE_META.custom) : null;
   const time = next ? formatScheduleTime(next.schedule_cron) : '';
@@ -185,6 +260,15 @@ const s = StyleSheet.create({
     borderRadius: borderRadius.xl,
     padding: spacing[4],
     gap: spacing[2],
+  },
+  overdueCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.terracotta,
+  },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
   },
   heading: {
     fontFamily: fontFamily.body,

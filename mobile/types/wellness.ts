@@ -87,6 +87,12 @@ export interface DailySummary {
   total: number;
   completed: number;
   streak: number;
+  // Reminder ids already resolved (taken or skipped) today. Used to suppress
+  // overdue reminders the user has already handled from the "Next Up" card.
+  resolved_reminder_ids: string[];
+  // Subset of resolved that were taken (not just skipped) — used to mark a
+  // reminder row as done vs merely dismissed.
+  completed_reminder_ids: string[];
 }
 
 export interface WeekDaySummary {
@@ -97,6 +103,14 @@ export interface WeekDaySummary {
 
 export interface WeekSummaryResponse {
   days: WeekDaySummary[];
+}
+
+export interface AdherenceSummary {
+  adherence_rate_30d: number;
+  current_streak: number;
+  longest_streak: number;
+  last_missed_at: string | null;
+  active_prescription_reminders: number;
 }
 
 export interface AdherenceLogRequest {

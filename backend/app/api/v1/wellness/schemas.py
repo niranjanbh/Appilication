@@ -42,7 +42,12 @@ class ReminderRead(BaseModel):
     schedule_cron: str | None
     schedule_interval_minutes: int | None
     active: bool
+    ends_at: datetime | None = None
     notification_channels: list[Any]
+    # Provenance — lets the client distinguish doctor-prescribed reminders from
+    # self-created ones (e.g. an "Rx" badge) without inferring from metadata.
+    source_type: str = "manual"
+    generated_by: str = "patient"
     # ORM attribute is `extra_metadata` (to avoid clash with Base.metadata);
     # we expose it to clients as `metadata`.
     metadata: dict[str, Any] | None = Field(None, validation_alias="extra_metadata")
@@ -79,6 +84,12 @@ class DailySummaryResponse(BaseModel):
     total: int
     completed: int
     streak: int
+    # Reminder ids resolved (taken or skipped) on this date. Lets the client
+    # surface still-pending overdue reminders without nagging handled ones.
+    resolved_reminder_ids: list[uuid.UUID] = Field(default_factory=list)
+    # Subset of the above that were actually taken (not just skipped) — used to
+    # mark a reminder "done" vs merely dismissed.
+    completed_reminder_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class WeekDaySummary(BaseModel):
@@ -89,6 +100,16 @@ class WeekDaySummary(BaseModel):
 
 class WeekSummaryResponse(BaseModel):
     days: list[WeekDaySummary]
+
+
+class AdherenceSummaryResponse(BaseModel):
+    """Patient's own longer-horizon adherence snapshot (mirrors the doctor view)."""
+
+    adherence_rate_30d: float
+    current_streak: int
+    longest_streak: int
+    last_missed_at: datetime | None = None
+    active_prescription_reminders: int
 
 
 class AdherenceLogRequest(BaseModel):

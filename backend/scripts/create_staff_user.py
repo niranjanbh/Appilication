@@ -108,6 +108,7 @@ def _validate(args: argparse.Namespace) -> None:
 
 async def _run(args: argparse.Namespace, password: str) -> None:
     from app.core.audit import AuditContext
+
     from app.db.enums import ActorRole, UserRole
     from app.db.session import AsyncSessionLocal
     from app.services.staff_service import StaffServiceError, create_staff_user
@@ -161,5 +162,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

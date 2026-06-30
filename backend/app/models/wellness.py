@@ -36,8 +36,23 @@ class Reminder(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     schedule_cron: Mapped[str | None] = mapped_column(String(100), nullable=True)
     schedule_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+    # When the reminder stops producing occurrences (e.g. a finite medication
+    # course). NULL = open-ended. Queries ignore occurrences after this instant.
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     notification_channels: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    # Provenance: where the reminder came from, the source row's id, and who
+    # created it. Explicit columns (not buried in metadata) so editing/regeneration
+    # rules can key on origin. Stored as strings (see ReminderSourceType/…GeneratedBy).
+    source_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'manual'")
+    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    generated_by: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'patient'")
     )
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSONB, nullable=True

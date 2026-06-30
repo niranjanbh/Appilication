@@ -93,6 +93,22 @@ class ReminderAction(enum.StrEnum):
     MISSED = "missed"
 
 
+class ReminderSourceType(enum.StrEnum):
+    """Where a reminder originated. Stored as a String column (not a PG enum)."""
+
+    MANUAL = "manual"          # patient-created in the app
+    PRESCRIPTION = "prescription"  # generated from a signed prescription line
+    CARE_PLAN = "care_plan"    # generated from an activated care-plan item
+
+
+class ReminderGeneratedBy(enum.StrEnum):
+    """Actor that caused a reminder to exist. Stored as a String column."""
+
+    PATIENT = "patient"
+    DOCTOR = "doctor"
+    SYSTEM = "system"
+
+
 class HealthSyncSource(enum.StrEnum):
     APPLE_HEALTH = "apple_health"
     GOOGLE_HEALTH_CONNECT = "google_health_connect"

@@ -11,6 +11,7 @@ aggregate consultation counts only.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -19,8 +20,9 @@ from pydantic import BaseModel
 from app.api.deps import DbSession
 from app.core.audit import AuditContext, write_audit
 from app.core.rbac import get_doctor_user
-from app.db.enums import ActorRole
+from app.db.enums import ActorRole, ReminderSourceType
 from app.repositories import doctor_portal as dr_repo
+from app.repositories import reminders as reminders_repo
 
 router = APIRouter(tags=["doctor-patients"])
 
@@ -59,6 +61,18 @@ class PanelPatientListResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class PatientAdherenceSummary(BaseModel):
+    """Doctor-facing adherence snapshot. Summary metrics only — no raw logs,
+    no lab/prescription contents (coordinators never reach this; doctor-only)."""
+
+    patient_id: uuid.UUID
+    adherence_rate_30d: float
+    current_streak: int
+    longest_streak: int
+    last_missed_at: datetime | None
+    active_prescription_reminders: int
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -197,4 +211,65 @@ async def get_panel_patient(
         chronic_conditions=pt.chronic_conditions,
         current_medications=pt.current_medications,
         consultation_counts=counts,
+    )
+
+
+@router.get("/patients/{patient_id}/adherence", response_model=PatientAdherenceSummary)
+async def get_patient_adherence(
+    patient_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(get_doctor_user)],
+) -> PatientAdherenceSummary:
+    """Adherence snapshot for a patient on the requesting doctor's panel.
+
+    Doctor-only (coordinators are blocked by the role gate). Cross-doctor access
+    returns 404, identical to a non-existent patient.
+    """
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    dr_row = await dr_repo.get_doctor_with_user(db, user_id=user.id)
+    if dr_row is None:
+        await write_audit(
+            db, ctx, action="view_patient_adherence",
+            resource_type="patient_adherence", resource_id=patient_id,
+            allowed=False, reason="doctor_profile_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    doctor, _ = dr_row
+    pt_row = await dr_repo.get_panel_patient(db, doctor_id=doctor.id, patient_id=patient_id)
+    if pt_row is None:
+        await write_audit(
+            db, ctx, action="view_patient_adherence",
+            resource_type="patient_adherence", resource_id=patient_id,
+            allowed=False, reason="not_own_or_not_found",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="not found")
+
+    _, u = pt_row
+    rate = await reminders_repo.get_overall_adherence_rate(db, user_id=u.id)
+    current_streak = await reminders_repo.get_adherence_streak(db, user_id=u.id)
+    longest_streak = await reminders_repo.get_longest_streak(db, user_id=u.id)
+    last_missed_at = await reminders_repo.get_last_missed_at(db, user_id=u.id)
+    active_rx = await reminders_repo.count_active_reminders_by_source(
+        db, user_id=u.id, source_type=ReminderSourceType.PRESCRIPTION.value
+    )
+
+    await write_audit(
+        db, ctx, action="view_patient_adherence",
+        resource_type="patient_adherence", resource_id=patient_id, allowed=True,
+    )
+    return PatientAdherenceSummary(
+        patient_id=patient_id,
+        adherence_rate_30d=rate,
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        last_missed_at=last_missed_at,
+        active_prescription_reminders=active_rx,
     )

@@ -4,7 +4,7 @@ import { FAQ_DATA } from '../../lib/faq-data';
 import { JsonLD } from '../../components/schema/JsonLD';
 
 export const metadata: Metadata = {
-  title: 'Frequently Asked Questions | Kyros Clinic',
+  title: 'Frequently Asked Questions',
   description:
       'Questions about consultations, specialists, privacy, prescriptions, pricing, and how Kyros Clinic works.',
   alternates: {

@@ -147,10 +147,32 @@ async def get_image_url(db: AsyncSession, *, reminder: Reminder) -> str | None:
 
 
 async def remove_image(db: AsyncSession, *, reminder: Reminder) -> None:
-    """Drop the patient's custom image reference from the reminder metadata."""
+    """Delete the patient's custom photo from S3 and drop its metadata reference.
+
+    Only the patient-uploaded object (`image_key`) is removed. A doctor-attached
+    catalog image (`catalog_id`) is shared and owned by the catalog, so it is
+    never deleted here.
+    """
     meta = dict(reminder.extra_metadata or {})
-    meta.pop("image_key", None)
+    key = meta.pop("image_key", None)
     meta.pop("image_content_type", None)
+    if key:
+        await asyncio.to_thread(s3.delete_object, s3_key=str(key))
     await reminders_repo.update_reminder(
         db, reminder_id=reminder.id, user_id=reminder.user_id, extra_metadata=meta
+    )
+
+
+async def delete_reminder(db: AsyncSession, *, reminder: Reminder) -> None:
+    """Soft-delete a reminder, cleaning up its custom S3 photo first.
+
+    The S3 object would otherwise be orphaned, since the soft delete leaves the
+    row (and its `image_key` metadata) in place. The catalog image, if any, is
+    left untouched.
+    """
+    key = (reminder.extra_metadata or {}).get("image_key")
+    if key:
+        await asyncio.to_thread(s3.delete_object, s3_key=str(key))
+    await reminders_repo.soft_delete_reminder(
+        db, reminder_id=reminder.id, user_id=reminder.user_id
     )

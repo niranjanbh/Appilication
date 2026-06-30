@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     consultation_fee_initial_paise: int = 70000
     consultation_fee_followup_paise: int = 50000
 
+    # Default IST clock times (HH:MM) for prescription timing slots, used when
+    # auto-generating reminders from a signed prescription. Patients can edit the
+    # resulting reminder times; these are only the starting defaults.
+    reminder_slot_time_morning: str = "08:00"
+    reminder_slot_time_afternoon: str = "14:00"
+    reminder_slot_time_evening: str = "18:00"
+    reminder_slot_time_night: str = "21:00"
+
     # Abuse protection — per-IP fixed-window limits on auth endpoints
     rate_limit_enabled: bool = True
 

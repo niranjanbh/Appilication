@@ -25,6 +25,7 @@ import { useTheme } from '../../../lib/theme';
 import { TAB_DOCK_CLEARANCE } from '../../ui/GlassTabBar';
 import type { Reminder, ReminderType, WeekDaySummary } from '../../../types/wellness';
 import type { ReminderListProps } from './ReminderList.types';
+import { AdherenceSummaryCard } from '../AdherenceSummaryCard';
 import { NextUpCard } from '../NextUpCard';
 import { TodayProgressCard } from '../TodayProgressCard';
 
@@ -276,7 +277,9 @@ function WeekStrip({ selectedDate, onSelectDate, onToggleCalendar, calendarExpan
           const selected = isSameDay(day, selectedDate);
           const todayMark = isSameDay(day, today);
           const isFuture = day > today;
-          const dotColor = getDotColor(summaryMap.get(formatDayIso(day)), isFuture);
+          const ds = summaryMap.get(formatDayIso(day));
+          const dotColor = getDotColor(ds, isFuture);
+          const dayPct = ds && ds.total > 0 ? Math.round((ds.completed / ds.total) * 100) : null;
           return (
             <Pressable
               key={i}
@@ -304,10 +307,10 @@ function WeekStrip({ selectedDate, onSelectDate, onToggleCalendar, calendarExpan
                   {day.getDate()}
                 </Text>
               </View>
-              {dotColor ? (
-                <View style={[ws.dot, { backgroundColor: dotColor }]} />
+              {dotColor && dayPct !== null ? (
+                <Text style={[ws.pct, { color: dotColor }]}>{dayPct}%</Text>
               ) : (
-                <View style={ws.dotSpacer} />
+                <View style={ws.pctSpacer} />
               )}
             </Pressable>
           );
@@ -367,14 +370,14 @@ const ws = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '500',
   },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+  pct: {
+    fontFamily: fontFamily.data,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    lineHeight: 13,
   },
-  dotSpacer: {
-    width: 5,
-    height: 5,
+  pctSpacer: {
+    height: 13,
   },
 });
 
@@ -540,11 +543,17 @@ const sec = StyleSheet.create({
 interface ReminderRowProps {
   reminder: Reminder;
   temporalState: TemporalState;
+  /** Taken or skipped on the viewed date — drops overdue/upcoming urgency. */
+  resolved: boolean;
+  /** Taken (not merely skipped) on the viewed date — shows the done state. */
+  completed: boolean;
   onEdit: (r: Reminder) => void;
   onAdherence: (r: Reminder) => void;
   onDelete: (r: Reminder) => void;
   onToggle: (r: Reminder) => void;
   onTakeNow: (r: Reminder) => void;
+  onSkip: (r: Reminder) => void;
+  onSnooze: (r: Reminder) => void;
 }
 
 function getAdherenceColor(rate: number): string {
@@ -606,16 +615,49 @@ function SwipeLeftAction({ progress }: { progress: SharedValue<number> }) {
   );
 }
 
-function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, onToggle, onTakeNow }: ReminderRowProps) {
+const RIGHT_ACTION_WIDTH = 76;
+
+// Swipe-left menu: Skip / Snooze / Delete. Tapping a button performs the action
+// and the row closes (handled by the caller). Delete still routes through the
+// caller's confirmation dialog.
+function SwipeRightActions({ onSkip, onSnooze, onDelete }: {
+  onSkip: () => void;
+  onSnooze: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <View style={swipe.rightContainer}>
+      <Pressable style={[swipe.rightBtn, { backgroundColor: colors.stone }]} onPress={onSkip} accessibilityLabel="Skip">
+        <Ionicons name="play-skip-forward" size={20} color={colors.white} />
+        <Text style={swipe.actionText}>Skip</Text>
+      </Pressable>
+      <Pressable style={[swipe.rightBtn, { backgroundColor: colors.saffron }]} onPress={onSnooze} accessibilityLabel="Snooze 15 minutes">
+        <Ionicons name="alarm-outline" size={20} color={colors.white} />
+        <Text style={swipe.actionText}>Snooze</Text>
+      </Pressable>
+      <Pressable style={[swipe.rightBtn, { backgroundColor: colors.terracotta }]} onPress={onDelete} accessibilityLabel="Delete">
+        <Ionicons name="trash" size={20} color={colors.white} />
+        <Text style={swipe.actionText}>Delete</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onAdherence, onDelete, onToggle, onTakeNow, onSkip, onSnooze }: ReminderRowProps) {
   const t    = useTheme();
   const meta = TYPE_META[reminder.type] ?? TYPE_META.custom;
   const time = formatScheduleTime(reminder.schedule_cron);
   const freq = formatFrequency(reminder.schedule_interval_minutes ?? null, reminder.schedule_cron);
   const swipeRef = useRef<SwipeableMethods>(null);
 
-  const isPast     = temporalState === 'past';
-  const isOverdue  = temporalState === 'overdue';
-  const isUpcoming = temporalState === 'upcoming';
+  const isPast      = temporalState === 'past';
+  // A resolved reminder (taken or skipped) is handled for the day, so its
+  // urgency cues are dropped — a dose taken at 9:05 must not still read as
+  // "overdue" at 9:20. Taken shows a done check; skipped just dims.
+  const isCompleted = completed;
+  const isSkipped   = resolved && !completed;
+  const isOverdue   = temporalState === 'overdue' && !resolved;
+  const isUpcoming  = temporalState === 'upcoming' && !resolved;
 
   const hasAdherence = reminder.adherence_rate > 0;
   const adherencePct = Math.round(reminder.adherence_rate * 100);
@@ -635,21 +677,34 @@ function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, o
     [],
   );
 
+  const renderRightActions = useCallback(
+    () => (
+      <SwipeRightActions
+        onSkip={() => { swipeRef.current?.close(); onSkip(reminder); }}
+        onSnooze={() => { swipeRef.current?.close(); onSnooze(reminder); }}
+        onDelete={() => { swipeRef.current?.close(); onDelete(reminder); }}
+      />
+    ),
+    [reminder, onSkip, onSnooze, onDelete],
+  );
+
   const content = (
       <HapticPressable
         haptic="selection"
         scaleTo={0.98}
         onPress={() => onAdherence(reminder)}
         onLongPress={() => onEdit(reminder)}
-        accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}. Tap to log, long-press to edit.`}
+        accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isCompleted ? ', done' : isSkipped ? ', skipped' : isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}. Tap to log, long-press to edit.`}
       >
         <View
           style={[
             row.container,
             { backgroundColor: t.surface },
             isPast && { opacity: 0.55 },
+            isSkipped && { opacity: 0.6 },
             isOverdue && { opacity: 0.75, borderLeftWidth: 3, borderLeftColor: t.isDark ? colors.terracottaSoft : colors.terracotta },
             isUpcoming && { borderLeftWidth: 3, borderLeftColor: colors.saffron },
+            isCompleted && { borderLeftWidth: 3, borderLeftColor: colors.jade },
           ]}
         >
           {time ? (
@@ -657,7 +712,7 @@ function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, o
               <Text
                 style={[
                   row.timeText,
-                  { color: isUpcoming ? colors.saffron : isOverdue ? (t.isDark ? colors.terracottaSoft : colors.terracotta) : t.text },
+                  { color: isCompleted ? colors.jade : isUpcoming ? colors.saffron : isOverdue ? (t.isDark ? colors.terracottaSoft : colors.terracotta) : t.text },
                 ]}
               >
                 {time}
@@ -672,6 +727,9 @@ function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, o
               <Text style={[row.label, { color: t.text }]} numberOfLines={1}>
                 {reminder.label}
               </Text>
+              {isCompleted && (
+                <Ionicons name="checkmark-circle" size={14} color={colors.jade} />
+              )}
               {hasAdherence && (
                 <Text style={[row.adherenceText, { color: getAdherenceColor(reminder.adherence_rate) }]}>
                   {adherencePct}%
@@ -716,14 +774,6 @@ function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, o
             >
               <Ionicons name="create-outline" size={16} color={t.textSub} />
             </Pressable>
-
-            <Pressable
-              onPress={() => onDelete(reminder)}
-              hitSlop={8}
-              accessibilityLabel={`Delete ${reminder.label}`}
-            >
-              <Ionicons name="trash-outline" size={16} color={t.textSub} />
-            </Pressable>
           </View>
         </View>
       </HapticPressable>
@@ -739,8 +789,11 @@ function ReminderRow({ reminder, temporalState, onEdit, onAdherence, onDelete, o
       ref={swipeRef}
       friction={2}
       leftThreshold={40}
+      rightThreshold={40}
       overshootLeft={false}
+      overshootRight={false}
       renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
       onSwipeableOpen={handleSwipeOpen}
       containerStyle={swipe.swipeContainer}
     >
@@ -835,11 +888,20 @@ const swipe = StyleSheet.create({
     fontWeight: '700',
     color: colors.white,
   },
+  rightContainer: {
+    flexDirection: 'row',
+  },
+  rightBtn: {
+    width: RIGHT_ACTION_WIDTH,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+  },
 });
 
 // ── ReminderList ──────────────────────────────────────────────────────────────
 
-export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onAdherence, onDelete, onToggle, onTakeNow, dailySummary, weekSummary, refreshControl }: ReminderListProps) {
+export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, onAdherence, onDelete, onToggle, onTakeNow, onSkip, onSnooze, dailySummary, weekSummary, adherenceSummary, refreshControl }: ReminderListProps) {
   const t = useTheme();
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -860,6 +922,15 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
 
   const sections = useMemo(() => groupByTimeOfDay(filtered), [filtered]);
 
+  const resolvedToday = useMemo(
+    () => new Set(dailySummary?.resolved_reminder_ids ?? []),
+    [dailySummary],
+  );
+  const completedToday = useMemo(
+    () => new Set(dailySummary?.completed_reminder_ids ?? []),
+    [dailySummary],
+  );
+
   function handleCalendarSelect(date: Date) {
     onDateChange(date);
     setCalendarExpanded(false);
@@ -872,8 +943,7 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
       refreshControl={refreshControl}
     >
       {dailySummary && <TodayProgressCard summary={dailySummary} />}
-
-
+      {adherenceSummary && <AdherenceSummaryCard summary={adherenceSummary} />}
 
       <WeekStrip
         selectedDate={selectedDate}
@@ -890,6 +960,7 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
           reminders={filtered}
           selectedDate={selectedDate}
           onTakeNow={onTakeNow}
+          resolvedToday={resolvedToday}
       />
       <Text style={[list.dateHeading, { color: t.isDark ? colors.jadeGlow : colors.forest }]}>
         {displayDate}
@@ -910,11 +981,15 @@ export function ReminderList({ reminders, selectedDate, onDateChange, onEdit, on
                   key={r.id}
                   reminder={r}
                   temporalState={getTemporalState(r.schedule_cron, r.schedule_interval_minutes ?? null, selectedDate, now)}
+                  resolved={resolvedToday.has(r.id)}
+                  completed={completedToday.has(r.id)}
                   onEdit={onEdit}
                   onAdherence={onAdherence}
                   onDelete={onDelete}
                   onToggle={onToggle}
                   onTakeNow={onTakeNow}
+                  onSkip={onSkip}
+                  onSnooze={onSnooze}
                 />
               ))}
             </View>

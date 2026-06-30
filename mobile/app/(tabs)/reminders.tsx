@@ -22,6 +22,7 @@ import { SkeletonCards } from '../../components/ui/Skeleton';
 import {
   createReminderApi,
   deleteReminderApi,
+  getAdherenceSummaryApi,
   getDailySummaryApi,
   getWeekSummaryApi,
   listRemindersApi,
@@ -39,8 +40,24 @@ import {
 import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 import { ReminderList } from '../../components/reminders/ReminderList';
 import { ReminderFormModal } from '../../components/reminders/ReminderFormModal';
-import type { AdherenceAction, Reminder, ReminderAction, ReminderCreate } from '../../types/wellness';
+import type { AdherenceAction, DailySummary, Reminder, ReminderAction, ReminderCreate, ReminderType, WeekSummaryResponse } from '../../types/wellness';
 
+
+const QUICK_START: { type: ReminderType; emoji: string; label: string }[] = [
+  { type: 'water',      emoji: '💧', label: 'Water' },
+  { type: 'medication', emoji: '💊', label: 'Medication' },
+  { type: 'supplement', emoji: '🌿', label: 'Supplement' },
+  { type: 'gym',        emoji: '🏋️', label: 'Exercise' },
+];
+
+
+// A reminder is delivered by a device-local notification only when its channels
+// include 'push'. Server-generated reminders (doctor-prescribed) use empty
+// channels and are delivered by the backend dispatcher — the device must not
+// also schedule a local one, or the patient is notified twice.
+function schedulesLocally(reminder: { notification_channels: string[] }): boolean {
+  return reminder.notification_channels.includes('push');
+}
 
 function formatCronTime(cron: string): string {
   const parts = cron.split(' ');
@@ -143,6 +160,7 @@ export default function RemindersScreen() {
   const t      = useTheme();
   const isDark = useThemePreference().colorScheme === 'dark';
   const [modalVisible, setModalVisible] = useState(false);
+  const [createType, setCreateType] = useState<ReminderType | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [adherenceState, setAdherenceState] = useState<{
     visible: boolean; reminderId: string; scheduledAt: string; label: string;
@@ -188,31 +206,37 @@ export default function RemindersScreen() {
   weekSunday.setDate(weekSunday.getDate() - weekSunday.getDay());
   const weekStartIso = `${weekSunday.getFullYear()}-${String(weekSunday.getMonth() + 1).padStart(2, '0')}-${String(weekSunday.getDate()).padStart(2, '0')}`;
   const weekQuery = useQuery({ queryKey: ['week-summary', weekStartIso], queryFn: () => getWeekSummaryApi(weekStartIso), staleTime: 60_000 });
+  const adherenceQuery = useQuery({ queryKey: ['adherence-summary'], queryFn: getAdherenceSummaryApi, staleTime: 60_000 });
 
   function invalidateAll() {
     qc.invalidateQueries({ queryKey: ['reminders'] });
     qc.invalidateQueries({ queryKey: ['daily-summary'] });
     qc.invalidateQueries({ queryKey: ['week-summary'] });
+    qc.invalidateQueries({ queryKey: ['adherence-summary'] });
   }
 
   function onRefresh() {
     remindersQuery.refetch();
     summaryQuery.refetch();
     weekQuery.refetch();
+    adherenceQuery.refetch();
   }
 
   const refreshing =
     (remindersQuery.isFetching && !remindersQuery.isLoading) ||
     (summaryQuery.isFetching && !summaryQuery.isLoading) ||
-    (weekQuery.isFetching && !weekQuery.isLoading);
+    (weekQuery.isFetching && !weekQuery.isLoading) ||
+    (adherenceQuery.isFetching && !adherenceQuery.isLoading);
 
   const createMutation = useMutation({
     mutationFn: createReminderApi,
     onSuccess: async (reminder) => {
       invalidateAll();
       // Repeating trigger: fires today if the time is still ahead, else the
-      // next occurrence, then daily/interval thereafter.
-      if (reminder.active) await scheduleRepeatingReminder(reminder);
+      // next occurrence, then daily/interval thereafter. Only schedule a local
+      // notification when the reminder is device-owned ('push' channel); server-
+      // generated reminders (e.g. doctor-prescribed) are delivered by the backend.
+      if (schedulesLocally(reminder)) await scheduleRepeatingReminder(reminder);
       setModalVisible(false);
     },
     onError: () => Alert.alert('Error', 'Could not create reminder. Please try again.'),
@@ -238,7 +262,7 @@ export default function RemindersScreen() {
     },
     onSuccess: async (reminder) => {
       invalidateAll();
-      if (reminder.active) await scheduleRepeatingReminder(reminder);
+      if (reminder.active && schedulesLocally(reminder)) await scheduleRepeatingReminder(reminder);
       else await cancelReminderNotifications(reminder.id);
     },
   });
@@ -252,8 +276,53 @@ export default function RemindersScreen() {
   const logMutation = useMutation({
     mutationFn: ({ reminderId, scheduledAt, action }: { reminderId: string; scheduledAt: string; action: ReminderAction }) =>
       logAdherenceApi(reminderId, { scheduled_at: scheduledAt, action }),
-    onSuccess: () => { invalidateAll(); setAdherenceState(s => ({ ...s, visible: false })); },
-    onError: () => Alert.alert('Error', 'Could not log adherence.'),
+    // Optimistically reflect the log in the progress ring, week dots and the
+    // Next Up card so the tap feels instant. onSettled re-syncs with the server
+    // (streak and cross-date edges are reconciled there).
+    onMutate: async ({ reminderId, action }) => {
+      const dailyKey = ['daily-summary', selectedIso];
+      const weekKey = ['week-summary', weekStartIso];
+      await qc.cancelQueries({ queryKey: ['daily-summary'] });
+      await qc.cancelQueries({ queryKey: ['week-summary'] });
+      const prevDaily = qc.getQueryData<DailySummary>(dailyKey);
+      const prevWeek = qc.getQueryData<WeekSummaryResponse>(weekKey);
+
+      const resolves = action === 'taken' || action === 'skipped';
+      // Gate the "completed" advance on not-already-*completed* (not merely
+      // resolved) so a skip→take on the same slot still bumps progress.
+      const newlyTaken =
+        action === 'taken' && !(prevDaily?.completed_reminder_ids.includes(reminderId) ?? false);
+
+      if (prevDaily) {
+        let nextDaily = prevDaily;
+        if (resolves && !prevDaily.resolved_reminder_ids.includes(reminderId)) {
+          nextDaily = { ...nextDaily, resolved_reminder_ids: [...nextDaily.resolved_reminder_ids, reminderId] };
+        }
+        if (newlyTaken) {
+          nextDaily = {
+            ...nextDaily,
+            completed: Math.min(nextDaily.completed + 1, nextDaily.total),
+            completed_reminder_ids: [...nextDaily.completed_reminder_ids, reminderId],
+          };
+        }
+        if (nextDaily !== prevDaily) qc.setQueryData<DailySummary>(dailyKey, nextDaily);
+      }
+      if (prevWeek && newlyTaken) {
+        qc.setQueryData<WeekSummaryResponse>(weekKey, {
+          days: prevWeek.days.map(d =>
+            d.date === selectedIso ? { ...d, completed: Math.min(d.completed + 1, d.total) } : d,
+          ),
+        });
+      }
+      setAdherenceState(s => ({ ...s, visible: false }));
+      return { prevDaily, prevWeek, dailyKey, weekKey };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevDaily) qc.setQueryData(ctx.dailyKey, ctx.prevDaily);
+      if (ctx?.prevWeek) qc.setQueryData(ctx.weekKey, ctx.prevWeek);
+      Alert.alert('Error', 'Could not log adherence.');
+    },
+    onSettled: () => { invalidateAll(); },
   });
 
   function handleSave(payload: ReminderCreate) {
@@ -265,7 +334,7 @@ export default function RemindersScreen() {
     const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
     setAdherenceState({ visible: true, reminderId: r.id, scheduledAt, label: r.label });
   }
-  function openCreate()             { setModalVisible(true); }
+  function openCreate(type?: ReminderType) { setCreateType(type); setModalVisible(true); }
   function handleToggle(r: Reminder) {
     toggleMutation.mutate({ id: r.id, active: !r.active });
   }
@@ -283,6 +352,16 @@ export default function RemindersScreen() {
   function handleTakeNow(r: Reminder) {
     const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
     logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'taken' as ReminderAction });
+  }
+  function handleSkip(r: Reminder) {
+    const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
+    logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'skipped' as ReminderAction });
+  }
+  async function handleSnooze(r: Reminder) {
+    const scheduledAt = todayScheduledAt(r.schedule_cron, selectedDate);
+    logMutation.mutate({ reminderId: r.id, scheduledAt, action: 'snoozed' as ReminderAction });
+    const snoozeAt = new Date(Date.now() + 15 * 60_000);
+    await scheduleReminderNotification(r.id, r.label, snoozeAt);
   }
   async function handleAdherenceLog(reminderId: string, scheduledAt: string, action: AdherenceAction) {
     logMutation.mutate({ reminderId, scheduledAt, action: action as ReminderAction });
@@ -321,8 +400,21 @@ export default function RemindersScreen() {
             title="No reminders yet"
             body="Set up water intake, medication, or supplement reminders and track your adherence."
             ctaLabel="Create reminder"
-            onCtaPress={openCreate}
+            onCtaPress={() => openCreate()}
           />
+          <View style={styles.quickRow}>
+            {QUICK_START.map(q => (
+              <Pressable
+                key={q.type}
+                style={[styles.quickChip, { backgroundColor: isDark ? colors.forestSurface : colors.white, borderColor: withAlpha(colors.forest, 0.25) }]}
+                onPress={() => openCreate(q.type)}
+                accessibilityLabel={`Add ${q.label} reminder`}
+              >
+                <Text style={styles.quickEmoji}>{q.emoji}</Text>
+                <Text style={[styles.quickLabel, { color: t.text }]}>{q.label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       ) : (
         <>
@@ -335,8 +427,11 @@ export default function RemindersScreen() {
             onDelete={confirmDelete}
             onToggle={handleToggle}
             onTakeNow={handleTakeNow}
+            onSkip={handleSkip}
+            onSnooze={handleSnooze}
             dailySummary={summaryQuery.data ?? null}
             weekSummary={weekQuery.data?.days ?? null}
+            adherenceSummary={adherenceQuery.data ?? null}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -349,7 +444,7 @@ export default function RemindersScreen() {
             haptic="medium"
             containerStyle={styles.fab}
             style={styles.fabBtn}
-            onPress={openCreate}
+            onPress={() => openCreate()}
             accessibilityLabel="Add reminder"
           >
             <Ionicons name="add" size={28} color={colors.white} />
@@ -360,6 +455,7 @@ export default function RemindersScreen() {
       <ReminderFormModal
         visible={modalVisible}
         editing={null}
+        initialType={createType}
         onClose={() => setModalVisible(false)}
         onSave={handleSave}
         isSaving={createMutation.isPending}
@@ -427,4 +523,22 @@ const styles = StyleSheet.create({
   },
 
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing[6] },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing[2],
+    marginTop: spacing[5],
+  },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+  },
+  quickEmoji: { fontSize: fontSize.body },
+  quickLabel: { fontFamily: fontFamily.body, fontSize: fontSize.sm, fontWeight: '600' },
 });

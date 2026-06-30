@@ -26,8 +26,29 @@ interface LabReportSummary {
   patient_attention_flags: string[] | null;
 }
 
+interface PatientAdherence {
+  patient_id: string;
+  adherence_rate_30d: number;
+  current_streak: number;
+  longest_streak: number;
+  last_missed_at: string | null;
+  active_prescription_reminders: number;
+}
+
 function formatCategory(s: string) {
   return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Colour the headline rate by adherence band (PDC convention): strong ≥90%,
+// watch 70–89%, concern below 70%. Uses high-contrast tokens for WCAG AA.
+function adherenceColor(rate: number): string {
+  if (rate >= 0.9) return 'text-forest';
+  if (rate >= 0.7) return 'text-saffron';
+  return 'text-alert';
+}
+
+function days(n: number): string {
+  return `${n} day${n !== 1 ? 's' : ''}`;
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null }) {
@@ -35,6 +56,15 @@ function InfoRow({ label, value }: { label: string; value: string | null }) {
     <div className="flex gap-4 py-2.5 border-b border-stone/10 last:border-0">
       <dt className="font-body text-caption text-stone w-40 shrink-0">{label}</dt>
       <dd className="font-body text-body text-ink">{value || '—'}</dd>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-1">
+      <dt className="font-body text-caption text-stone">{label}</dt>
+      <dd className="font-body text-body text-ink font-semibold">{value}</dd>
     </div>
   );
 }
@@ -51,6 +81,12 @@ export function PatientDetail() {
   const { data: labReports } = useQuery({
     queryKey: ['patient-lab-reports', id],
     queryFn: () => apiFetch<LabReportSummary[]>(`/v1/doctor/patients/${id}/lab-reports`),
+    enabled: !!id,
+  });
+
+  const { data: adherence, isLoading: adherenceLoading } = useQuery({
+    queryKey: ['patient-adherence', id],
+    queryFn: () => apiFetch<PatientAdherence>(`/v1/doctor/patients/${id}/adherence`),
     enabled: !!id,
   });
 
@@ -119,6 +155,43 @@ export function PatientDetail() {
           <InfoRow label="Chronic conditions" value={data.chronic_conditions} />
           <InfoRow label="Current medications" value={data.current_medications} />
         </dl>
+      </div>
+
+      {/* Adherence */}
+      <div className="bg-white rounded-card p-5 mb-6">
+        <h2 className="font-display text-h3 text-forest font-medium mb-3">Adherence</h2>
+        {adherenceLoading ? (
+          <p className="font-body text-body text-stone">Loading…</p>
+        ) : !adherence ||
+          (adherence.active_prescription_reminders === 0 &&
+            adherence.adherence_rate_30d === 0 &&
+            adherence.current_streak === 0 &&
+            adherence.longest_streak === 0 &&
+            !adherence.last_missed_at) ? (
+          <p className="font-body text-body text-stone">No reminders set up yet.</p>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2 mb-4">
+              <span className={`font-display text-h2 font-medium ${adherenceColor(adherence.adherence_rate_30d)}`}>
+                {Math.round(adherence.adherence_rate_30d * 100)}%
+              </span>
+              <span className="font-body text-caption text-stone">30-day adherence</span>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-6">
+              <Stat label="Current streak" value={days(adherence.current_streak)} />
+              <Stat label="Longest streak" value={days(adherence.longest_streak)} />
+              <Stat label="Active Rx reminders" value={String(adherence.active_prescription_reminders)} />
+              <Stat
+                label="Last missed"
+                value={
+                  adherence.last_missed_at
+                    ? new Date(adherence.last_missed_at).toLocaleDateString('en-IN')
+                    : 'None'
+                }
+              />
+            </dl>
+          </>
+        )}
       </div>
 
       {/* Consultation breakdown */}

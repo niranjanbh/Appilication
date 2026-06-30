@@ -709,6 +709,21 @@ async def test_delete_reminder_no_auth_returns_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+async def test_adherence_summary_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/v1/wellness/reminders/adherence-summary")
+    assert resp.status_code == 401
+
+
+async def test_adherence_summary_doctor_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    doctor = await create_doctor_user(db_session)
+    resp = await client.get(
+        "/v1/wellness/reminders/adherence-summary", headers=make_auth_headers(doctor)
+    )
+    assert resp.status_code == 403
+
+
 # ── /v1/wellness/health-sync — patient-scoped endpoint ───────────────────────
 # Role matrix: patient=200/403 (consent-gated), no-auth=401, doctor/coordinator=403.
 
@@ -1598,6 +1613,35 @@ async def test_doctor_get_patient_coordinator_returns_403(
     coord = await create_coordinator_user(db_session)
     resp = await client.get(
         f"/v1/doctor/patients/{uuid.uuid4()}", headers=make_auth_headers(coord)
+    )
+    assert resp.status_code == 403
+
+
+# ── /v1/doctor/patients/{id}/adherence — doctor only ─────────────────────────
+# Role matrix: doctor=200/404 (own/foreign), no-auth=401, patient/coordinator=403.
+
+
+async def test_doctor_patient_adherence_no_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.get(f"/v1/doctor/patients/{uuid.uuid4()}/adherence")
+    assert resp.status_code == 401
+
+
+async def test_doctor_patient_adherence_patient_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    patient = await create_patient_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/patients/{uuid.uuid4()}/adherence", headers=make_auth_headers(patient)
+    )
+    assert resp.status_code == 403
+
+
+async def test_doctor_patient_adherence_coordinator_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    coord = await create_coordinator_user(db_session)
+    resp = await client.get(
+        f"/v1/doctor/patients/{uuid.uuid4()}/adherence", headers=make_auth_headers(coord)
     )
     assert resp.status_code == 403
 

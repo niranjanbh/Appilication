@@ -1223,7 +1223,10 @@ async def notify_reminder_due(
 
     prefs = row.notification_preferences or {}
     title, body = _reminder_title_body(reminder_type, reminder_label)
-    data = {"screen": "reminders"}
+    template_name = f"{reminder_type}_reminder"
+    # Carry template_name in the payload so a tap deep-links to the reminders tab
+    # (the client routes on data.template_name, not data.screen).
+    data = {"screen": "reminders", "template_name": template_name}
 
     channels_sent: list[str] = []
     if _pref(prefs, "push"):
@@ -1234,7 +1237,7 @@ async def notify_reminder_due(
     await _record_notification(
         db,
         user_id=user_id,
-        template_name=f"{reminder_type}_reminder",
+        template_name=template_name,
         title=title,
         body=body,
         channels=channels_sent,

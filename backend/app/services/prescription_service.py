@@ -6,12 +6,15 @@ import uuid
 from html import escape as _esc
 from typing import Any
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import FoodRelation, FrequencyCode, TimingSlot
 from app.models.clinic import Prescription, PrescriptionItem
 from app.repositories import drug_catalogue as dc_repo
 from app.repositories import prescriptions as prescriptions_repo
+
+logger = structlog.get_logger(__name__)
 
 
 class PrescriptionError(Exception):
@@ -300,7 +303,38 @@ async def sign_prescription(
     if rx is None:
         raise PrescriptionError("prescription_not_found_or_not_signable")
 
+    await _generate_prescription_reminders(db, rx)
+
     return rx
+
+
+async def _generate_prescription_reminders(db: AsyncSession, rx: Prescription) -> None:
+    """Best-effort: transcribe the signed prescription into patient reminders.
+
+    Generation must never block the clinical sign, so it runs in a SAVEPOINT and
+    swallows failures — a failed generation rolls back only the reminders and is
+    logged; the signed prescription stands and reminders can be regenerated later.
+    """
+    from app.models.clinic import Patient
+    from app.services import reminder_generation
+
+    try:
+        async with db.begin_nested():
+            patient = await db.get(Patient, rx.patient_id)
+            if patient is None:
+                return
+            items = await prescriptions_repo.list_items(db, prescription_id=rx.id)
+            await reminder_generation.generate_for_prescription(
+                db,
+                prescription=rx,
+                items=items,
+                patient_user_id=patient.user_id,
+            )
+    except Exception:  # noqa: BLE001 — generation is non-critical to signing
+        logger.exception(
+            "prescription_reminder_generation_failed",
+            prescription_id=str(rx.id),
+        )
 
 
 def render_prescription_html(

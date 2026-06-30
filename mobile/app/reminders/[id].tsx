@@ -35,7 +35,11 @@ import { resolveReminderImage } from '../../lib/reminder-image';
 import { borderRadius, colors, fontFamily, fontSize, spacing, withAlpha } from '../../lib/design-tokens';
 import { useTheme } from '../../lib/theme';
 import { useThemePreference } from '../../lib/theme-context';
-import type { Reminder, ReminderAction, ReminderCreate, ReminderType } from '../../types/wellness';
+import type { DailySummary, Reminder, ReminderAction, ReminderCreate, ReminderType, WeekSummaryResponse } from '../../types/wellness';
+
+function isoOf(dt: Date): string {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
 
 const TYPE_LABEL: Record<ReminderType, string> = {
   water: 'Hydration',
@@ -128,8 +132,11 @@ export default function ReminderDetailScreen() {
     mutationFn: ({ rid, payload }: { rid: string; payload: ReminderCreate }) => updateReminderApi(rid, payload),
     onSuccess: async (updated) => {
       invalidateAll();
-      if (updated.active) await scheduleRepeatingReminder(updated);
-      else await cancelReminderNotifications(updated.id);
+      if (updated.active && updated.notification_channels.includes('push')) {
+        await scheduleRepeatingReminder(updated);
+      } else {
+        await cancelReminderNotifications(updated.id);
+      }
       setEditVisible(false);
     },
     onError: () => Alert.alert('Error', 'Could not update reminder.'),
@@ -154,8 +161,11 @@ export default function ReminderDetailScreen() {
     },
     onSuccess: async (updated) => {
       invalidateAll();
-      if (updated.active) await scheduleRepeatingReminder(updated);
-      else await cancelReminderNotifications(updated.id);
+      if (updated.active && updated.notification_channels.includes('push')) {
+        await scheduleRepeatingReminder(updated);
+      } else {
+        await cancelReminderNotifications(updated.id);
+      }
     },
   });
 
@@ -172,8 +182,54 @@ export default function ReminderDetailScreen() {
   const logMutation = useMutation({
     mutationFn: ({ rid, scheduledAt, action }: { rid: string; scheduledAt: string; action: ReminderAction }) =>
       logAdherenceApi(rid, { scheduled_at: scheduledAt, action }),
-    onSuccess: () => invalidateAll(),
-    onError: () => Alert.alert('Error', 'Could not log adherence.'),
+    // Optimistically sync today's progress ring and week dots (the detail screen
+    // always logs against today) so the tab is already up to date on back-nav.
+    // adherence_rate is a 30-day server figure, so it's left to onSettled.
+    onMutate: async ({ rid, action }) => {
+      const now = new Date();
+      const todayIso = isoOf(now);
+      const sunday = new Date(now);
+      sunday.setDate(sunday.getDate() - sunday.getDay());
+      const dailyKey = ['daily-summary', todayIso];
+      const weekKey = ['week-summary', isoOf(sunday)];
+      await qc.cancelQueries({ queryKey: ['daily-summary'] });
+      await qc.cancelQueries({ queryKey: ['week-summary'] });
+      const prevDaily = qc.getQueryData<DailySummary>(dailyKey);
+      const prevWeek = qc.getQueryData<WeekSummaryResponse>(weekKey);
+
+      const resolves = action === 'taken' || action === 'skipped';
+      const newlyTaken =
+        action === 'taken' && !(prevDaily?.completed_reminder_ids.includes(rid) ?? false);
+
+      if (prevDaily) {
+        let nextDaily = prevDaily;
+        if (resolves && !prevDaily.resolved_reminder_ids.includes(rid)) {
+          nextDaily = { ...nextDaily, resolved_reminder_ids: [...nextDaily.resolved_reminder_ids, rid] };
+        }
+        if (newlyTaken) {
+          nextDaily = {
+            ...nextDaily,
+            completed: Math.min(nextDaily.completed + 1, nextDaily.total),
+            completed_reminder_ids: [...nextDaily.completed_reminder_ids, rid],
+          };
+        }
+        if (nextDaily !== prevDaily) qc.setQueryData<DailySummary>(dailyKey, nextDaily);
+      }
+      if (prevWeek && newlyTaken) {
+        qc.setQueryData<WeekSummaryResponse>(weekKey, {
+          days: prevWeek.days.map(d =>
+            d.date === todayIso ? { ...d, completed: Math.min(d.completed + 1, d.total) } : d,
+          ),
+        });
+      }
+      return { prevDaily, prevWeek, dailyKey, weekKey };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevDaily) qc.setQueryData(ctx.dailyKey, ctx.prevDaily);
+      if (ctx?.prevWeek) qc.setQueryData(ctx.weekKey, ctx.prevWeek);
+      Alert.alert('Error', 'Could not log adherence.');
+    },
+    onSettled: () => invalidateAll(),
   });
 
   // ── Image (custom photo or doctor catalog image) ──────────────────────────────

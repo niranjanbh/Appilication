@@ -70,13 +70,15 @@ function metaStr(meta: Record<string, unknown> | null | undefined, key: string):
 export interface ReminderFormModalProps {
   visible: boolean;
   editing: Reminder | null;
+  /** Pre-selects the type for a new reminder (e.g. from an empty-state chip). */
+  initialType?: ReminderType;
   onClose: () => void;
   onSave: (payload: ReminderCreate, editing: Reminder | null) => void;
   isSaving: boolean;
   isDark: boolean;
 }
 
-export function ReminderFormModal({ visible, editing, onClose, onSave, isSaving, isDark }: ReminderFormModalProps) {
+export function ReminderFormModal({ visible, editing, initialType, onClose, onSave, isSaving, isDark }: ReminderFormModalProps) {
   const [form, setForm] = useState<ReminderFormState>(DEFAULT_FORM);
 
   useEffect(() => {
@@ -107,11 +109,12 @@ export function ReminderFormModal({ visible, editing, onClose, onSave, isSaving,
       const carryHour = roundedMin >= 60 ? 1 : 0;
       setForm({
         ...DEFAULT_FORM,
+        type: initialType ?? DEFAULT_FORM.type,
         scheduleHour: String((soon.getHours() + carryHour) % 24).padStart(2, '0'),
         scheduleMinute: String(roundedMin % 60).padStart(2, '0'),
       });
     }
-  }, [editing, visible]);
+  }, [editing, visible, initialType]);
 
   function handleSave() {
     if (!form.label.trim()) {
