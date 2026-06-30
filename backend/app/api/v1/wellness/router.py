@@ -260,6 +260,21 @@ async def update_reminder(
         resource_type="reminder",
         resource_id=reminder_id,
     )
+    if reminder.source_type == ReminderSourceType.PRESCRIPTION.value:
+        await write_audit(
+            db,
+            ctx,
+            action="update_reminder",
+            resource_type="reminder",
+            resource_id=reminder_id,
+            allowed=False,
+            reason="prescription_reminder_immutable",
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Doctor-prescribed reminders cannot be modified.",
+        )
     update_kwargs = body.model_dump(exclude_unset=True)
     # Remap client-facing "metadata" key to ORM attribute name
     if "metadata" in update_kwargs:
@@ -304,6 +319,21 @@ async def delete_reminder(
         resource_type="reminder",
         resource_id=reminder_id,
     )
+    if reminder.source_type == ReminderSourceType.PRESCRIPTION.value:
+        await write_audit(
+            db,
+            ctx,
+            action="delete_reminder",
+            resource_type="reminder",
+            resource_id=reminder_id,
+            allowed=False,
+            reason="prescription_reminder_immutable",
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Doctor-prescribed reminders cannot be deleted.",
+        )
     await reminders_service.delete_reminder(db, reminder=reminder)
     await write_audit(
         db,

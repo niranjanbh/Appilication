@@ -54,7 +54,9 @@ def send_email(
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
             if settings.smtp_user and settings.smtp_password:
+                smtp.ehlo()
                 smtp.starttls()
+                smtp.ehlo()  # re-identify after TLS; exposes TLS-only AUTH mechanisms
                 smtp.login(settings.smtp_user, settings.smtp_password)
             smtp.sendmail(settings.email_from, [to_email], msg.as_string())
 

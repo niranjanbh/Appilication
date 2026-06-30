@@ -9,9 +9,11 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Workspace root — needed so Metro can resolve shared packages (design-tokens)
+// Workspace root — needed so Metro can resolve shared packages (design-tokens).
+// Spread the Expo defaults so expo-doctor's watchFolders check passes; the
+// workspace root supersedes them but they must be present in the array.
 const workspaceRoot = path.resolve(__dirname, '..');
-config.watchFolders = [workspaceRoot];
+config.watchFolders = [workspaceRoot, ...(config.watchFolders ?? [])];
 config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),

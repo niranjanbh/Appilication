@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
     livekit_host: str = "ws://localhost:7880"
+    # URL returned to browser/mobile clients. In dev this is localhost:7880
+    # (host-mapped port). In prod it matches livekit_host (same wss:// URL).
+    # Defaults to livekit_host so prod needs no extra config.
+    livekit_public_url: str = ""
     livekit_recordings_bucket: str = ""
     # Video room participant sizing. The default covers a standard 1:1 consult plus
     # support seats. Staff may raise it per-consultation (up to the cap) when

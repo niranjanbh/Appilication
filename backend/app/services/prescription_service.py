@@ -108,6 +108,7 @@ _OWNERSHIP_CODES: frozenset[str] = frozenset(
         "doctor_profile_not_found",
         "prescription_not_found_or_not_draft",
         "prescription_not_found_or_not_signable",
+        "prescription_not_found_or_not_supersedable",
     }
 )
 
@@ -306,6 +307,36 @@ async def sign_prescription(
     await _generate_prescription_reminders(db, rx)
 
     return rx
+
+
+async def supersede_prescription(
+    db: AsyncSession,
+    *,
+    doctor_user_id: uuid.UUID,
+    prescription_id: uuid.UUID,
+) -> Prescription:
+    """Create a new draft version that supersedes a signed prescription.
+
+    Signed prescriptions are immutable; corrections go through this versioned
+    supersede flow. The new draft copies the predecessor's items so the doctor
+    can adjust them via the existing draft-edit endpoint, then re-sign.
+    """
+    from sqlalchemy import select
+
+    from app.models.doctor import Doctor
+
+    result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise PrescriptionError("doctor_profile_not_found")
+
+    new_rx = await prescriptions_repo.create_supersession(
+        db, prescription_id=prescription_id, doctor_id=doctor.id
+    )
+    if new_rx is None:
+        raise PrescriptionError("prescription_not_found_or_not_supersedable")
+
+    return new_rx
 
 
 async def _generate_prescription_reminders(db: AsyncSession, rx: Prescription) -> None:

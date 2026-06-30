@@ -45,6 +45,8 @@ export type ReminderType = 'water' | 'supplement' | 'medication' | 'gym' | 'cust
 export type ReminderAction = 'taken' | 'skipped' | 'snoozed' | 'missed';
 export type AdherenceAction = 'taken' | 'skipped' | 'snoozed';
 
+export type ReminderSourceType = 'manual' | 'prescription';
+
 export interface Reminder {
   id: string;
   type: ReminderType;
@@ -53,6 +55,10 @@ export interface Reminder {
   schedule_interval_minutes: number | null;
   active: boolean;
   notification_channels: string[];
+  // Provenance: 'prescription' reminders are doctor-prescribed and immutable to
+  // the patient; 'manual' reminders are patient-created and fully editable.
+  source_type: ReminderSourceType;
+  generated_by: string;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

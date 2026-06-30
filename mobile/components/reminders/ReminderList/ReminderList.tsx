@@ -562,9 +562,8 @@ function getAdherenceColor(rate: number): string {
   return colors.terracotta;
 }
 
-function isRxReminder(metadata: Record<string, unknown> | null): boolean {
-  if (!metadata) return false;
-  return !!(metadata.care_plan_id || metadata.prescription_id);
+function isPrescribed(reminder: Reminder): boolean {
+  return reminder.source_type === 'prescription';
 }
 
 // Build a short, type-specific detail string from the reminder's metadata,
@@ -623,7 +622,8 @@ const RIGHT_ACTION_WIDTH = 76;
 function SwipeRightActions({ onSkip, onSnooze, onDelete }: {
   onSkip: () => void;
   onSnooze: () => void;
-  onDelete: () => void;
+  // Omitted for doctor-prescribed reminders, which the patient cannot delete.
+  onDelete?: () => void;
 }) {
   return (
     <View style={swipe.rightContainer}>
@@ -635,10 +635,12 @@ function SwipeRightActions({ onSkip, onSnooze, onDelete }: {
         <Ionicons name="alarm-outline" size={20} color={colors.white} />
         <Text style={swipe.actionText}>Snooze</Text>
       </Pressable>
-      <Pressable style={[swipe.rightBtn, { backgroundColor: colors.terracotta }]} onPress={onDelete} accessibilityLabel="Delete">
-        <Ionicons name="trash" size={20} color={colors.white} />
-        <Text style={swipe.actionText}>Delete</Text>
-      </Pressable>
+      {onDelete && (
+        <Pressable style={[swipe.rightBtn, { backgroundColor: colors.terracotta }]} onPress={onDelete} accessibilityLabel="Delete">
+          <Ionicons name="trash" size={20} color={colors.white} />
+          <Text style={swipe.actionText}>Delete</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -661,7 +663,7 @@ function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onA
 
   const hasAdherence = reminder.adherence_rate > 0;
   const adherencePct = Math.round(reminder.adherence_rate * 100);
-  const rx = isRxReminder(reminder.metadata);
+  const prescribed = isPrescribed(reminder);
   const detail = formatDetail(reminder.type, reminder.metadata);
 
   const handleSwipeOpen = useCallback((direction: SwipeDirection) => {
@@ -682,10 +684,11 @@ function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onA
       <SwipeRightActions
         onSkip={() => { swipeRef.current?.close(); onSkip(reminder); }}
         onSnooze={() => { swipeRef.current?.close(); onSnooze(reminder); }}
-        onDelete={() => { swipeRef.current?.close(); onDelete(reminder); }}
+        // Doctor-prescribed reminders cannot be deleted by the patient.
+        onDelete={prescribed ? undefined : () => { swipeRef.current?.close(); onDelete(reminder); }}
       />
     ),
-    [reminder, onSkip, onSnooze, onDelete],
+    [reminder, onSkip, onSnooze, onDelete, prescribed],
   );
 
   const content = (
@@ -693,7 +696,7 @@ function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onA
         haptic="selection"
         scaleTo={0.98}
         onPress={() => onAdherence(reminder)}
-        onLongPress={() => onEdit(reminder)}
+        onLongPress={prescribed ? undefined : () => onEdit(reminder)}
         accessibilityLabel={`Reminder: ${reminder.label}${time ? ` at ${time}` : ''}${isCompleted ? ', done' : isSkipped ? ', skipped' : isOverdue ? ', overdue' : ''}${hasAdherence ? `, ${adherencePct}% adherence` : ''}. Tap to log, long-press to edit.`}
       >
         <View
@@ -740,9 +743,13 @@ function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onA
               <Text style={[row.freq, { color: t.textSub }]} numberOfLines={1}>
                 {detail ? `${freq} · ${detail}` : freq}
               </Text>
-              {rx && (
+              {prescribed ? (
                 <View style={[row.rxBadge, { backgroundColor: withAlpha(colors.jade, t.isDark ? 0.20 : 0.10) }]}>
-                  <Text style={[row.rxText, { color: t.isDark ? colors.jadeGlow : colors.jade }]}>Rx</Text>
+                  <Text style={[row.rxText, { color: t.isDark ? colors.jadeGlow : colors.jade }]}>Doctor prescribed</Text>
+                </View>
+              ) : (
+                <View style={[row.rxBadge, { backgroundColor: withAlpha(colors.stone, 0.15) }]}>
+                  <Text style={[row.rxText, { color: t.textSub }]}>Personal</Text>
                 </View>
               )}
             </View>
@@ -750,31 +757,35 @@ function ReminderRow({ reminder, temporalState, resolved, completed, onEdit, onA
 
           {/* Claim the touch so toggling / deleting / editing never bubbles up to
               the row's adherence onPress. */}
-          <View
-            style={row.controls}
-            onStartShouldSetResponder={() => true}
-            onResponderRelease={() => {}}
-          >
-            <Switch
-              value={reminder.active}
-              trackColor={{
-                false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
-                true:  withAlpha(colors.jadeGlow, 0.50),
-              }}
-              thumbColor={reminder.active ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
-              ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
-              accessibilityLabel={`${reminder.active ? 'Disable' : 'Enable'} ${reminder.label}`}
-              onValueChange={() => onToggle(reminder)}
-            />
-
-            <Pressable
-              onPress={() => onEdit(reminder)}
-              hitSlop={8}
-              accessibilityLabel={`Edit ${reminder.label}`}
+          {/* Doctor-prescribed reminders are immutable to the patient — no
+              pause toggle or edit control (the backend rejects those edits). */}
+          {!prescribed && (
+            <View
+              style={row.controls}
+              onStartShouldSetResponder={() => true}
+              onResponderRelease={() => {}}
             >
-              <Ionicons name="create-outline" size={16} color={t.textSub} />
-            </Pressable>
-          </View>
+              <Switch
+                value={reminder.active}
+                trackColor={{
+                  false: t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight,
+                  true:  withAlpha(colors.jadeGlow, 0.50),
+                }}
+                thumbColor={reminder.active ? colors.jadeGlow : (t.isDark ? colors.stoneDim : colors.white)}
+                ios_backgroundColor={t.isDark ? withAlpha(colors.stoneDim, 0.30) : colors.borderLight}
+                accessibilityLabel={`${reminder.active ? 'Disable' : 'Enable'} ${reminder.label}`}
+                onValueChange={() => onToggle(reminder)}
+              />
+
+              <Pressable
+                onPress={() => onEdit(reminder)}
+                hitSlop={8}
+                accessibilityLabel={`Edit ${reminder.label}`}
+              >
+                <Ionicons name="create-outline" size={16} color={t.textSub} />
+              </Pressable>
+            </View>
+          )}
         </View>
       </HapticPressable>
   );

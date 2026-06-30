@@ -3,6 +3,9 @@ rtc:
   tcp_port: 7881
   udp_port: 7882
   use_external_ip: false
+  # Advertise localhost so browser ICE candidates resolve via the mapped host ports.
+  # Without this, LiveKit advertises its internal Docker IP which the browser can't reach.
+  node_ip: 127.0.0.1
 
 keys:
   APIkyros877055598d: EE9Jo/r2gMQrza32UsM8ziIhGgqhNP3C6Roke2ygb08uCvQ0

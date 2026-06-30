@@ -22,7 +22,7 @@ router = APIRouter(tags=["doctor-video"])
 def _livekit_ws_url() -> str:
     from app.core.config import settings
 
-    return settings.livekit_host
+    return settings.livekit_public_url or settings.livekit_host
 
 
 class DoctorJoinResponse(BaseModel):

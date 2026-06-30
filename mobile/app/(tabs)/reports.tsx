@@ -425,14 +425,14 @@ function SubTabs({ active, onChange, t }: { active: TabKey; onChange: (k: TabKey
 
 // ── Prescription card ───────────────────────────────────────────────────────────
 
-function PrescriptionCard({ rx, t }: { rx: Prescription; t: AppPalette }) {
+function PrescriptionCard({ rx, t, onPress }: { rx: Prescription; t: AppPalette; onPress: () => void }) {
   const sColor = rx.status === 'dispensed' ? colors.jade : colors.forest;
   const sLabel = rx.status === 'dispensed' ? 'Dispensed' : 'Signed';
   const medCount = rx.items.length;
   return (
     <HapticPressable
       scaleTo={0.98}
-      onPress={() => undefined}
+      onPress={onPress}
       accessibilityLabel={`Prescription, ${medCount} medication${medCount === 1 ? '' : 's'}`}
       containerStyle={styles.richCardSpacing}
     >
@@ -742,7 +742,9 @@ export default function ReportsScreen() {
           contentContainerStyle={styles.scrollPad}
           refreshControl={refreshControl}
           ListHeaderComponent={headerBlock}
-          renderItem={({ item }) => <PrescriptionCard rx={item} t={t} />}
+          renderItem={({ item }) => (
+            <PrescriptionCard rx={item} t={t} onPress={() => router.push(`/prescriptions/${item.id}`)} />
+          )}
           ListEmptyComponent={
             prescriptionsQuery.error ? (
               <EmptyState

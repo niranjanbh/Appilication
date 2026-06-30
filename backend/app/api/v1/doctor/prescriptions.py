@@ -382,6 +382,59 @@ async def update_prescription(
 
 
 @router.post(
+    "/prescriptions/{prescription_id}/supersede",
+    response_model=PrescriptionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def supersede_prescription(
+    prescription_id: uuid.UUID,
+    request: Request,
+    db: DbSession,
+    user: Annotated[object, Depends(require_permission(Permission.PRESCRIPTION_CREATE))],
+) -> PrescriptionRead:
+    """Correct a SIGNED prescription via the versioned supersede flow.
+
+    Creates a new DRAFT (version+1) that copies the predecessor's items and marks
+    the original as superseded (dropping it from the patient's current view). The
+    doctor edits the new draft via PATCH and re-signs. Signed prescriptions remain
+    immutable in place — 404 if not owned, not signed, or already superseded.
+    """
+    from app.models.identity import User as UserModel
+
+    assert isinstance(user, UserModel)
+    ctx = _audit_ctx(request, user)
+
+    try:
+        rx = await prescription_service.supersede_prescription(
+            db,
+            doctor_user_id=user.id,
+            prescription_id=prescription_id,
+        )
+    except prescription_service.PrescriptionError as exc:
+        await write_audit(
+            db, ctx,
+            action="supersede_prescription",
+            resource_type="prescription",
+            resource_id=prescription_id,
+            allowed=False,
+            reason=exc.code,
+        )
+        await db.commit()
+        raise _prescription_http_error(exc) from exc
+
+    await write_audit(
+        db, ctx,
+        action="supersede_prescription",
+        resource_type="prescription",
+        resource_id=rx.id,
+        allowed=True,
+        log_metadata={"superseded_prescription_id": str(prescription_id)},
+    )
+
+    return await _read_with_items(db, rx)
+
+
+@router.post(
     "/prescriptions/{prescription_id}/sign",
     response_model=PrescriptionRead,
 )

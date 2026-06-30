@@ -44,7 +44,7 @@ services:
       - "8025:8025"   # Web UI
 
   livekit:
-    image: livekit/livekit-server:v1.8
+    image: livekit/livekit-server:latest
     container_name: kyros-livekit
     restart: unless-stopped
     command: --config /etc/livekit.yaml --dev

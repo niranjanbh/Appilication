@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Clock, ShieldCheck, Video, VideoOff } from 'lucide-react';
-import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import { CheckCircle, Clock, Maximize2, Minimize2, ShieldCheck, Video, VideoOff } from 'lucide-react';
+import { ControlBar, LiveKitRoom, VideoTrack, useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import { apiFetch } from '../lib/api';
 import { PatientContextPanel } from './PatientContextPanel';
@@ -52,6 +53,73 @@ function ElapsedTimer({ startISO }: { startISO: string }) {
       <Clock size={12} />
       {mm}:{ss}
     </span>
+  );
+}
+
+/** Custom call layout: patient fills the main area, doctor self-view is a PIP.
+ *  Clicking the PIP swaps them — doctor becomes main, patient goes to PIP. */
+function CustomVideoLayout() {
+  const [swapped, setSwapped] = useState(false);
+
+  const tracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: true }],
+    { onlySubscribed: false },
+  );
+
+  const localTrack = tracks.find(t => t.participant.isLocal);
+  const remoteTrack = tracks.find(t => !t.participant.isLocal);
+
+  const mainTrack = swapped ? localTrack : remoteTrack;
+  const pipTrack = swapped ? remoteTrack : localTrack;
+
+  return (
+    <div className="relative w-full h-full bg-ink rounded-card overflow-hidden">
+      {/* Main video */}
+      <div className="absolute inset-0">
+        {mainTrack?.publication?.track ? (
+          <VideoTrack
+            trackRef={mainTrack}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <VideoOff size={32} className="text-stone" />
+          </div>
+        )}
+      </div>
+
+      {/* PIP — click to swap */}
+      {pipTrack && (
+        <button
+          onClick={() => setSwapped(s => !s)}
+          title={swapped ? 'Show patient as main' : 'Show your video as main'}
+          className="absolute bottom-16 right-3 w-36 h-24 rounded-lg overflow-hidden border-2 border-ivory/30 hover:border-ivory/70 transition-colors shadow-xl cursor-pointer group"
+        >
+          {pipTrack.publication?.track ? (
+            <VideoTrack trackRef={pipTrack} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-ink/80 flex items-center justify-center">
+              <VideoOff size={18} className="text-stone" />
+            </div>
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-ink/0 group-hover:bg-ink/30 transition-colors">
+            {swapped ? (
+              <Minimize2 size={18} className="text-ivory opacity-0 group-hover:opacity-100 transition-opacity" />
+            ) : (
+              <Maximize2 size={18} className="text-ivory opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+          </span>
+        </button>
+      )}
+
+      {/* LiveKit controls bar */}
+      <div className="absolute bottom-0 inset-x-0">
+        <ControlBar
+          controls={{ screenShare: false, chat: false, leave: false }}
+          className="!bg-ink/70 !border-t-0 !rounded-none"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -134,9 +202,8 @@ function VideoArea({ consultation }: VideoAreaProps) {
         <ElapsedTimer startISO={consultation.scheduled_start_at} />
       </div>
 
-      {/* LiveKit web SDK — VideoConference renders the full call UI (participant
-          tiles, mic/camera/screen-share controls). High-quality capture is
-          configured via the room options below. */}
+      {/* LiveKit room with custom PIP layout. Patient is main by default;
+          clicking the doctor self-view PIP swaps them. */}
       <div className="flex-1 w-full min-h-0">
         <LiveKitRoom
           serverUrl={session.endpoint}
@@ -156,7 +223,7 @@ function VideoArea({ consultation }: VideoAreaProps) {
           data-lk-theme="default"
           style={{ height: '100%' }}
         >
-          <VideoConference />
+          <CustomVideoLayout />
         </LiveKitRoom>
       </div>
     </div>

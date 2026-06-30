@@ -214,6 +214,68 @@ async def update_draft(
     return rx
 
 
+async def create_supersession(
+    db: AsyncSession,
+    *,
+    prescription_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+) -> Prescription | None:
+    """Create a new draft that supersedes a SIGNED prescription (correction flow).
+
+    The new row is version+1 and copies the predecessor's items verbatim so the
+    doctor can edit them via the existing draft-edit endpoint. The OLD row's
+    ``superseded_by_id`` points at the NEW row, which drops it from the patient's
+    current view (``list_for_patient`` filters ``superseded_by_id IS NULL``).
+
+    Returns None when not owned by this doctor, not SIGNED, or already superseded.
+    """
+    old = await get_for_doctor(db, prescription_id=prescription_id, doctor_id=doctor_id)
+    if (
+        old is None
+        or old.status != PrescriptionStatus.SIGNED
+        or old.superseded_by_id is not None
+    ):
+        return None
+
+    new_rx = Prescription(
+        consultation_id=old.consultation_id,
+        doctor_id=old.doctor_id,
+        patient_id=old.patient_id,
+        status=PrescriptionStatus.DRAFT,
+        diagnosis_note=old.diagnosis_note,
+        general_instructions=old.general_instructions,
+        version=old.version + 1,
+    )
+    db.add(new_rx)
+    await db.flush()  # get new_rx.id
+
+    old_items = await list_items(db, prescription_id=old.id)
+    for idx, item in enumerate(old_items):
+        db.add(
+            PrescriptionItem(
+                prescription_id=new_rx.id,
+                drug_generic_name=item.drug_generic_name,
+                drug_form=item.drug_form,
+                dosage=item.dosage,
+                frequency=item.frequency,
+                frequency_code=item.frequency_code,
+                timing_slots=list(item.timing_slots or []),
+                food_relation=item.food_relation,
+                duration_days=item.duration_days,
+                instructions=item.instructions,
+                refill_allowed=item.refill_allowed,
+                order_index=idx,
+                drug_schedule=item.drug_schedule,
+            )
+        )
+
+    old.superseded_by_id = new_rx.id
+    old.updated_at = datetime.now(UTC)
+
+    await db.flush()
+    return new_rx
+
+
 async def sign(
     db: AsyncSession,
     *,

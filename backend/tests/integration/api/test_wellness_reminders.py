@@ -569,14 +569,20 @@ async def test_adherence_rate_reflected_in_list(
 ) -> None:
     created = await _create_reminder(client, patient_headers)
     rid = created["id"]
-    scheduled = "2026-06-03T08:00:00+00:00"
+    # Each slot must be distinct so log_adherence doesn't collapse them into one row
+    slots = [
+        "2026-06-03T08:00:00+00:00",
+        "2026-06-04T08:00:00+00:00",
+        "2026-06-05T08:00:00+00:00",
+        "2026-06-06T08:00:00+00:00",
+    ]
 
     # 2 taken, 2 skipped → 50% taken
-    for action in ["taken", "taken", "skipped", "skipped"]:
+    for slot, action in zip(slots, ["taken", "taken", "skipped", "skipped"]):
         await client.post(
             f"/v1/wellness/reminders/{rid}/log",
             headers=patient_headers,
-            json={"scheduled_at": scheduled, "action": action},
+            json={"scheduled_at": slot, "action": action},
         )
 
     resp = await client.get("/v1/wellness/reminders", headers=patient_headers)

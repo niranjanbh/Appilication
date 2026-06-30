@@ -326,7 +326,7 @@ export default function ReminderDetailScreen() {
   const freq = formatFrequency(reminder.schedule_interval_minutes ?? null, reminder.schedule_cron);
   const rows = detailRows(reminder);
   const adherencePct = Math.round(reminder.adherence_rate * 100);
-  const isRx = !!(reminder.metadata?.care_plan_id || reminder.metadata?.prescription_id);
+  const prescribed = reminder.source_type === 'prescription';
 
   return (
     <View style={[s.container, { backgroundColor: bg }]}>
@@ -334,11 +334,14 @@ export default function ReminderDetailScreen() {
       <Stack.Screen
         options={{
           title: '',
-          headerRight: () => (
-            <Pressable onPress={() => setEditVisible(true)} hitSlop={8} accessibilityLabel="Edit reminder">
-              <Text style={[s.editBtn, { color: t.primary }]}>Edit</Text>
-            </Pressable>
-          ),
+          // Doctor-prescribed reminders are read-only to the patient — no Edit affordance.
+          headerRight: prescribed
+            ? undefined
+            : () => (
+                <Pressable onPress={() => setEditVisible(true)} hitSlop={8} accessibilityLabel="Edit reminder">
+                  <Text style={[s.editBtn, { color: t.primary }]}>Edit</Text>
+                </Pressable>
+              ),
         }}
       />
 
@@ -387,9 +390,13 @@ export default function ReminderDetailScreen() {
         <Text style={[s.title, { color: t.text }]}>{reminder.label}</Text>
         <View style={s.subRow}>
           <Text style={[s.subtitle, { color: t.textSub }]}>{TYPE_LABEL[reminder.type]}</Text>
-          {isRx && (
+          {prescribed ? (
             <View style={[s.rxBadge, { backgroundColor: withAlpha(colors.jade, isDark ? 0.2 : 0.1) }]}>
-              <Text style={[s.rxText, { color: isDark ? colors.jadeGlow : colors.jade }]}>Rx</Text>
+              <Text style={[s.rxText, { color: isDark ? colors.jadeGlow : colors.jade }]}>Doctor prescribed</Text>
+            </View>
+          ) : (
+            <View style={[s.rxBadge, { backgroundColor: withAlpha(colors.stone, 0.15) }]}>
+              <Text style={[s.rxText, { color: t.textSub }]}>Personal</Text>
             </View>
           )}
           {!reminder.active && (
@@ -453,21 +460,31 @@ export default function ReminderDetailScreen() {
           </Pressable>
         </View>
 
-        {/* Secondary controls */}
-        <View style={s.controls}>
-          <Pressable
-            style={s.controlBtn}
-            onPress={() => toggleMutation.mutate({ rid: reminder.id, active: !reminder.active })}
-            accessibilityLabel={reminder.active ? 'Pause reminder' : 'Resume reminder'}
-          >
-            <Ionicons name={reminder.active ? 'pause-outline' : 'play-outline'} size={18} color={t.textSub} />
-            <Text style={[s.controlText, { color: t.textSub }]}>{reminder.active ? 'Pause' : 'Resume'}</Text>
-          </Pressable>
-          <Pressable style={s.controlBtn} onPress={confirmDelete} accessibilityLabel="Delete reminder">
-            <Ionicons name="trash-outline" size={18} color={colors.terracotta} />
-            <Text style={[s.controlText, { color: colors.terracotta }]}>Delete</Text>
-          </Pressable>
-        </View>
+        {/* Secondary controls — hidden for doctor-prescribed reminders, which the
+            patient cannot pause, edit, or delete (the backend rejects those edits). */}
+        {prescribed ? (
+          <View style={[s.rxNote, { backgroundColor: t.surface }]}>
+            <Ionicons name="lock-closed-outline" size={16} color={t.textSub} />
+            <Text style={[s.rxNoteText, { color: t.textSub }]}>
+              This reminder was set by your doctor and cannot be modified.
+            </Text>
+          </View>
+        ) : (
+          <View style={s.controls}>
+            <Pressable
+              style={s.controlBtn}
+              onPress={() => toggleMutation.mutate({ rid: reminder.id, active: !reminder.active })}
+              accessibilityLabel={reminder.active ? 'Pause reminder' : 'Resume reminder'}
+            >
+              <Ionicons name={reminder.active ? 'pause-outline' : 'play-outline'} size={18} color={t.textSub} />
+              <Text style={[s.controlText, { color: t.textSub }]}>{reminder.active ? 'Pause' : 'Resume'}</Text>
+            </Pressable>
+            <Pressable style={s.controlBtn} onPress={confirmDelete} accessibilityLabel="Delete reminder">
+              <Ionicons name="trash-outline" size={18} color={colors.terracotta} />
+              <Text style={[s.controlText, { color: colors.terracotta }]}>Delete</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
 
       <ReminderFormModal
@@ -557,4 +574,13 @@ const s = StyleSheet.create({
   controls: { flexDirection: 'row', justifyContent: 'center', gap: spacing[6], paddingTop: spacing[2] },
   controlBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], padding: spacing[2] },
   controlText: { fontFamily: fontFamily.body, fontSize: fontSize.body, fontWeight: '500' },
+  rxNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    borderRadius: borderRadius.xl,
+    padding: spacing[4],
+    marginTop: spacing[2],
+  },
+  rxNoteText: { flex: 1, fontFamily: fontFamily.body, fontSize: fontSize.caption, lineHeight: 18 },
 });
