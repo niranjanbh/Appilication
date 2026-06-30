@@ -7,7 +7,6 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "prebuildCommand": "npx expo prebuild --clean",
       "ios": {
         "simulator": true
       },
@@ -20,7 +19,6 @@
     },
     "preview": {
       "distribution": "internal",
-      "prebuildCommand": "npx expo prebuild --clean",
       "ios": {
         "simulator": false
       },
@@ -34,7 +32,6 @@
     },
     "production": {
       "autoIncrement": true,
-      "prebuildCommand": "npx expo prebuild --clean",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.kyrosclinic.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "523700664250-e55h54jfibt7n7oj1kh4tji0h3cg2fc0.apps.googleusercontent.com",
