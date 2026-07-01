@@ -516,8 +516,8 @@ export default function JoinScreen() {
   if (!LiveKitNative || !LK) {
     const message =
       Platform.OS === 'web'
-        ? 'Video consultations are available in the Kyros mobile app. Please open this consultation on your phone to join the call.'
-        : 'Video calling needs the full Kyros app build. Please update to the latest version of the app to join your consultation.';
+        ? 'Video consultations are available in the Baseline mobile app. Please open this consultation on your phone to join the call.'
+        : 'Video calling needs the full Baseline app build. Please update to the latest version of the app to join your consultation.';
     return <ErrorState message={message} onBack={() => router.back()} isDark={isDark} />;
   }
 

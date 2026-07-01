@@ -109,7 +109,7 @@ export default function ProfileScreen() {
               <View style={styles.identityInfo}>
                 <Text style={[styles.userName, { color: textPri }]}>{user.name}</Text>
                 <Text style={[styles.userDetail, { color: textSub }]}>
-                  {user.phone ?? user.email ?? 'Kyros patient'}
+                  {user.phone ?? user.email ?? 'Baseline patient'}
                 </Text>
                 <View style={[styles.planBadge, { backgroundColor: isDark ? colors.forestSurfaceRaised : colors.ivory }]}>
                   <Text style={[styles.planBadgeText, { color: colors.jade }]}>

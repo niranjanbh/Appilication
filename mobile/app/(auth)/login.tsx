@@ -175,7 +175,7 @@ export default function LoginScreen() {
 
         {/* ── Logo area ───────────────────────────────────────────────────── */}
         <View style={styles.logoArea}>
-          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Baseline</Text>
           <Text style={[styles.tagline, { color: isDark ? 'rgba(255,255,255,0.60)' : colors.stone }]}>Doctor-first hormonal health</Text>
         </View>
 
@@ -292,7 +292,7 @@ export default function LoginScreen() {
             ) : null}
 
             <Link href="/(auth)/signup" style={[styles.signupLink, { color: textSub }]}>
-              New to Kyros? Create an account
+              New to Baseline? Create an account
             </Link>
           </View>
         </GlassCard>

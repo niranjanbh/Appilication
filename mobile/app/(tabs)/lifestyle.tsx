@@ -34,7 +34,7 @@ export default function LifestyleScreen() {
       } else if (result.reason === 'unsupported_platform') {
         Alert.alert(
           'Not available here',
-          'Wearable sync needs the Kyros mobile app. You can still log your activity manually.',
+          'Wearable sync needs the Baseline mobile app. You can still log your activity manually.',
         );
       } else {
         Alert.alert(

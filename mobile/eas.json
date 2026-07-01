@@ -15,7 +15,8 @@
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "523700664250-e55h54jfibt7n7oj1kh4tji0h3cg2fc0.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "523700664250-m56sno48ofi5tde5hl7ko50dsdmqmpdc.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "523700664250-qfd1ptelum4vmmao7euhr9ma460879pi.apps.googleusercontent.com"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",

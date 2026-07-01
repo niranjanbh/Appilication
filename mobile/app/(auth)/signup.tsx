@@ -141,7 +141,7 @@ export default function SignupScreen() {
 
         {/* Logo */}
         <View style={styles.logoArea}>
-          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Baseline</Text>
           <Text style={[styles.tagline, { color: isDark ? 'rgba(255,255,255,0.60)' : colors.stone }]}>Create your account</Text>
         </View>
 

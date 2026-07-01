@@ -134,7 +134,7 @@ export default function AddPhoneScreen() {
       <AuthBackdrop />
       <View style={styles.container}>
         <View style={styles.logoArea}>
-          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Baseline</Text>
         </View>
 
         <GlassCard strong unpadded style={styles.cardShadow}>

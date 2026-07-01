@@ -31,9 +31,9 @@ export default function JoinConsultationWebScreen() {
         <View style={[styles.iconWrap, { backgroundColor: colors.forest + '15' }]}>
           <Text style={styles.icon}>📱</Text>
         </View>
-        <Text style={[styles.title, { color: textPri }]}>Open the Kyros app to join</Text>
+        <Text style={[styles.title, { color: textPri }]}>Open the Baseline app to join</Text>
         <Text style={[styles.body, { color: textSub }]}>
-          Live video consultations require the Kyros mobile app. Download it to join your appointment on your phone or tablet.
+          Live video consultations require the Baseline mobile app. Download it to join your appointment on your phone or tablet.
         </Text>
         <Animated.View style={[btnAnim, { width: '100%' }]}>
           <Pressable

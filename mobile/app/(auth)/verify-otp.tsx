@@ -86,7 +86,7 @@ export default function VerifyOtpScreen() {
 
         {/* Logo area */}
         <View style={styles.logoArea}>
-          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Kyros</Text>
+          <Text style={[styles.wordmark, { color: isDark ? colors.ivoryText : colors.forest }]}>Baseline</Text>
         </View>
 
         {/* Verify card — frosted glass over the gradient */}

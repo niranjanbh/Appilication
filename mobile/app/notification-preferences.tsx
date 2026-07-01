@@ -127,7 +127,7 @@ export default function NotificationPreferencesScreen() {
             <View style={styles.header}>
               <Text style={[styles.title, { color: textPri }]}>Notification channels</Text>
               <Text style={[styles.subtitle, { color: textSub }]}>
-                Choose how Kyros contacts you for appointment confirmations, reminders, and lab results.
+                Choose how Baseline contacts you for appointment confirmations, reminders, and lab results.
               </Text>
             </View>
 

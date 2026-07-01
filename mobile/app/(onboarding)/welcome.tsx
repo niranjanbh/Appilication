@@ -22,7 +22,7 @@ export default function WelcomeScreen() {
 
       {/* Hero */}
       <View style={styles.hero}>
-        <Text style={styles.wordmark}>Kyros</Text>
+        <Text style={styles.wordmark}>Baseline</Text>
         <Text style={styles.headline}>
           Doctor-first care for{'\n'}hormonal health
         </Text>

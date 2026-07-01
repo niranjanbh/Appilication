@@ -36,7 +36,7 @@ export function PrivacyShield() {
       {/* Opaque-ish wash in case blur is unavailable on this device */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: t.glass.overlay }]} />
       <View style={styles.center}>
-        <Text style={[styles.wordmark, { color: t.text }]}>Kyros</Text>
+        <Text style={[styles.wordmark, { color: t.text }]}>Baseline</Text>
       </View>
     </View>
   );

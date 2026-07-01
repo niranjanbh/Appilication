@@ -39,7 +39,7 @@ export function OpenInAppBanner() {
   return (
     <View style={styles.banner}>
       <Text style={styles.text} numberOfLines={1}>
-        Open Kyros in the app for the full experience
+        Open Baseline in the app for the full experience
       </Text>
       <Pressable
         onPress={() => {
@@ -49,7 +49,7 @@ export function OpenInAppBanner() {
           }
         }}
         style={styles.openBtn}
-        accessibilityLabel="Open in Kyros app"
+        accessibilityLabel="Open in Baseline app"
       >
         <Text style={styles.openBtnText}>Open app</Text>
       </Pressable>

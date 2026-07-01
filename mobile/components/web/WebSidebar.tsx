@@ -42,7 +42,7 @@ export function WebSidebar() {
     <View style={styles.sidebar}>
       {/* Wordmark */}
       <View style={styles.wordmarkRow}>
-        <Text style={styles.wordmark}>Kyros</Text>
+        <Text style={styles.wordmark}>Baseline</Text>
       </View>
 
       {/* Primary nav */}

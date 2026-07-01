@@ -52,7 +52,7 @@ export function ServiceBanner() {
     >
       <View style={styles.content}>
         <Ionicons name="warning-outline" size={18} color={colors.ink} />
-        <Text style={styles.text}>We're having trouble reaching Kyros</Text>
+        <Text style={styles.text}>We're having trouble reaching Baseline</Text>
         <Pressable onPress={handleRetry} style={styles.retryBtn} accessibilityLabel="Retry">
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>

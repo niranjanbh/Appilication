@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Kyros",
+    "name": "Baseline",
     "slug": "kyros",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/App_logo.png",
     "userInterfaceStyle": "light",
     "scheme": "kyros",
     "splash": {
@@ -29,6 +29,7 @@
       "package": "clinic.kyros.app",
       "versionCode": 1,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/App_logo.png",
         "backgroundColor": "#0F3D2E"
       },
       "intentFilters": [
@@ -47,16 +48,22 @@
               "pathPrefix": "/app"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
+      ],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "name": "Kyros Clinic",
-      "shortName": "Kyros",
-      "description": "Kyros Clinic patient portal — hormonal health, PCOS, thyroid, and more.",
+      "name": "Baseline by Kyros Clinic",
+      "shortName": "Baseline",
+      "description": "Baseline by Kyros Clinic — patient portal for hormonal health, PCOS, thyroid, and more.",
       "themeColor": "#0F3D2E",
       "backgroundColor": "#FAF1E4",
       "lang": "en-IN"
@@ -75,8 +82,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Kyros uses your photos so you can attach an image to a reminder (e.g. a photo of your medication).",
-          "cameraPermission": "Kyros uses your camera so you can photograph your medication for a reminder."
+          "photosPermission": "Baseline uses your photos so you can attach an image to a reminder (e.g. a photo of your medication).",
+          "cameraPermission": "Baseline uses your camera so you can photograph your medication for a reminder."
         }
       ]
     ],
@@ -87,6 +94,12 @@
       "eas": {
         "projectId": "b1a2763c-c321-4506-9f57-6b82ae2666ae"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b1a2763c-c321-4506-9f57-6b82ae2666ae"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
     }
   }
 }
