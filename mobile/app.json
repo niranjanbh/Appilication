@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Baseline",
+    "name": "Kyros Clinic",
     "slug": "kyros",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -61,9 +61,9 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "name": "Baseline by Kyros Clinic",
-      "shortName": "Baseline",
-      "description": "Baseline by Kyros Clinic — patient portal for hormonal health, PCOS, thyroid, and more.",
+      "name": "Kyros Clinic",
+      "shortName": "Kyros Clinic",
+      "description": "Kyros Clinic — patient portal for hormonal health, PCOS, thyroid, and more.",
       "themeColor": "#0F3D2E",
       "backgroundColor": "#FAF1E4",
       "lang": "en-IN"
@@ -82,8 +82,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Baseline uses your photos so you can attach an image to a reminder (e.g. a photo of your medication).",
-          "cameraPermission": "Baseline uses your camera so you can photograph your medication for a reminder."
+          "photosPermission": "Kyros Clinic uses your photos so you can attach an image to a reminder (e.g. a photo of your medication).",
+          "cameraPermission": "Kyros Clinic uses your camera so you can photograph your medication for a reminder."
         }
       ]
     ],
