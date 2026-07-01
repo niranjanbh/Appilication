@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { AmbientBackground } from '../components/ui/AmbientBackground';
-import { GlassCard } from '../components/ui/GlassCard';
 import { HapticPressable } from '../components/ui/HapticPressable';
 import { useTheme } from '../lib/theme';
 import { listActivityApi, type ActivityItem } from '../lib/api/activity';
